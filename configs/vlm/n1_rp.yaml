@@ -1,0 +1,144 @@
+# One run on a single 96 GB card, three groups of jobs one after another.
+#
+# 1. rank_smoke / rank_test: test side of the channel pr27xm. The own Qwen3.8-27B without training scores every code
+#    exactly through the prefix tree behind its frozen protocol notes (data/derived/proto_notes_test/test_pr27.jsonl),
+#    bf16, with the same settings as on the training rows (px27_rp). pr27xm is the arithmetic mean of pr27 (named codes)
+#    and this ranking, used as ONE channel. Outputs for test rows stay under artifacts/runs/ and are not inspected; the
+#    evaluation uses only completeness and aggregates.
+# 2. rank_d2: robustness check (not used in the final lines): the same exact ranking behind the notes of the SECOND pr27
+#    draw (data/derived/proto_notes/train_pr27d2.jsonl, 1,500 training rows); checks whether the gain of the mean depends
+#    on draw d1. No new holdout (same labels).
+# 3. ft27b_smoke / ft27b_f0, f2, f3, f4 (not used in the final lines): the fine-tuned code-first 27B with question block
+#    on the four remaining folds, for a five-fold value of this trained 27B.
+#
+# Inputs: data/derived/proto_notes, data/derived/proto_notes_test, data/derived/teacher.
+# Expected: rank_test 3,498 rows x 1.5-1.8 s, about 1.5-1.8 h; rank_d2 about 45 min; per ft27b fold about 65 min (3 epochs,
+#           0.9-1.0 s per step, measurement of the fold with 74 codes). Together about 7 h, about 17.5 USD.
+# Checks before the evaluation: prompt-header check "-> an" per ranking job; rank_smoke 'rows': 8, 'failed': 0;
+#           rank_test and rank_d2 complete and without 'oom_retries'; ft27b_smoke without errors.
+run: n1_rp
+models:
+  q38_27b: {repo: Qwen/Qwen3.8-27B, revision: 1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0, dtype: bf16, max_beam_tokens: 600000}
+workers:
+- gpu: 0
+  jobs:
+  - {name: rank_smoke, kind: bench, must_pass: true, model: q38_27b, image: {max_side: 1024, question_max_side: 448},
+     rows: {sample: 8, seed: 0}, probes: [proto_rank], proto_from: derived/proto_notes/train_pr27.jsonl,
+     batch: 6, beams: 74, prefix_cache_tol: 0.12, prefix_cache_same_top: false, prefix_cache_check_rows: 4, save_every: 25}
+  - {name: rank_test, kind: predict, model: q38_27b, fold: null,
+     proto_from: derived/proto_notes_test/test_pr27.jsonl, probes: [proto_rank],
+     predict: [{split: test, tag: test, probes: [proto_rank]}],
+     image: {max_side: 1024, question_max_side: 448}, batch: 6, beams: 74,
+     prefix_cache_tol: 0.12, prefix_cache_same_top: false, prefix_cache_check_rows: 4, save_every: 25}
+  - {name: rank_d2, kind: bench, model: q38_27b, image: {max_side: 1024, question_max_side: 448},
+     probes: [proto_rank], proto_from: derived/proto_notes/train_pr27d2.jsonl,
+     batch: 6, beams: 74, prefix_cache_tol: 0.12, prefix_cache_same_top: false, prefix_cache_check_rows: 4, save_every: 25}
+  - name: ft27b_smoke
+    kind: train
+    must_pass: true
+    model: q38_27b
+    fold: 0
+    taxonomy: full
+    topic_codes: 10
+    topic_none: true
+    teacher_labels: [pool_a, pool_b]
+    question_codes: 8
+    image: {max_side: 1024, question_max_side: 448}
+    examples: true
+    example_dropout: 0.15
+    max_examples: 4
+    train_rows: {limit: 64}
+    val_rows: {limit: 16}
+    train: {epochs: 1, max_steps: 32, lr: 0.0001, accum: 8, lora_r: 32, lora_alpha: 64, lora_dropout: 0.05, lora_from_layer: 40,
+            tasks: [diag], w_code: 1.0, w_fac: 0.5, w_aux: 0.5, log_every: 8, seed: 42, grad_checkpointing: false, code_loss: sum}
+    probes: [diag]
+    batch: 8
+    beams: 74
+  - name: ft27b_f0
+    kind: train
+    model: q38_27b
+    fold: 0
+    taxonomy: full
+    topic_codes: 10
+    topic_none: true
+    teacher_labels: [pool_a, pool_b]
+    question_codes: 8
+    image: {max_side: 1024, question_max_side: 448}
+    examples: true
+    example_dropout: 0.15
+    max_examples: 4
+    train: {epochs: 3, lr: 0.0001, accum: 8, lora_r: 32, lora_alpha: 64, lora_dropout: 0.05, lora_from_layer: 40,
+            tasks: [diag], w_code: 1.0, w_fac: 0.5, w_aux: 0.5, log_every: 200, seed: 42, grad_checkpointing: false, code_loss: sum}
+    train_budget_s: 6000
+    eval_each_epoch: false
+    probes: [diag]
+    save_hidden: true
+    batch: 8
+    beams: 74
+    save_every: 25
+  - name: ft27b_f2
+    kind: train
+    model: q38_27b
+    fold: 2
+    taxonomy: full
+    topic_codes: 10
+    topic_none: true
+    teacher_labels: [pool_a, pool_b]
+    question_codes: 8
+    image: {max_side: 1024, question_max_side: 448}
+    examples: true
+    example_dropout: 0.15
+    max_examples: 4
+    train: {epochs: 3, lr: 0.0001, accum: 8, lora_r: 32, lora_alpha: 64, lora_dropout: 0.05, lora_from_layer: 40,
+            tasks: [diag], w_code: 1.0, w_fac: 0.5, w_aux: 0.5, log_every: 200, seed: 42, grad_checkpointing: false, code_loss: sum}
+    train_budget_s: 6000
+    eval_each_epoch: false
+    probes: [diag]
+    save_hidden: true
+    batch: 8
+    beams: 74
+    save_every: 25
+  - name: ft27b_f3
+    kind: train
+    model: q38_27b
+    fold: 3
+    taxonomy: full
+    topic_codes: 10
+    topic_none: true
+    teacher_labels: [pool_a, pool_b]
+    question_codes: 8
+    image: {max_side: 1024, question_max_side: 448}
+    examples: true
+    example_dropout: 0.15
+    max_examples: 4
+    train: {epochs: 3, lr: 0.0001, accum: 8, lora_r: 32, lora_alpha: 64, lora_dropout: 0.05, lora_from_layer: 40,
+            tasks: [diag], w_code: 1.0, w_fac: 0.5, w_aux: 0.5, log_every: 200, seed: 42, grad_checkpointing: false, code_loss: sum}
+    train_budget_s: 6000
+    eval_each_epoch: false
+    probes: [diag]
+    save_hidden: true
+    batch: 8
+    beams: 74
+    save_every: 25
+  - name: ft27b_f4
+    kind: train
+    model: q38_27b
+    fold: 4
+    taxonomy: full
+    topic_codes: 10
+    topic_none: true
+    teacher_labels: [pool_a, pool_b]
+    question_codes: 8
+    image: {max_side: 1024, question_max_side: 448}
+    examples: true
+    example_dropout: 0.15
+    max_examples: 4
+    train: {epochs: 3, lr: 0.0001, accum: 8, lora_r: 32, lora_alpha: 64, lora_dropout: 0.05, lora_from_layer: 40,
+            tasks: [diag], w_code: 1.0, w_fac: 0.5, w_aux: 0.5, log_every: 200, seed: 42, grad_checkpointing: false, code_loss: sum}
+    train_budget_s: 6000
+    eval_each_epoch: false
+    probes: [diag]
+    save_hidden: true
+    batch: 8
+    beams: 74
+    save_every: 25

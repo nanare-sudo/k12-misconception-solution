@@ -1,0 +1,21 @@
+# Reasoning channel WITHOUT the question block from teacher labels (draw n). Two questions in one run, on the 412 rows of
+# folds 1 and 2 that have a reasoning text (the same rows as the reasoning channel with block, i.e. paired):
+#   1. Strictly inductive line (no teacher): what does reasoning add to the channel with topic block only (prompt as zs27t)?
+#   2. Best-CV line: does a reasoning text without block complement the blend where the block misleads? In the group
+#      "code never seen for this question" the blend drops to 0.28 when the correct code is missing from the teacher's
+#      knowledge about the question, against 0.61 for questions without any pool material.
+# Otherwise everything as for draw g (zs27v_all_rp): greedy, effort xhigh, limit 1,800 tokens, 64 concurrent requests;
+# scoring of all codes behind the text.
+run: zs27v_n_rp
+models:
+  q38_27b: {repo: Qwen/Qwen3.8-27B, revision: 1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0, dtype: bf16, max_beam_tokens: 600000}
+workers:
+- gpu: 0
+  jobs:
+  - {name: gen_n, kind: think_gen, model: q38_27b, split: train, rows: {folds: [1, 2], only: derived/think_rows/train.npy}, tag: think,
+     taxonomy: full, topic_codes: 10, topic_none: true,
+     image: {max_side: 1024, question_max_side: 448}, examples: true, max_examples: 4, max_think_tokens: 1800, concurrency: 64,
+     server: {max_model_len: 16000, gpu_memory_utilization: 0.93, max_num_seqs: 64, startup_s: 900}}
+  - {name: think_n, kind: bench, model: q38_27b, taxonomy: full, topic_codes: 10, topic_none: true,
+     image: {max_side: 1024, question_max_side: 448}, examples: true, max_examples: 4, rows: {folds: [1, 2], only: derived/think_rows/train.npy},
+     probes: [think], think_from: gen_n/think, batch: 6, beams: 74, prefix_cache_tol: 0.12, prefix_cache_check_rows: 4, prefix_cache_same_top: false, save_every: 25}

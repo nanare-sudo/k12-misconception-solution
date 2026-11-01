@@ -1,0 +1,12 @@
+# Test prediction of the model v1: Qwen3.5-9B with the adapter of the full fit (v1_full), bf16 and all 74 codes as in the
+# out-of-fold measurements; examples in the prompt from all 1,500 training rows. A40. For test rows only aggregates are
+# logged. Also the source of the test gates (tools/replay/gates.py --sources a40).
+run: v1_test_rp
+models:
+  q35_9b: {repo: Qwen/Qwen3.5-9B, revision: c202236235762e1c871ad0ccb60c8ee5ba337b9a, dtype: bf16, max_beam_tokens: 420000}
+workers:
+  - gpu: 0
+    jobs:
+      - {name: v1_test, kind: predict, model: q35_9b, adapter: v1_full, fold: null, taxonomy: full, image: {max_side: 1024, question_max_side: 448},
+         examples: true, max_examples: 4, save_hidden: true, batch: 8, beams: 74, save_every: 25,
+         predict: [{split: test, tag: test, probes: [diag]}]}

@@ -1,0 +1,98 @@
+# M3 without pool rows (recipe of the pilot, configs/vlm/m3_pilot_rp.yaml) on the remaining folds 0, 3 and 4, so that the
+# five folds form ONE channel. Gold training targets per fold (data/derived/sft/m3_fold{0,3,4}_targets.jsonl,
+# tools/make_sft_targets.py), training, merging, generation (3,200 tokens) and exact ranking as in the pilot, unchanged.
+# Strictly inductive (no teacher targets).
+#
+# Inputs: data/derived/sft (training targets of training rows only).
+# Hardware: one RTX PRO 6000 (96 GB, 200 GB disk). Time and cost: 1.76 s per step, 2,400 steps per fold = 70 min; merge
+# 5 min; generation of 300 rows about 12 min; ranking 300 x 3.4 s about 17 min: about 1.75 h per fold, three folds
+# about 5.3 h, about 13 USD; pre-run about 2 min.
+# Checks before the evaluation: pre-run m3_smoke_f0 (s per step <= 3.0, memory <= 92 GB); per fold the train summary
+#        (steps_done = steps_total, skipped_oom 0, nonfinite 0), the merge log line, the generation meta (answered 300,
+#        failed 0, states), ranking 'failed': 0, prompt-header check "-> an".
+# Automatic aborts: pre-run > 25 % failed steps, > 3.0 s per step, > 92 GB; generation: of the first 24 rows < 25 %
+#        complete answers or > 5 % request errors; train_budget_s 7800 per fold.
+run: m3_f034_rp
+models:
+  q38_27b: {repo: Qwen/Qwen3.8-27B, revision: 1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0, dtype: bf16, max_beam_tokens: 600000}
+  m3_f0: {merged: m3_f0_merged, dtype: bf16, max_beam_tokens: 600000}
+  m3_f3: {merged: m3_f3_merged, dtype: bf16, max_beam_tokens: 600000}
+  m3_f4: {merged: m3_f4_merged, dtype: bf16, max_beam_tokens: 600000}
+workers:
+- gpu: 0
+  jobs:
+  # --- pre-run: step time and memory (merging, generation and ranking were verified in the pilot)
+  - name: m3_smoke_f0
+    kind: train
+    must_pass: true
+    max_s_per_step: 3.0
+    max_gpu_gb: 92
+    model: q38_27b
+    fold: 0
+    sft_targets: derived/sft/m3_fold0_targets.jsonl
+    sft_notes_max_tokens: 2500
+    image: {max_side: 1024, question_max_side: 448}
+    train_rows: {sample: 32, seed: 0}
+    train: {tasks: [proto_sft], epochs: 1, max_steps: 32, lr: 0.0001, accum: 8, lora_r: 32, lora_alpha: 64, lora_dropout: 0.05,
+            lora_from_layer: 40, prefix_with_adapter: true, grad_checkpointing: true, code_loss: sum, why_loss: first+mean,
+            w_code: 1.0, w_why: 1.0, w_notes: 0.5, w_aux: 0.5, log_every: 8, seed: 42}
+  # --- Fold 0
+  - name: m3_train_f0
+    kind: train
+    model: q38_27b
+    fold: 0
+    sft_targets: derived/sft/m3_fold0_targets.jsonl
+    sft_notes_max_tokens: 2500
+    image: {max_side: 1024, question_max_side: 448}
+    train_budget_s: 7800
+    train: {tasks: [proto_sft], epochs: 2, lr: 0.0001, accum: 8, lora_r: 32, lora_alpha: 64, lora_dropout: 0.05,
+            lora_from_layer: 40, prefix_with_adapter: true, grad_checkpointing: true, code_loss: sum, why_loss: first+mean,
+            w_code: 1.0, w_why: 1.0, w_notes: 0.5, w_aux: 0.5, log_every: 100, seed: 42}
+  - {name: m3_merge_f0, kind: merge, model: q38_27b, adapter_from: m3_train_f0, out_model: m3_f0_merged}
+  - {name: m3_gen_f0, kind: sft_gen, model: m3_f0, split: train, rows: {folds: [0]}, order_seed: 0,
+     image: {max_side: 1024, question_max_side: 448}, max_tokens: 3200, concurrency: 64, guard_rows: 24, guard_min_complete: 0.25,
+     max_failed: 0.05, request_timeout_s: 1200, tag: gen,
+     server: {max_model_len: 16000, gpu_memory_utilization: 0.90, max_num_seqs: 64, startup_s: 900, pip: "vllm==0.31.0 transformers==5.17.0"}}
+  - {name: m3_rank_f0, kind: bench, model: m3_f0, rows: {folds: [0]}, probes: [proto_rank], sft_from: m3_gen_f0/gen,
+     image: {max_side: 1024, question_max_side: 448}, batch: 6, beams: 74, finish_tokens: 320,
+     prefix_cache_tol: 0.12, prefix_cache_same_top: false, prefix_cache_check_rows: 4, save_every: 25, drop_model: true}
+  # --- Fold 3
+  - name: m3_train_f3
+    kind: train
+    model: q38_27b
+    fold: 3
+    sft_targets: derived/sft/m3_fold3_targets.jsonl
+    sft_notes_max_tokens: 2500
+    image: {max_side: 1024, question_max_side: 448}
+    train_budget_s: 7800
+    train: {tasks: [proto_sft], epochs: 2, lr: 0.0001, accum: 8, lora_r: 32, lora_alpha: 64, lora_dropout: 0.05,
+            lora_from_layer: 40, prefix_with_adapter: true, grad_checkpointing: true, code_loss: sum, why_loss: first+mean,
+            w_code: 1.0, w_why: 1.0, w_notes: 0.5, w_aux: 0.5, log_every: 100, seed: 42}
+  - {name: m3_merge_f3, kind: merge, model: q38_27b, adapter_from: m3_train_f3, out_model: m3_f3_merged}
+  - {name: m3_gen_f3, kind: sft_gen, model: m3_f3, split: train, rows: {folds: [3]}, order_seed: 0,
+     image: {max_side: 1024, question_max_side: 448}, max_tokens: 3200, concurrency: 64, guard_rows: 24, guard_min_complete: 0.25,
+     max_failed: 0.05, request_timeout_s: 1200, tag: gen,
+     server: {max_model_len: 16000, gpu_memory_utilization: 0.90, max_num_seqs: 64, startup_s: 900, pip: "vllm==0.31.0 transformers==5.17.0"}}
+  - {name: m3_rank_f3, kind: bench, model: m3_f3, rows: {folds: [3]}, probes: [proto_rank], sft_from: m3_gen_f3/gen,
+     image: {max_side: 1024, question_max_side: 448}, batch: 6, beams: 74, finish_tokens: 320,
+     prefix_cache_tol: 0.12, prefix_cache_same_top: false, prefix_cache_check_rows: 4, save_every: 25, drop_model: true}
+  # --- Fold 4
+  - name: m3_train_f4
+    kind: train
+    model: q38_27b
+    fold: 4
+    sft_targets: derived/sft/m3_fold4_targets.jsonl
+    sft_notes_max_tokens: 2500
+    image: {max_side: 1024, question_max_side: 448}
+    train_budget_s: 7800
+    train: {tasks: [proto_sft], epochs: 2, lr: 0.0001, accum: 8, lora_r: 32, lora_alpha: 64, lora_dropout: 0.05,
+            lora_from_layer: 40, prefix_with_adapter: true, grad_checkpointing: true, code_loss: sum, why_loss: first+mean,
+            w_code: 1.0, w_why: 1.0, w_notes: 0.5, w_aux: 0.5, log_every: 100, seed: 42}
+  - {name: m3_merge_f4, kind: merge, model: q38_27b, adapter_from: m3_train_f4, out_model: m3_f4_merged}
+  - {name: m3_gen_f4, kind: sft_gen, model: m3_f4, split: train, rows: {folds: [4]}, order_seed: 0,
+     image: {max_side: 1024, question_max_side: 448}, max_tokens: 3200, concurrency: 64, guard_rows: 24, guard_min_complete: 0.25,
+     max_failed: 0.05, request_timeout_s: 1200, tag: gen,
+     server: {max_model_len: 16000, gpu_memory_utilization: 0.90, max_num_seqs: 64, startup_s: 900, pip: "vllm==0.31.0 transformers==5.17.0"}}
+  - {name: m3_rank_f4, kind: bench, model: m3_f4, rows: {folds: [4]}, probes: [proto_rank], sft_from: m3_gen_f4/gen,
+     image: {max_side: 1024, question_max_side: 448}, batch: 6, beams: 74, finish_tokens: 320,
+     prefix_cache_tol: 0.12, prefix_cache_same_top: false, prefix_cache_check_rows: 4, save_every: 25, drop_model: true}

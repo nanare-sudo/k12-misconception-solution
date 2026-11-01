@@ -1,0 +1,202 @@
+# Channel q397m3 ("397B finds, M3 names") on all 1,500 training rows; best-CV line only, like q397.
+# PURPOSE: M3 (Qwen3.8-27B + LoRA, gold targets only, task proto_sft; it has learned how the annotators assign codes) reads
+# the note of Qwen3.5-397B-A17B (first pass in the teacher protocol; strong at forming candidates, weaker at choosing among
+# them) as its OWN reasoning, writes its finding itself (finish_tokens 320, greedy up to "Root:") and scores all 74 codes
+# exactly (probe proto_rank, sft mode). No M3 notes are generated: the notes come frozen from
+# derived/sft/q397m3_train_notes.jsonl (tools/make_q397m3_notes.py; SHA-256 and statistics in the meta file; format as in
+# tools/freeze_m3_texts.py with finding = null).
+# FOLD RULE: per fold k the adapter that has NOT learned fold k (folds 1/2 from the pilot m3_pilot_rp, folds 0/3/4 from
+# m3_f034_rp, the same as for the M3 draws, e.g. m3d3_oof_rp); the runner checks per ranking that all rows lie in the fold
+# held out by the merged model (sft.check_recipe), and eda/c115_q397m3_eval.py checks it again afterwards via run
+# configuration -> merge job -> sft_recipe.json. The 397B notes depend on no fold (no training, no labelled row in the prompt).
+# RANKING exactly as for the M3 draws (beams 74, finish_tokens 320, image 1,024/448, bf16, batch 6). The pre-run
+# q397m3_smoke (must_pass, 6 rows of fold 1, own folder) stops the worker before a form error costs five folds.
+# DECISION RULE (eda/c115_q397m3_eval.py): continue to the test side (configs/vlm/q397m3te_rp.yaml) only if, in the full
+# recipe of the best-CV line, q397m3 as an ADDED channel (floor 0.05) OR as a REPLACEMENT of q397 reaches Δ >= +0.002 with
+# z >= 1.0 (σ over questions) and a LogLoss that is not worse, AND the top-code agreement q397m3/q397 is <= 0.90
+# (otherwise it is a mere copy); otherwise stop.
+# EARLY STOP (only to save cost, fixed in advance): after the first complete shard run
+#   python -I eda/c115_q397m3_eval.py --early    -> top-code agreement q397m3/q397 >= 0.95 on >= 300 rows: stop.
+# Inputs: the training-note file (data/derived/sft) and the adapters m3_pilot_rp/m3_train_f{1,2} and
+# m3_f034_rp/m3_train_f{0,3,4} under the same output root.
+# Evaluation: python -I eda/c115_q397m3_eval.py --status; python -I eda/c115_q397m3_eval.py
+# Time and cost (RTX PRO 6000): loading the base model about 10-15 min; per fold merge about 1 min and ranking of 300 rows x
+# about 3.4-4.5 s (here M3 writes the finding in EVERY row) about 17-23 min; pre-run about 2 min: about 1.7-2.3 h, about
+# 4.2-5.7 USD.
+run: q397m3_oof_rp
+models:
+  q38_27b:
+    repo: Qwen/Qwen3.8-27B
+    revision: 1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0
+    dtype: bf16
+    max_beam_tokens: 600000
+  q397m3_f1:
+    merged: q397m3_f1_merged
+    dtype: bf16
+    max_beam_tokens: 600000
+  q397m3_f2:
+    merged: q397m3_f2_merged
+    dtype: bf16
+    max_beam_tokens: 600000
+  q397m3_f0:
+    merged: q397m3_f0_merged
+    dtype: bf16
+    max_beam_tokens: 600000
+  q397m3_f3:
+    merged: q397m3_f3_merged
+    dtype: bf16
+    max_beam_tokens: 600000
+  q397m3_f4:
+    merged: q397m3_f4_merged
+    dtype: bf16
+    max_beam_tokens: 600000
+workers:
+- gpu: 0
+  jobs:
+  - name: q397m3_merge_f1
+    kind: merge
+    model: q38_27b
+    adapter_from: ../m3_pilot_rp/m3_train_f1
+    out_model: q397m3_f1_merged
+  - name: q397m3_smoke
+    kind: bench
+    must_pass: true
+    model: q397m3_f1
+    rows:
+      folds:
+      - 1
+      limit: 6
+    sft_from: derived/sft/q397m3_train_notes.jsonl
+    probes:
+    - proto_rank
+    image:
+      max_side: 1024
+      question_max_side: 448
+    batch: 6
+    beams: 74
+    finish_tokens: 320
+    prefix_cache_tol: 0.12
+    prefix_cache_same_top: false
+    prefix_cache_check_rows: 4
+    save_every: 1
+    drop_model: false
+  - name: q397m3_rank_f1
+    kind: bench
+    model: q397m3_f1
+    rows:
+      folds:
+      - 1
+    sft_from: derived/sft/q397m3_train_notes.jsonl
+    probes:
+    - proto_rank
+    image:
+      max_side: 1024
+      question_max_side: 448
+    batch: 6
+    beams: 74
+    finish_tokens: 320
+    prefix_cache_tol: 0.12
+    prefix_cache_same_top: false
+    prefix_cache_check_rows: 4
+    save_every: 25
+    drop_model: true
+  - name: q397m3_merge_f2
+    kind: merge
+    model: q38_27b
+    adapter_from: ../m3_pilot_rp/m3_train_f2
+    out_model: q397m3_f2_merged
+  - name: q397m3_rank_f2
+    kind: bench
+    model: q397m3_f2
+    rows:
+      folds:
+      - 2
+    sft_from: derived/sft/q397m3_train_notes.jsonl
+    probes:
+    - proto_rank
+    image:
+      max_side: 1024
+      question_max_side: 448
+    batch: 6
+    beams: 74
+    finish_tokens: 320
+    prefix_cache_tol: 0.12
+    prefix_cache_same_top: false
+    prefix_cache_check_rows: 4
+    save_every: 25
+    drop_model: true
+  - name: q397m3_merge_f0
+    kind: merge
+    model: q38_27b
+    adapter_from: ../m3_f034_rp/m3_train_f0
+    out_model: q397m3_f0_merged
+  - name: q397m3_rank_f0
+    kind: bench
+    model: q397m3_f0
+    rows:
+      folds:
+      - 0
+    sft_from: derived/sft/q397m3_train_notes.jsonl
+    probes:
+    - proto_rank
+    image:
+      max_side: 1024
+      question_max_side: 448
+    batch: 6
+    beams: 74
+    finish_tokens: 320
+    prefix_cache_tol: 0.12
+    prefix_cache_same_top: false
+    prefix_cache_check_rows: 4
+    save_every: 25
+    drop_model: true
+  - name: q397m3_merge_f3
+    kind: merge
+    model: q38_27b
+    adapter_from: ../m3_f034_rp/m3_train_f3
+    out_model: q397m3_f3_merged
+  - name: q397m3_rank_f3
+    kind: bench
+    model: q397m3_f3
+    rows:
+      folds:
+      - 3
+    sft_from: derived/sft/q397m3_train_notes.jsonl
+    probes:
+    - proto_rank
+    image:
+      max_side: 1024
+      question_max_side: 448
+    batch: 6
+    beams: 74
+    finish_tokens: 320
+    prefix_cache_tol: 0.12
+    prefix_cache_same_top: false
+    prefix_cache_check_rows: 4
+    save_every: 25
+    drop_model: true
+  - name: q397m3_merge_f4
+    kind: merge
+    model: q38_27b
+    adapter_from: ../m3_f034_rp/m3_train_f4
+    out_model: q397m3_f4_merged
+  - name: q397m3_rank_f4
+    kind: bench
+    model: q397m3_f4
+    rows:
+      folds:
+      - 4
+    sft_from: derived/sft/q397m3_train_notes.jsonl
+    probes:
+    - proto_rank
+    image:
+      max_side: 1024
+      question_max_side: 448
+    batch: 6
+    beams: 74
+    finish_tokens: 320
+    prefix_cache_tol: 0.12
+    prefix_cache_same_top: false
+    prefix_cache_check_rows: 4
+    save_every: 25
+    drop_model: true

@@ -1,0 +1,21 @@
+# Channel zs27t (27B without training, topic block; used in the strictly inductive line): all 1,500 training rows
+# out-of-fold (topic block and examples never from the row's fold) and the 3,498 test rows.
+# Topic block: up to ten codes of other questions of the same topic, with the number of workings without a major error as
+# the first line (without that line the 27B lost 0.02 on NONE rows).
+# Fold 1 runs first (zs27t_f1). A40, 4-bit, all 74 codes exactly, prompt header reused. For test rows only aggregates are
+# logged. Also the source of the test gates (tools/replay/gates.py --sources a40).
+run: zs27t_all_rp
+models:
+  q38_27b_4bit: {repo: Qwen/Qwen3.8-27B, revision: 1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0, dtype: bf16, quant: 4bit, max_beam_tokens: 200000}
+workers:
+  - gpu: 0
+    jobs:
+      - {name: zs27t_f1, kind: bench, model: q38_27b_4bit, taxonomy: full, topic_codes: 10, topic_none: true, image: {max_side: 1024, question_max_side: 448},
+         examples: true, max_examples: 4, rows: {folds: [1]}, probes: [diag], save_hidden: true, batch: 4, exact_chunk: 40,
+         prefix_cache_tol: 0.12, prefix_cache_check_rows: 4, save_every: 25}
+      - {name: zs27t_oof4, kind: bench, model: q38_27b_4bit, taxonomy: full, topic_codes: 10, topic_none: true, image: {max_side: 1024, question_max_side: 448},
+         examples: true, max_examples: 4, rows: {folds: [0, 2, 3, 4]}, probes: [diag], save_hidden: true, batch: 4, exact_chunk: 40,
+         prefix_cache_tol: 0.12, prefix_cache_check_rows: 4, save_every: 25}
+      - {name: zs27t_test, kind: predict, model: q38_27b_4bit, fold: null, taxonomy: full, topic_codes: 10, topic_none: true, image: {max_side: 1024, question_max_side: 448},
+         examples: true, max_examples: 4, save_hidden: true, batch: 4, exact_chunk: 40, prefix_cache_tol: 0.12, prefix_cache_check_rows: 4,
+         save_every: 25, predict: [{split: test, tag: test, probes: [diag]}]}

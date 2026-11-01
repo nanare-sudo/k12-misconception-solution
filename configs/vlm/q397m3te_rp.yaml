@@ -1,0 +1,86 @@
+# Channel q397m3 ("397B finds, M3 names"): TEST side (all 3,498 test rows), run only after the decision rule of the
+# training-side run passed (configs/vlm/q397m3_oof_rp.yaml, eda/c115_q397m3_eval.py). Best-CV line, like q397.
+# PURPOSE: M3 of the full fit (m3_fullte_rp/m3_train_full, gold targets only, all 1,500 rows; the same source as
+# m3d3te_rp) reads per test row the note of Qwen3.5-397B-A17B from the IN-HOUSE compute path (q397te_rp; fidelity check
+# passed with a top-code agreement of 0.781 against the API measurement), writes its finding itself (finish_tokens 320) and
+# scores all 74 codes exactly (probe proto_rank, sft mode). Compute path and settings as in m3d3te_rp/m3d3_test_rank, only
+# without own generation: the notes come frozen from derived/sft/q397m3_test_notes.jsonl. Test notes and test outputs stay
+# under data/derived/ and artifacts/runs/ and are NEVER inspected, only aggregates; offline on the machine (local weights,
+# no outbound call).
+# BEFORE (local):
+#   python -I eda/c110_q397_deploy.py test-status runs/q397te_rp/proto_te/proto      # test side of the 397B complete and valid
+#   python -I tools/make_q397m3_notes.py --test-from runs/q397te_rp/proto_te/proto   # -> derived/sft/q397m3_test_notes.jsonl
+#                                                                                    #    + upload folder derived/sft_q397m3te/
+# Inputs: the test-note file (data/derived/sft) and the adapter m3_fullte_rp/m3_train_full under the same output root.
+# Checks (aggregates only): summary.json of the merge job, q397m3_test_rank 'failed': 0, 3,498 rows, prompt-header check,
+#   share of NONE at the top about 0.33.
+# Time and cost (RTX PRO 6000): loading about 10-15 min, merge about 1 min, pre-run about 2 min, ranking 3,498 rows x about
+# 3.4-4.5 s (here M3 writes the finding in every row), about 3.3-4.4 h: about 3.6-4.7 h, about 9-12 USD.
+run: q397m3te_rp
+models:
+  q38_27b:
+    repo: Qwen/Qwen3.8-27B
+    revision: 1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0
+    dtype: bf16
+    max_beam_tokens: 600000
+  q397m3_full:
+    merged: q397m3_full_merged
+    dtype: bf16
+    max_beam_tokens: 600000
+workers:
+- gpu: 0
+  jobs:
+  - name: q397m3_merge_full
+    kind: merge
+    model: q38_27b
+    adapter_from: ../m3_fullte_rp/m3_train_full
+    out_model: q397m3_full_merged
+  - name: q397m3_test_smoke
+    kind: predict
+    must_pass: true
+    model: q397m3_full
+    fold: null
+    sft_from: derived/sft/q397m3_test_notes.jsonl
+    probes:
+    - proto_rank
+    predict:
+    - split: test
+      tag: smoke
+      probes:
+      - proto_rank
+      rows:
+        limit: 6
+    image:
+      max_side: 1024
+      question_max_side: 448
+    batch: 6
+    beams: 74
+    finish_tokens: 320
+    prefix_cache_tol: 0.12
+    prefix_cache_same_top: false
+    prefix_cache_check_rows: 4
+    save_every: 1
+    drop_model: false
+  - name: q397m3_test_rank
+    kind: predict
+    model: q397m3_full
+    fold: null
+    sft_from: derived/sft/q397m3_test_notes.jsonl
+    probes:
+    - proto_rank
+    predict:
+    - split: test
+      tag: test
+      probes:
+      - proto_rank
+    image:
+      max_side: 1024
+      question_max_side: 448
+    batch: 6
+    beams: 74
+    finish_tokens: 320
+    prefix_cache_tol: 0.12
+    prefix_cache_same_top: false
+    prefix_cache_check_rows: 4
+    save_every: 25
+    drop_model: true

@@ -1,0 +1,50 @@
+# Reasoning channel, draw g (prompt as for zs27q: topic block and question block from the whole pool), sparse: reasoning
+# texts are generated only for the rows that the channel without reasoning (zs27q) does not already consider error-free
+# with at least 50 % (68-69 % of the rows in train and test). The positions are in data/derived/think_rows/{train,test}.npy
+# (`rows.only`); the other rows take the channel without reasoning when the channel is assembled (a6 --fill --only,
+# make_submission --fill). Generation with the local vLLM server (only 127.0.0.1), scoring of the codes behind the text on
+# the in-house path. bf16, 96 GB card.
+# Limit 1,800 tokens: on fold 2 the contribution to the blend saturates there (700 / 1,200 / 1,800 / 2,500 tokens:
+# +0.021 / +0.035 / +0.045 / +0.043). 64 concurrent requests (860-960 tokens per second at 60).
+#   gen_te_smoke / think_te_smoke   8 test rows: checks the path for test rows (row selection, think_from in predict)
+#   gen_f1 / think_f1               fold 1
+#   gen_te / think_te               test rows
+#   gen_tr / think_tr               folds 0, 3, 4 (with fold 2 from zs27v_cut_rp the channel has an out-of-fold value on all folds)
+# Fold 2 comes from zs27v_cut_rp (cut1800_f2: the same reasoning texts, truncated to 1,800 tokens). For test rows only
+# aggregates in the log; the texts stay unread under artifacts/runs/.
+run: zs27v_all_rp
+models:
+  q38_27b: {repo: Qwen/Qwen3.8-27B, revision: 1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0, dtype: bf16, max_beam_tokens: 600000}
+workers:
+- gpu: 0
+  jobs:
+  - {name: gen_te_smoke, kind: think_gen, must_pass: true, model: q38_27b, split: test, fold: null, rows: {only: derived/think_rows/test.npy, limit: 8}, tag: think,
+     taxonomy: full, topic_codes: 10, topic_none: true, teacher_labels: [pool_a, pool_b], question_codes: 8,
+     image: {max_side: 1024, question_max_side: 448}, examples: true, max_examples: 4, max_think_tokens: 1800, concurrency: 8,
+     server: {max_model_len: 16000, gpu_memory_utilization: 0.93, max_num_seqs: 64, startup_s: 900}}
+  - {name: think_te_smoke, kind: predict, must_pass: true, fold: null, model: q38_27b, taxonomy: full, topic_codes: 10, topic_none: true, teacher_labels: [pool_a, pool_b], question_codes: 8,
+     image: {max_side: 1024, question_max_side: 448}, examples: true, max_examples: 4, think_from: gen_te_smoke/think,
+     batch: 6, beams: 74, prefix_cache_tol: 0.12, prefix_cache_check_rows: 4, save_every: 4,
+     predict: [{split: test, tag: smoke, probes: [think], rows: {only: derived/think_rows/test.npy, limit: 8}}]}
+  - {name: gen_f1, kind: think_gen, model: q38_27b, split: train, rows: {folds: [1], only: derived/think_rows/train.npy}, tag: think,
+     taxonomy: full, topic_codes: 10, topic_none: true, teacher_labels: [pool_a, pool_b], question_codes: 8,
+     image: {max_side: 1024, question_max_side: 448}, examples: true, max_examples: 4, max_think_tokens: 1800, concurrency: 64,
+     server: {max_model_len: 16000, gpu_memory_utilization: 0.93, max_num_seqs: 64, startup_s: 900}}
+  - {name: think_f1, kind: bench, model: q38_27b, taxonomy: full, topic_codes: 10, topic_none: true, teacher_labels: [pool_a, pool_b], question_codes: 8,
+     image: {max_side: 1024, question_max_side: 448}, examples: true, max_examples: 4, rows: {folds: [1], only: derived/think_rows/train.npy},
+     probes: [think], think_from: gen_f1/think, batch: 6, beams: 74, prefix_cache_tol: 0.12, prefix_cache_check_rows: 4, save_every: 25}
+  - {name: gen_te, kind: think_gen, model: q38_27b, split: test, fold: null, rows: {only: derived/think_rows/test.npy}, tag: think,
+     taxonomy: full, topic_codes: 10, topic_none: true, teacher_labels: [pool_a, pool_b], question_codes: 8,
+     image: {max_side: 1024, question_max_side: 448}, examples: true, max_examples: 4, max_think_tokens: 1800, concurrency: 64,
+     server: {max_model_len: 16000, gpu_memory_utilization: 0.93, max_num_seqs: 64, startup_s: 900}}
+  - {name: think_te, kind: predict, fold: null, model: q38_27b, taxonomy: full, topic_codes: 10, topic_none: true, teacher_labels: [pool_a, pool_b], question_codes: 8,
+     image: {max_side: 1024, question_max_side: 448}, examples: true, max_examples: 4, think_from: gen_te/think,
+     batch: 6, beams: 74, prefix_cache_tol: 0.12, prefix_cache_check_rows: 4, save_every: 25,
+     predict: [{split: test, tag: test, probes: [think], rows: {only: derived/think_rows/test.npy}}]}
+  - {name: gen_tr, kind: think_gen, model: q38_27b, split: train, rows: {folds: [0, 3, 4], only: derived/think_rows/train.npy}, tag: think,
+     taxonomy: full, topic_codes: 10, topic_none: true, teacher_labels: [pool_a, pool_b], question_codes: 8,
+     image: {max_side: 1024, question_max_side: 448}, examples: true, max_examples: 4, max_think_tokens: 1800, concurrency: 64,
+     server: {max_model_len: 16000, gpu_memory_utilization: 0.93, max_num_seqs: 64, startup_s: 900}}
+  - {name: think_tr, kind: bench, model: q38_27b, taxonomy: full, topic_codes: 10, topic_none: true, teacher_labels: [pool_a, pool_b], question_codes: 8,
+     image: {max_side: 1024, question_max_side: 448}, examples: true, max_examples: 4, rows: {folds: [0, 3, 4], only: derived/think_rows/train.npy},
+     probes: [think], think_from: gen_tr/think, batch: 6, beams: 74, prefix_cache_tol: 0.12, prefix_cache_check_rows: 4, save_every: 25}

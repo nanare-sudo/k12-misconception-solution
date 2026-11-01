@@ -1,0 +1,26 @@
+# Second hardware class for the fast channel zs27t (strictly inductive line): test side of the channel zs27t (27B without
+# training, topic block) on Kaggle T4 x2, OFFLINE, 4-bit nf4 with fp16 compute; part 2 of 2 of the 3,498 test rows (rows.shard [1, 2], 1,749 rows).
+# Reference: zs27t_all_rp/zs27t_test (A40, 4-bit nf4, bf16 compute), same recipe (taxonomy full, topic_codes 10,
+# topic_none, 4 examples from all 1,500 training rows, image 1024/448); scoring exactly in groups instead of exact_chunk
+# 40, without hidden states. Measured on 24 training rows: 18.9 s per row, prompt-header check deviation 0.0039, top-code
+# agreement with the A40 run 0.958 -> 1,749 rows about 9.2 h + 4-24 min loading.
+# Test rows: only aggregates in the log (runner), outputs only as files under artifacts/runs/ (gitignored), never inspected.
+# Comparison afterwards only as an aggregate: python -I eda/c59_hardware_agreement.py --a zs27t_all_rp/zs27t_test/test
+#   --b px27_t4zt0/zs27t_test_t4/test --b px27_t4zt1/zs27t_test_t4/test --descriptive-only
+run: px27_t4zt1
+offline: true
+expected_hours: 9.8
+budget_hours: 10.8
+kernel_sources: [nanaresudo/k12-assets-q35-4b]  # wheels for the offline run
+model_sources: [ugvfpdcuwfnh/qwen3-8-27b/transformers/transformers-bf16/1]
+models:
+  q38_27b_t4: {repo: Qwen/Qwen3.8-27B, revision: 1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0,
+               kaggle_model: ugvfpdcuwfnh/qwen3-8-27b/transformers/transformers-bf16/1,
+               dtype: fp16, quant: 4bit, device: sequential, max_memory: {0: 12GiB, 1: 14GiB}, max_beam_tokens: 60000}
+workers:
+- gpu: "0,1"
+  jobs:
+  - {name: zs27t_test_t4, kind: predict, model: q38_27b_t4, fold: null, taxonomy: full, topic_codes: 10, topic_none: true,
+     image: {max_side: 1024, question_max_side: 448}, examples: true, max_examples: 4, batch: 2, exact_chunk: 12,
+     prefix_cache_tol: 0.12, prefix_cache_keep_on_oom: true, prefix_cache_check_rows: 4, save_every: 10,
+     predict: [{split: test, tag: test, probes: [diag], rows: {shard: [1, 2]}}]}

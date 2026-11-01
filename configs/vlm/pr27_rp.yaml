@@ -1,0 +1,40 @@
+# Channel pr27 on the training rows: the own Qwen3.8-27B in the teacher protocol on the in-house compute path (local vLLM
+# server, one 96 GB card, offline). Question: is the gain of a second model in the same protocol (Qwen3.5-397B, measured
+# through the API) a property of the larger model or of the protocol? A second MODEL may read more independently than
+# the same model with a different prompt.
+#
+# Protocol (vlm/proto.py): instruction, taxonomy, question, key, photo; NO labelled row, no topic or question block, no
+# teacher labels. First pass in thinking mode up to 2,500 tokens (reasoning and answer together), then a finish without
+# further reasoning from the end of the own notes (up to 1,500 tokens). Greedy. The prompts of both steps are
+# token-identical to the API measurement of the same protocol; the API saw the images as JPEG q75, the in-house path
+# sends PNG.
+#
+#   proto_a  the 860 rows of the stratified sample of the API measurement (data/derived/open_teacher/design_stage2.json),
+#            compared against the 397B on the same rows. The 70 rows of the API measurement run FIRST (`first`): after
+#            about seven minutes the input-token counts per row can be checked against the API measurement. After that
+#            in shuffled order (`order_seed`): train.csv is sorted by category, an intermediate state in file order
+#            would be biased. The evaluation still starts only after the job has finished.
+#   proto_b  the remaining 640 training rows: only with them can the test recipe be measured (marginal alignment acts on
+#            the whole set and needs full coverage).
+#   proto_r  the 70 rows of the API measurement a second time on the in-house path: how often does the same path hit
+#            the same top code on a repetition? This is the reference for "in-house path versus API" (about 5 minutes).
+# Training rows only. About 3.5 s per row: proto_a about 52 min, proto_b about 36 min; with setup about 105 min and
+# 4.3 USD.
+run: pr27_rp
+models:
+  q38_27b: {repo: Qwen/Qwen3.8-27B, revision: 1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0, dtype: bf16, max_beam_tokens: 600000}
+workers:
+- gpu: 0
+  jobs:
+  - {name: proto_a, kind: proto_gen, model: q38_27b, split: train, rows: {only: derived/proto_rows/train_sample.npy}, first: derived/proto_rows/train_api27.npy, order_seed: 0, tag: proto, must_pass: true,
+     image: {max_side: 1024, question_max_side: 448}, max_tokens: 2500, finish_tokens: 1500, note_chars: 16000,
+     concurrency: 64, guard_rows: 24, guard_min_valid: 0.5, request_timeout_s: 600,
+     server: {max_model_len: 16000, gpu_memory_utilization: 0.93, max_num_seqs: 64, startup_s: 900, pip: "vllm==0.31.0 transformers==5.17.0"}}
+  - {name: proto_b, kind: proto_gen, model: q38_27b, split: train, rows: {only: derived/proto_rows/train_rest.npy}, order_seed: 0, tag: proto,
+     image: {max_side: 1024, question_max_side: 448}, max_tokens: 2500, finish_tokens: 1500, note_chars: 16000,
+     concurrency: 64, guard_rows: 24, guard_min_valid: 0.5, request_timeout_s: 600,
+     server: {max_model_len: 16000, gpu_memory_utilization: 0.93, max_num_seqs: 64, startup_s: 900, pip: "vllm==0.31.0 transformers==5.17.0"}}
+  - {name: proto_r, kind: proto_gen, model: q38_27b, split: train, rows: {only: derived/proto_rows/train_api27.npy}, order_seed: 1, tag: proto,
+     image: {max_side: 1024, question_max_side: 448}, max_tokens: 2500, finish_tokens: 1500, note_chars: 16000,
+     concurrency: 64, guard_rows: 24, guard_min_valid: 0.5, request_timeout_s: 600,
+     server: {max_model_len: 16000, gpu_memory_utilization: 0.93, max_num_seqs: 64, startup_s: 900, pip: "vllm==0.31.0 transformers==5.17.0"}}

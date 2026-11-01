@@ -1,0 +1,51 @@
+# Channel v1r: orientation normalisation for v1, on Kaggle T4 x2.
+# Photos lying on their side cost the fine-tuned 9B (v1) about 0.07 MAP@3, the 27B without training hardly anything. Here v1
+# reads the photos marked as rotated STRAIGHTENED: `image.rotate_from` rotates the row's photo before reading (rotation
+# list from the orientation estimate of the image analysis, tools/make_orient.py; the network was trained only on train
+# and pool images; direction checked on two training images). Marked are photos whose most probable orientation is not
+# "upright", from confidence 0.5: 248 training rows (16.5 %), 620 test rows (17.7 %).
+# Per fold the same adapter measures the same marked rows twice, straightened (rot_f<k>) and unchanged (base_f<k>), both
+# in fp16 over both cards (the path that matched the A40), all codes exactly. The comparison is therefore paired and free of
+# differences between machines. Then the marked test rows straightened with the model fitted on all rows (only aggregates
+# in the log).
+# Fixed in advance: the main version uses confidence from 0.8 (about 124 training rows). It is adopted if v1 gains at least
+# +0.03 there (paired) AND the blend over all folds with the replaced v1 rows does not drop. The bands 0.5-0.6 / 0.6-0.7 /
+# 0.7-0.8 are reported; a lower threshold applies only if every band above it is positive.
+# Offline; weights and wheels from attached notebook outputs, adapters and rotation lists from private datasets.
+run: v1rot_t4
+offline: true
+expected_hours: 2.8
+kernel_sources: [nanaresudo/k12-assets-q35-4b, nanaresudo/k12-assets-q35-9b]  # the wheels for the offline run are in the 4B package
+dataset_sources: [nanaresudo/k12-misconception-adapters, nanaresudo/k12-derived]
+models:
+  q35_9b_fp16x2: {repo: Qwen/Qwen3.5-9B, revision: c202236235762e1c871ad0ccb60c8ee5ba337b9a, dtype: fp16, device: auto,
+                  max_memory: {0: 10GiB, 1: 11GiB}, max_beam_tokens: 36000}
+workers:
+  - gpu: "0,1"
+    jobs:
+      - {name: smoke, kind: eval, must_pass: true, model: q35_9b_fp16x2, adapter: v1_f1, fold: 1, image: {max_side: 1024, question_max_side: 448, rotate_from: derived/orient/train_c50.json},
+         val_rows: {only: derived/orient/train_c50_rows.npy, limit: 6}, taxonomy: full, examples: true, max_examples: 4, probes: [diag], batch: 4, exact_chunk: 6, save_every: 20}
+      - {name: rot_f1, kind: eval, model: q35_9b_fp16x2, adapter: v1_f1, fold: 1, image: {max_side: 1024, question_max_side: 448, rotate_from: derived/orient/train_c50.json},
+         val_rows: {only: derived/orient/train_c50_rows.npy}, taxonomy: full, examples: true, max_examples: 4, probes: [diag], batch: 4, exact_chunk: 6, save_every: 20}
+      - {name: base_f1, kind: eval, model: q35_9b_fp16x2, adapter: v1_f1, fold: 1, image: {max_side: 1024, question_max_side: 448},
+         val_rows: {only: derived/orient/train_c50_rows.npy}, taxonomy: full, examples: true, max_examples: 4, probes: [diag], batch: 4, exact_chunk: 6, save_every: 20}
+      - {name: rot_f2, kind: eval, model: q35_9b_fp16x2, adapter: v1_f2, fold: 2, image: {max_side: 1024, question_max_side: 448, rotate_from: derived/orient/train_c50.json},
+         val_rows: {only: derived/orient/train_c50_rows.npy}, taxonomy: full, examples: true, max_examples: 4, probes: [diag], batch: 4, exact_chunk: 6, save_every: 20}
+      - {name: base_f2, kind: eval, model: q35_9b_fp16x2, adapter: v1_f2, fold: 2, image: {max_side: 1024, question_max_side: 448},
+         val_rows: {only: derived/orient/train_c50_rows.npy}, taxonomy: full, examples: true, max_examples: 4, probes: [diag], batch: 4, exact_chunk: 6, save_every: 20}
+      - {name: rot_f0, kind: eval, model: q35_9b_fp16x2, adapter: v1_f0, fold: 0, image: {max_side: 1024, question_max_side: 448, rotate_from: derived/orient/train_c50.json},
+         val_rows: {only: derived/orient/train_c50_rows.npy}, taxonomy: full, examples: true, max_examples: 4, probes: [diag], batch: 4, exact_chunk: 6, save_every: 20}
+      - {name: base_f0, kind: eval, model: q35_9b_fp16x2, adapter: v1_f0, fold: 0, image: {max_side: 1024, question_max_side: 448},
+         val_rows: {only: derived/orient/train_c50_rows.npy}, taxonomy: full, examples: true, max_examples: 4, probes: [diag], batch: 4, exact_chunk: 6, save_every: 20}
+      - {name: rot_f3, kind: eval, model: q35_9b_fp16x2, adapter: v1_f3, fold: 3, image: {max_side: 1024, question_max_side: 448, rotate_from: derived/orient/train_c50.json},
+         val_rows: {only: derived/orient/train_c50_rows.npy}, taxonomy: full, examples: true, max_examples: 4, probes: [diag], batch: 4, exact_chunk: 6, save_every: 20}
+      - {name: base_f3, kind: eval, model: q35_9b_fp16x2, adapter: v1_f3, fold: 3, image: {max_side: 1024, question_max_side: 448},
+         val_rows: {only: derived/orient/train_c50_rows.npy}, taxonomy: full, examples: true, max_examples: 4, probes: [diag], batch: 4, exact_chunk: 6, save_every: 20}
+      - {name: rot_f4, kind: eval, model: q35_9b_fp16x2, adapter: v1_f4, fold: 4, image: {max_side: 1024, question_max_side: 448, rotate_from: derived/orient/train_c50.json},
+         val_rows: {only: derived/orient/train_c50_rows.npy}, taxonomy: full, examples: true, max_examples: 4, probes: [diag], batch: 4, exact_chunk: 6, save_every: 20}
+      - {name: base_f4, kind: eval, model: q35_9b_fp16x2, adapter: v1_f4, fold: 4, image: {max_side: 1024, question_max_side: 448},
+         val_rows: {only: derived/orient/train_c50_rows.npy}, taxonomy: full, examples: true, max_examples: 4, probes: [diag], batch: 4, exact_chunk: 6, save_every: 20}
+      - {name: rot_test, kind: predict, model: q35_9b_fp16x2, adapter: v1_full, fold: null,
+         image: {max_side: 1024, question_max_side: 448, rotate_from: derived/orient/test_c50.json},
+         taxonomy: full, examples: true, max_examples: 4, probes: [diag], batch: 4, exact_chunk: 6, save_every: 20,
+         predict: [{split: test, tag: test, probes: [diag], rows: {only: derived/orient/test_c50_rows.npy}}]}

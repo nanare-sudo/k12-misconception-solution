@@ -1,0 +1,49 @@
+# v1: recipe of ft_sum1_rp (Qwen3.5-9B, bf16, adapters in layers 20-31, fixed prompt header, task diag with auxiliary
+# targets, summed code loss), full fit on all 1,500 training rows (adapter v1_full, used for the test side).
+# A40 (48 GB).
+run: ft_v1c_rp
+models:
+  q35_9b:
+    repo: Qwen/Qwen3.5-9B
+    revision: c202236235762e1c871ad0ccb60c8ee5ba337b9a
+    dtype: bf16
+    max_beam_tokens: 420000
+workers:
+- gpu: 0
+  jobs:
+  - batch: 8
+    beams: 74
+    epoch_probes:
+    - diag
+    eval_each_epoch: false
+    example_dropout: 0.15
+    examples: true
+    fold: null
+    image:
+      max_side: 1024
+      question_max_side: 448
+    kind: train
+    max_examples: 4
+    model: q35_9b
+    name: v1_full
+    save_hidden: true
+    taxonomy: full
+    train:
+      accum: 8
+      code_loss: sum
+      epochs: 3
+      grad_checkpointing: false
+      log_every: 200
+      lora_alpha: 64
+      lora_dropout: 0.05
+      lora_from_layer: 20
+      lora_r: 32
+      lr: 0.00015
+      seed: 42
+      tasks:
+      - diag
+      w_aux: 0.5
+      w_code: 1.0
+      w_fac: 0.5
+    train_budget_s: 34000
+    probes: []

@@ -1,0 +1,25 @@
+# Offline rerun of the test prediction of the channel v1 on a SECOND hardware class, half 1 of 2 of the test rows:
+# Qwen3.5-9B with the adapter of the full fit (v1_full) on Kaggle T4 x2, OFFLINE (weights and wheels from attached
+# notebook outputs, adapter from the private dataset). Recipe as in configs/vlm/v1_test_rp.yaml (examples of the same
+# question from all 1,500 training rows, full taxonomy, all 74 codes exactly); there bf16 on a rented A40, here fp16 over
+# both cards (the path that matched the A40).
+# Purpose: (1) part of the offline rerun of the final files (the channel is used in both lines), (2) a measure of the
+# deviation between two machines: top-code agreement and distance of the probabilities against the A40 run, aggregates only.
+# First 40 rows of fold 1 with the fold-1 adapter (comparison against the A40 measurement of the channel v1).
+# For test rows only aggregates in the log. About 3.3 h (6.6 s per row).
+run: v1te_a_t4
+offline: true
+expected_hours: 3.5
+kernel_sources: [nanaresudo/k12-assets-q35-4b, nanaresudo/k12-assets-q35-9b]  # the wheels for the offline run are in the 4B package
+dataset_sources: [nanaresudo/k12-misconception-adapters, nanaresudo/k12-derived]
+models:
+  q35_9b_fp16x2: {repo: Qwen/Qwen3.5-9B, revision: c202236235762e1c871ad0ccb60c8ee5ba337b9a, dtype: fp16, device: auto,
+                  max_memory: {0: 10GiB, 1: 11GiB}, max_beam_tokens: 36000}
+workers:
+  - gpu: "0,1"
+    jobs:
+      - {name: check_f1, kind: eval, must_pass: true, model: q35_9b_fp16x2, adapter: v1_f1, fold: 1, image: {max_side: 1024, question_max_side: 448},
+         val_rows: {limit: 40}, taxonomy: full, examples: true, max_examples: 4, probes: [diag], batch: 4, exact_chunk: 6, save_every: 20}
+      - {name: v1_test_a, kind: predict, model: q35_9b_fp16x2, adapter: v1_full, fold: null, image: {max_side: 1024, question_max_side: 448},
+         taxonomy: full, examples: true, max_examples: 4, probes: [diag], batch: 4, exact_chunk: 6, save_every: 20,
+         predict: [{split: test, tag: test, probes: [diag], rows: {shard: [0, 2]}}]}

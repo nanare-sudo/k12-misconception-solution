@@ -1,0 +1,16 @@
+# How much reasoning does the ranking need? The reasoning texts of fold 2 generated with up to 2,500 tokens (run
+# zs27v_f2_rp, job gen2500, on the same machine) are truncated afterwards to about 1,200 and 1,800 tokens and scored again;
+# together with 700 (think700v_f2) and 2,500 (think2500v_f2) this gives the curve of quality against cost.
+# Training rows only; nothing is generated again. cut1800_f2 is fold 2 of the reasoning channel (draw g).
+run: zs27v_cut_rp
+models:
+  q38_27b: {repo: Qwen/Qwen3.8-27B, revision: 1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0, dtype: bf16, max_beam_tokens: 600000}
+workers:
+- gpu: 0
+  jobs:
+  - {name: cut1200_f2, kind: bench, model: q38_27b, taxonomy: full, topic_codes: 10, topic_none: true, teacher_labels: [pool_a, pool_b], question_codes: 8,
+     image: {max_side: 1024, question_max_side: 448}, examples: true, max_examples: 4, rows: {folds: [2]}, probes: [think], think_from: zs27v_f2_rp/gen2500/think,
+     think_cut_tokens: 1200, batch: 6, beams: 74, prefix_cache_tol: 0.12, prefix_cache_check_rows: 4, save_every: 25}
+  - {name: cut1800_f2, kind: bench, model: q38_27b, taxonomy: full, topic_codes: 10, topic_none: true, teacher_labels: [pool_a, pool_b], question_codes: 8,
+     image: {max_side: 1024, question_max_side: 448}, examples: true, max_examples: 4, rows: {folds: [2]}, probes: [think], think_from: zs27v_f2_rp/gen2500/think,
+     think_cut_tokens: 1800, batch: 6, beams: 74, prefix_cache_tol: 0.12, prefix_cache_check_rows: 4, save_every: 25}

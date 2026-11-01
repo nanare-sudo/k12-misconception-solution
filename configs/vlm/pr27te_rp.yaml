@@ -1,0 +1,17 @@
+# Channel pr27 (teacher protocol) for the TEST rows: the own Qwen3.8-27B without training, with the same settings as on
+# the training rows (pr27_rp). Offline on the rented machine (local vLLM server, no outbound call); no API processes test
+# rows. The answer files are row-level derivatives of test images: they stay under artifacts/runs/ (gitignored) and are
+# not inspected. Log and evaluation use only counts (proto_meta.json: share of valid answers, share at the token limit,
+# token statistics, share of NONE at the top, number of distinct codes); they are compared with those of the training
+# run, and a deviation there would be the only sign of a form error.
+# Shuffled processing order; an interrupted run resumes. About 3.5 s per row: 3,498 rows about 3.4 h, about 8.50 USD.
+run: pr27te_rp
+models:
+  q38_27b: {repo: Qwen/Qwen3.8-27B, revision: 1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0, dtype: bf16, max_beam_tokens: 600000}
+workers:
+- gpu: 0
+  jobs:
+  - {name: proto_te, kind: proto_gen, model: q38_27b, split: test, order_seed: 0, tag: proto,
+     image: {max_side: 1024, question_max_side: 448}, max_tokens: 2500, finish_tokens: 1500, note_chars: 16000,
+     concurrency: 64, guard_rows: 24, guard_min_valid: 0.5, request_timeout_s: 600,
+     server: {max_model_len: 16000, gpu_memory_utilization: 0.93, max_num_seqs: 64, startup_s: 900, pip: "vllm==0.31.0 transformers==5.17.0"}}

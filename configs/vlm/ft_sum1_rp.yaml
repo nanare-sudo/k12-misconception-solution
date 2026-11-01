@@ -1,0 +1,28 @@
+# v1, fold 1: LoRA fine-tuning of Qwen3.5-9B. The loss of the code tokens is summed per sample instead of averaged: with
+# a mean, NONE (one token) weighed four to five times as much as an error code, and the averaged variant predicted NONE
+# for 61 % of the rows after two epochs (true share 34 %). The adapter of job ft9b_sum_f1 is the fold-1 adapter of v1.
+run: ft_sum1_rp
+models:
+  q35_4b: {repo: Qwen/Qwen3.5-4B, revision: 851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a, dtype: bf16, max_beam_tokens: 100000}
+  q35_9b: {repo: Qwen/Qwen3.5-9B, revision: c202236235762e1c871ad0ccb60c8ee5ba337b9a, dtype: bf16, max_beam_tokens: 100000}
+workers:
+  - gpu: 0
+    jobs:
+      - name: ft9b_sum_f1
+        kind: train
+        model: q35_9b
+        fold: 1
+        taxonomy: full
+        image: {max_side: 1024, question_max_side: 448}
+        examples: true
+        example_dropout: 0.15
+        max_examples: 4
+        train: {epochs: 3, lr: 1.5e-4, accum: 8, lora_r: 32, lora_alpha: 64, lora_dropout: 0.05, lora_from_layer: 20,
+                tasks: [diag], w_code: 1.0, w_fac: 0.5, w_aux: 0.5, log_every: 100, seed: 42, grad_checkpointing: false, code_loss: sum}
+        train_budget_s: 34000
+        eval_each_epoch: true
+        epoch_probes: [diag]
+        probes: [diag]
+        save_hidden: true
+        batch: 8
+        beams: 8

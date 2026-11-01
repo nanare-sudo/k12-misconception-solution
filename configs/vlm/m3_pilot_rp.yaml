@@ -1,0 +1,133 @@
+# M3: PILOT of the fine-tuned 27B diagnostician without question knowledge, on folds 1 and 2.
+#
+# Form: LoRA on Qwen3.8-27B (bf16, one 96 GB card), rank 32 / alpha 64, layers 40-63, vision tower frozen, gradient
+# checkpointing, two epochs, task proto_sft (src/vlm/sft.py). Prompt as for the channel pr27: verdict rules + taxonomy as
+# system text, question, diagram (448 px), key, photo (1,024 px); NO labelled row, no topic or question block, no teacher
+# labels. Answer: notes in the thinking block, then "Finding: <explanation>", then "Root: <code>". Training targets per
+# fold only from rows of the other folds (data/derived/sft/m3_fold<k>_targets.jsonl, tools/make_sft_targets.py, checksums
+# in the .meta.json files):
+#   - own pr27 note WITH loss where the pr27 channel ranks the gold code first (fold 1: 809 of 1,200 rows, fold 2: 830),
+#     otherwise as a closed thinking block in the prompt without loss; note limit 2,500 tokens (= the pr27 budget; 84 %
+#     of the notes end above 1,800 tokens, median 2,500, so a tighter limit would cut the reasoning budget below pr27);
+#   - finding line = full explanation of the annotators' root finding (NONE: "none"), loss with the first token at full
+#     weight + the rest averaged (decision "none" versus a description);
+#   - code with summed loss. Weights: code 1.0, finding 1.0, notes 0.5, scaffold 0.5.
+#   - The fixed header (system text, 3,376 tokens) is computed during training WITH the current adapter (without
+#     gradient, again after every optimiser step; prefix_with_adapter), the way the merged model computes it in vLLM and
+#     when scoring. Exact alternative with gradient through the header: drop prefix_with_adapter and set
+#     `prefix_cache: false` in the model q38_27b (about 1.8 times the training compute).
+# Measurement per fold: merge the adapter into the weight files (merge; unchanged files are linked) -> merged model in the
+# local vLLM server: notes + finding + root for the 300 rows of the fold (greedy, up to 3,200 tokens) -> exact ranking of
+# all 74 codes behind the canonical text "notes\n</think>\n\nFinding: …\nRoot:" (probe proto_rank, sft mode; if the finding
+# is missing, the in-house path generates it up to "Root:") -> output in the format of proto_rank (eda/a8_proto_oof.py --rank).
+#
+# Before the run (local):  python tools/make_sft_targets.py          (folds 0-4 and --full; only counts and checksums are printed)
+#                functional check: configs/vlm/local_m3_test.yaml (0.8B, CPU)
+# Hardware:      one RTX PRO 6000 (96 GB), disk >= 150 GB (base model 51.8 GB + merged files up to 54 GB + vLLM
+#                environment; 80 GB are NOT enough)
+# Inputs:        data/derived/sft (training targets of training rows only; no test data, no pool)
+# Checks after the run, BEFORE the evaluation: m3_smoke step time and memory; m3_smoke_merge merge log line;
+#                m3_smoke_gen and m3_gen_f* meta (answered, states, ends); m3_rank_* 'failed': 0, no 'oom_retries',
+#                prompt-header check "-> an".
+# Evaluation:    cd src && python -m vlm.sft combine --run m3_pilot_rp --jobs m3_rank_f1 m3_rank_f2 --out m3_rank
+#                cd src && python -m vlm.sft compare --run m3_pilot_rp --job m3_rank      (channel and NONE against pr27, per group)
+#                python -I eda/a8_proto_oof.py m3p runs/pr27_rp/proto_a/proto+runs/pr27_rp/proto_b/proto --rank runs/m3_pilot_rp/m3_rank/bench \
+#                    --rank-partial --neutral derived/sft/m3_neutral_f12.npy
+#                (partial coverage: exact ranking on folds 1+2, uniform on the other 900 rows, which has no effect in the
+#                log-linear mean; the added contribution is evaluated on these 600 rows only)
+#
+# Time and cost (estimate; the pre-run measures s per step and memory): setup about 10 min, pre-run chain about 25 min
+# (incl. vLLM environment); per fold training 2,400 steps x about 2.0 s (1.5-2.6), about 80 min, merge about 5 min,
+# generation about 17 min (300 x about 2,700 tokens at about 1,000 tokens/s), ranking about 12 min: about 1.9 h per fold.
+# Total about 4.4 h (3.9-5.0 h), about 11 USD (9.7-12.5 USD); upper bound at 3.0 s per step (pre-run limit) about 5.7 h,
+# about 14 USD.
+# Training memory (estimate): weights 51 GB + adapter/optimiser about 1 GB + header cache < 1 GB + checkpoint inputs
+# about 1 GB + one layer in the backward pass about 2-3 GB + logits on about 2,600 target positions about 6-7 GB:
+# about 62-66 GB (the code-first 27B fine-tune without checkpointing: 88.5 GB). Limit in the pre-run: 92 GB.
+#
+# ABORT rules (technical failures and harm only; the pilot is not a deployment gate):
+#   automatic during the run (must_pass / guards):
+#     m3_smoke        > 25 % failed steps (memory, non-finite), > 3.0 s per step after warm-up (1.5 x estimate; above it
+#                     two folds no longer fit the time limit), > 92 GB peak memory;
+#     m3_smoke_merge  adapter weight without a partner in the base model or wrong shape;
+#     m3_smoke_gen    vLLM does not start with the merged model or > 5 % request errors (form guard off: after 32 steps
+#                     the model still answers like the base model);
+#     m3_smoke_rank   one of the 8 rows without an exact ranking;
+#     m3_gen_f<k>     of the first 24 rows < 25 % with a complete answer (thinking block closed, finding, root) or
+#                     > 5 % request errors -> the job fails (form missed) and the ranking of this fold is skipped.
+#                     Incomplete answers above that are no abort: the ranking generates their finding (about 8-10 s per row).
+#   after the pilot (600 rows, folds 1+2, paired against pr27 on the same rows):
+#     channel MAP@3 < pr27 - 0.03  OR  NONE MAP@3 < pr27 - 0.05  OR  added contribution < -0.007 in BOTH lines -> stop.
+#   Everything else proceeds to the full measurement (three further folds); only that measurement decides on deployment.
+run: m3_pilot_rp
+models:
+  q38_27b: {repo: Qwen/Qwen3.8-27B, revision: 1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0, dtype: bf16, max_beam_tokens: 600000}
+  m3_smoke: {merged: m3_smoke_merged, dtype: bf16, max_beam_tokens: 600000}
+  m3_f1: {merged: m3_f1_merged, dtype: bf16, max_beam_tokens: 600000}
+  m3_f2: {merged: m3_f2_merged, dtype: bf16, max_beam_tokens: 600000}
+workers:
+- gpu: 0
+  jobs:
+  # --- pre-run chain: memory and step time, merging, vLLM with the merged model, ranking with completion
+  - name: m3_smoke
+    kind: train
+    must_pass: true
+    max_s_per_step: 3.0
+    max_gpu_gb: 92
+    model: q38_27b
+    fold: 1
+    sft_targets: derived/sft/m3_fold1_targets.jsonl
+    sft_notes_max_tokens: 2500
+    image: {max_side: 1024, question_max_side: 448}
+    train_rows: {sample: 32, seed: 0}
+    train: {tasks: [proto_sft], epochs: 1, max_steps: 32, lr: 0.0001, accum: 8, lora_r: 32, lora_alpha: 64, lora_dropout: 0.05,
+            lora_from_layer: 40, prefix_with_adapter: true, grad_checkpointing: true, code_loss: sum, why_loss: first+mean,
+            w_code: 1.0, w_why: 1.0, w_notes: 0.5, w_aux: 0.5, log_every: 8, seed: 42}
+  - {name: m3_smoke_merge, kind: merge, must_pass: true, model: q38_27b, adapter_from: m3_smoke, out_model: m3_smoke_merged}
+  - {name: m3_smoke_gen, kind: sft_gen, must_pass: true, model: m3_smoke, split: train, rows: {folds: [1], sample: 8, seed: 0},
+     image: {max_side: 1024, question_max_side: 448}, max_tokens: 3200, concurrency: 8, guard_rows: 8, guard_min_complete: 0.0,
+     max_failed: 0.05, request_timeout_s: 900, tag: gen,
+     server: {max_model_len: 16000, gpu_memory_utilization: 0.90, max_num_seqs: 64, startup_s: 900, pip: "vllm==0.31.0 transformers==5.17.0"}}
+  - {name: m3_smoke_rank, kind: bench, must_pass: true, model: m3_smoke, rows: {folds: [1], sample: 8, seed: 0}, probes: [proto_rank],
+     sft_from: m3_smoke_gen/gen, image: {max_side: 1024, question_max_side: 448}, batch: 6, beams: 74, finish_tokens: 320,
+     prefix_cache_tol: 0.12, prefix_cache_same_top: false, prefix_cache_check_rows: 4, save_every: 25, drop_model: true}
+  # --- Fold 1
+  - name: m3_train_f1
+    kind: train
+    model: q38_27b
+    fold: 1
+    sft_targets: derived/sft/m3_fold1_targets.jsonl
+    sft_notes_max_tokens: 2500
+    image: {max_side: 1024, question_max_side: 448}
+    train_budget_s: 7800
+    train: {tasks: [proto_sft], epochs: 2, lr: 0.0001, accum: 8, lora_r: 32, lora_alpha: 64, lora_dropout: 0.05,
+            lora_from_layer: 40, prefix_with_adapter: true, grad_checkpointing: true, code_loss: sum, why_loss: first+mean,
+            w_code: 1.0, w_why: 1.0, w_notes: 0.5, w_aux: 0.5, log_every: 100, seed: 42}
+  - {name: m3_merge_f1, kind: merge, model: q38_27b, adapter_from: m3_train_f1, out_model: m3_f1_merged}
+  - {name: m3_gen_f1, kind: sft_gen, model: m3_f1, split: train, rows: {folds: [1]}, order_seed: 0,
+     image: {max_side: 1024, question_max_side: 448}, max_tokens: 3200, concurrency: 64, guard_rows: 24, guard_min_complete: 0.25,
+     max_failed: 0.05, request_timeout_s: 1200, tag: gen,
+     server: {max_model_len: 16000, gpu_memory_utilization: 0.90, max_num_seqs: 64, startup_s: 900, pip: "vllm==0.31.0 transformers==5.17.0"}}
+  - {name: m3_rank_f1, kind: bench, model: m3_f1, rows: {folds: [1]}, probes: [proto_rank], sft_from: m3_gen_f1/gen,
+     image: {max_side: 1024, question_max_side: 448}, batch: 6, beams: 74, finish_tokens: 320,
+     prefix_cache_tol: 0.12, prefix_cache_same_top: false, prefix_cache_check_rows: 4, save_every: 25, drop_model: true}
+  # --- Fold 2
+  - name: m3_train_f2
+    kind: train
+    model: q38_27b
+    fold: 2
+    sft_targets: derived/sft/m3_fold2_targets.jsonl
+    sft_notes_max_tokens: 2500
+    image: {max_side: 1024, question_max_side: 448}
+    train_budget_s: 7800
+    train: {tasks: [proto_sft], epochs: 2, lr: 0.0001, accum: 8, lora_r: 32, lora_alpha: 64, lora_dropout: 0.05,
+            lora_from_layer: 40, prefix_with_adapter: true, grad_checkpointing: true, code_loss: sum, why_loss: first+mean,
+            w_code: 1.0, w_why: 1.0, w_notes: 0.5, w_aux: 0.5, log_every: 100, seed: 42}
+  - {name: m3_merge_f2, kind: merge, model: q38_27b, adapter_from: m3_train_f2, out_model: m3_f2_merged}
+  - {name: m3_gen_f2, kind: sft_gen, model: m3_f2, split: train, rows: {folds: [2]}, order_seed: 0,
+     image: {max_side: 1024, question_max_side: 448}, max_tokens: 3200, concurrency: 64, guard_rows: 24, guard_min_complete: 0.25,
+     max_failed: 0.05, request_timeout_s: 1200, tag: gen,
+     server: {max_model_len: 16000, gpu_memory_utilization: 0.90, max_num_seqs: 64, startup_s: 900, pip: "vllm==0.31.0 transformers==5.17.0"}}
+  - {name: m3_rank_f2, kind: bench, model: m3_f2, rows: {folds: [2]}, probes: [proto_rank], sft_from: m3_gen_f2/gen,
+     image: {max_side: 1024, question_max_side: 448}, batch: 6, beams: 74, finish_tokens: 320,
+     prefix_cache_tol: 0.12, prefix_cache_same_top: false, prefix_cache_check_rows: 4, save_every: 25, drop_model: true}

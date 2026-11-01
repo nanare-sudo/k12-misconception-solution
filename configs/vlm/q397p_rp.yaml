@@ -1,0 +1,22 @@
+# FIDELITY CHECK of the in-house compute path for Qwen3.5-397B-A17B (official FP8 version, 406 GB, Apache 2.0) against the
+# API measurement of the same protocol: 64 random training rows with a valid API answer (seed 20261030), teacher protocol
+# (no labelled row in the prompt; thinking mode up to 2,500 tokens, finish without thinking up to 1,500; greedy). One
+# machine with 4x H200, tensor parallelism 4. Decision rule fixed in advance: valid >= 97 %, input tokens of the first step
+# per row equal to the API count (deviation at most 1 %), top-code agreement >= 0.70; otherwise NO test side. q397te_rp
+# then runs on the same machine.
+# Evaluation: python -I eda/c109_q397_parity.py runs/q397p_rp/proto_p/proto
+# Server settings required on this machine type: --disable-custom-all-reduce (NCCL; capturing CUDA graphs failed in the
+# custom all-reduce because the container offers no P2P/IPC); flashinfer all-reduce off (VLLM_ALLREDUCE_USE_FLASHINFER=0)
+# and the bin folder of the vLLM environment on PATH (bin_on_path; flashinfer compiles its all-reduce kernel with ninja);
+# DeepGEMM off (its JIT requires nvcc >= 12.9, the image provides 12.8).
+run: q397p_rp
+models:
+  q397: {repo: Qwen/Qwen3.5-397B-A17B-FP8, revision: ea5b4f81096f3901c91dea97f81324302495781d, download_workers: 32}
+workers:
+- gpu: "0,1,2,3"
+  jobs:
+  - {name: proto_p, kind: proto_gen, model: q397, split: train, rows: {only: derived/open_teacher/rows_parity64_397b.npy}, order_seed: 0, tag: proto, must_pass: true,
+     image: {max_side: 1024, question_max_side: 448}, max_tokens: 2500, finish_tokens: 1500, note_chars: 16000,
+     concurrency: 64, guard_rows: 24, guard_min_valid: 0.5, request_timeout_s: 1200,
+     server: {dtype: auto, max_model_len: 16000, gpu_memory_utilization: 0.92, max_num_seqs: 64, startup_s: 3600, env: {VLLM_USE_DEEP_GEMM: "0", VLLM_MOE_USE_DEEP_GEMM: "0", VLLM_ALLREDUCE_USE_FLASHINFER: "0"}, bin_on_path: true, pip: "vllm==0.31.0 transformers==5.17.0",
+              extra_args: ["--tensor-parallel-size", "4", "--disable-custom-all-reduce"]}}

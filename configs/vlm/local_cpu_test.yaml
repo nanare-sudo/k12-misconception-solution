@@ -1,0 +1,31 @@
+# Functional check of the whole flow on the local CPU with the smallest model.
+# No measurement, only: does every step run?  cd src && python -m vlm.runner --config ../configs/vlm/local_cpu_test.yaml --out <folder>
+run: local_cpu_test
+models_dir: data/models
+models:
+  q35_08b: {repo: Qwen/Qwen3.5-0.8B, revision: 2fc06364715b967f1860aea9cf38778875588b17, dtype: fp32}
+workers:
+  - gpu: null
+    jobs:
+      - name: bench_tiny
+        kind: bench
+        model: q35_08b
+        taxonomy: name
+        image: {max_side: 224, question_max_side: 160}
+        rows: {sample: 3, seed: 1}
+        probes: [fac, diag, diag_gold, read, diag_read, full]
+        batch: 2
+        beams: 4
+        max_new_tokens: 40
+      - name: train_tiny
+        kind: train
+        model: q35_08b
+        fold: 1
+        taxonomy: name
+        image: {max_side: 224, question_max_side: 160}
+        train_rows: {limit: 6}
+        val_rows: {limit: 2}
+        train: {epochs: 1, accum: 2, max_steps: 4, log_every: 2, lora_r: 8, lora_alpha: 16}
+        probes: [diag]
+        batch: 2
+        beams: 4

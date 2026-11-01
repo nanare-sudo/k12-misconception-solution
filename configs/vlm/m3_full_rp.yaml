@@ -1,0 +1,43 @@
+# M3 without pool rows: FULL FIT of the reasoning 27B (recipe of the pilot) on ALL 1,500 gold training targets
+# (data/derived/sft/m3_full_targets.jsonl, tools/make_sft_targets.py --full); no fold held out, no measurement in this
+# run. m3_merge_full then merges the adapter into the weights. Strictly inductive (no teacher targets).
+# The test side runs in m3_fullte_rp.yaml, which contains the same training jobs followed by the test jobs; this file is
+# the training-only form of the same recipe. For a rerun the adapter is delivered UNMERGED (m3_train_full/adapter);
+# merging is a deterministic CPU step.
+#
+# Inputs: data/derived/sft (training targets of training rows only).
+# Hardware: one RTX PRO 6000 (96 GB, 200 GB disk). Time and cost: 2 x 1,500 targets = 3,000 steps x 1.76 s, about 88 min,
+# plus pre-run 2 min and merge 5 min: about 1.7 h, about 4.3 USD.
+# Automatic aborts: pre-run > 25 % failed steps, > 3.0 s per step, > 92 GB; train_budget_s 9000 (2.5 h).
+run: m3_full_rp
+models:
+  q38_27b: {repo: Qwen/Qwen3.8-27B, revision: 1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0, dtype: bf16, max_beam_tokens: 600000}
+workers:
+- gpu: 0
+  jobs:
+  - name: m3_smoke_full
+    kind: train
+    must_pass: true
+    max_s_per_step: 3.0
+    max_gpu_gb: 92
+    model: q38_27b
+    fold: null
+    sft_targets: derived/sft/m3_full_targets.jsonl
+    sft_notes_max_tokens: 2500
+    image: {max_side: 1024, question_max_side: 448}
+    train_rows: {sample: 32, seed: 0}
+    train: {tasks: [proto_sft], epochs: 1, max_steps: 32, lr: 0.0001, accum: 8, lora_r: 32, lora_alpha: 64, lora_dropout: 0.05,
+            lora_from_layer: 40, prefix_with_adapter: true, grad_checkpointing: true, code_loss: sum, why_loss: first+mean,
+            w_code: 1.0, w_why: 1.0, w_notes: 0.5, w_aux: 0.5, log_every: 8, seed: 42}
+  - name: m3_train_full
+    kind: train
+    model: q38_27b
+    fold: null
+    sft_targets: derived/sft/m3_full_targets.jsonl
+    sft_notes_max_tokens: 2500
+    image: {max_side: 1024, question_max_side: 448}
+    train_budget_s: 9000
+    train: {tasks: [proto_sft], epochs: 2, lr: 0.0001, accum: 8, lora_r: 32, lora_alpha: 64, lora_dropout: 0.05,
+            lora_from_layer: 40, prefix_with_adapter: true, grad_checkpointing: true, code_loss: sum, why_loss: first+mean,
+            w_code: 1.0, w_why: 1.0, w_notes: 0.5, w_aux: 0.5, log_every: 100, seed: 42}
+  - {name: m3_merge_full, kind: merge, model: q38_27b, adapter_from: m3_train_full, out_model: m3_full_merged}

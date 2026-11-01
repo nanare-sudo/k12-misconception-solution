@@ -1,0 +1,124 @@
+# M3, draw d2 on folds 1 and 2: the pilot adapters (m3_pilot_rp/m3_train_f1, f2, merged unchanged) generate their texts
+# with a limit of 5,200 instead of 3,200 tokens. In the pilot about 50 % of the answers ended at the limit and were
+# completed by the ranking step (finish_tokens 320). Measured: the channel paired against the pilot on the same 600 rows,
+# and the mean of the pilot draw and the new draw (two draws, the deployed form of the M3 test side). Ranking and
+# everything else as in the pilot.
+# Inputs: the adapters m3_pilot_rp/m3_train_f{1,2} under the same output root.
+# Hardware: one RTX PRO 6000 (96 GB, 200 GB disk). Time: loading about 10 min, per fold merge 2 min + generation about
+# 20 min (longer texts) + ranking about 12-18 min: about 1.4 h, about 3.5 USD.
+run: m3long_rp
+models:
+  q38_27b:
+    repo: Qwen/Qwen3.8-27B
+    revision: 1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0
+    dtype: bf16
+    max_beam_tokens: 600000
+  m3l_f1:
+    merged: m3l_f1_merged
+    dtype: bf16
+    max_beam_tokens: 600000
+  m3l_f2:
+    merged: m3l_f2_merged
+    dtype: bf16
+    max_beam_tokens: 600000
+workers:
+- gpu: 0
+  jobs:
+  - name: m3l_merge_f1
+    kind: merge
+    model: q38_27b
+    adapter_from: ../m3_pilot_rp/m3_train_f1
+    out_model: m3l_f1_merged
+  - name: m3l_gen_f1
+    kind: sft_gen
+    model: m3l_f1
+    split: train
+    rows:
+      folds:
+      - 1
+    order_seed: 0
+    image:
+      max_side: 1024
+      question_max_side: 448
+    max_tokens: 5200
+    concurrency: 64
+    guard_rows: 24
+    guard_min_complete: 0.25
+    max_failed: 0.05
+    request_timeout_s: 1200
+    tag: gen
+    server:
+      max_model_len: 16000
+      gpu_memory_utilization: 0.9
+      max_num_seqs: 64
+      startup_s: 900
+      pip: vllm==0.31.0 transformers==5.17.0
+  - name: m3l_rank_f1
+    kind: bench
+    model: m3l_f1
+    rows:
+      folds:
+      - 1
+    probes:
+    - proto_rank
+    sft_from: m3l_gen_f1/gen
+    image:
+      max_side: 1024
+      question_max_side: 448
+    batch: 6
+    beams: 74
+    finish_tokens: 320
+    prefix_cache_tol: 0.12
+    prefix_cache_same_top: false
+    prefix_cache_check_rows: 4
+    save_every: 25
+    drop_model: true
+  - name: m3l_merge_f2
+    kind: merge
+    model: q38_27b
+    adapter_from: ../m3_pilot_rp/m3_train_f2
+    out_model: m3l_f2_merged
+  - name: m3l_gen_f2
+    kind: sft_gen
+    model: m3l_f2
+    split: train
+    rows:
+      folds:
+      - 2
+    order_seed: 0
+    image:
+      max_side: 1024
+      question_max_side: 448
+    max_tokens: 5200
+    concurrency: 64
+    guard_rows: 24
+    guard_min_complete: 0.25
+    max_failed: 0.05
+    request_timeout_s: 1200
+    tag: gen
+    server:
+      max_model_len: 16000
+      gpu_memory_utilization: 0.9
+      max_num_seqs: 64
+      startup_s: 900
+      pip: vllm==0.31.0 transformers==5.17.0
+  - name: m3l_rank_f2
+    kind: bench
+    model: m3l_f2
+    rows:
+      folds:
+      - 2
+    probes:
+    - proto_rank
+    sft_from: m3l_gen_f2/gen
+    image:
+      max_side: 1024
+      question_max_side: 448
+    batch: 6
+    beams: 74
+    finish_tokens: 320
+    prefix_cache_tol: 0.12
+    prefix_cache_same_top: false
+    prefix_cache_check_rows: 4
+    save_every: 25
+    drop_model: true

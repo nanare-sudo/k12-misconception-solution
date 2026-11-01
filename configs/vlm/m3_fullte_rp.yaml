@@ -1,0 +1,53 @@
+# M3 without pool rows (recipe of the pilot, measured on five folds): full fit on all 1,500 gold training targets (as in
+# m3_full_rp.yaml), merge, then the test side: notes + finding + root for all 3,498 test rows (greedy, 3,200 tokens) and
+# the exact ranking of all 74 codes behind the canonical text. This is draw d1 of the M3 test channel. Test outputs stay
+# under artifacts/runs/; only aggregates are inspected. Strictly inductive, gold targets only.
+#
+# Inputs: data/derived/sft (training targets of training rows only).
+# Hardware: one RTX PRO 6000 (96 GB, 200 GB disk). Time: training 3,000 steps x 1.76 s, about 1.5 h; generation about
+# 2.5-2.9 h for 3,498 rows; ranking about 3.4 s per row (about half of the answers are open and are completed first),
+# about 3.3 h; loading, merging and server start about 0.4 h: about 7.7-8.1 h, about 19-20 USD.
+# Checks: pre-run (<= 3.0 s per step, <= 92 GB), train summary (3,000/3,000, 0 OOM), merge log line, generation meta
+#   (answered 3,498, failed 0, share of complete answers about 0.5 as in the folds), ranking 'failed': 0, prompt-header
+#   check, share of NONE at the top about 0.33 (aggregate).
+run: m3_fullte_rp
+models:
+  m3_full: {merged: m3_full_merged, dtype: bf16, max_beam_tokens: 600000}
+  q38_27b: {repo: Qwen/Qwen3.8-27B, revision: 1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0, dtype: bf16, max_beam_tokens: 600000}
+workers:
+- gpu: 0
+  jobs:
+  - name: m3_smoke_full
+    kind: train
+    must_pass: true
+    max_s_per_step: 3.0
+    max_gpu_gb: 92
+    model: q38_27b
+    fold: null
+    sft_targets: derived/sft/m3_full_targets.jsonl
+    sft_notes_max_tokens: 2500
+    image: {max_side: 1024, question_max_side: 448}
+    train_rows: {sample: 32, seed: 0}
+    train: {tasks: [proto_sft], epochs: 1, max_steps: 32, lr: 0.0001, accum: 8, lora_r: 32, lora_alpha: 64, lora_dropout: 0.05,
+            lora_from_layer: 40, prefix_with_adapter: true, grad_checkpointing: true, code_loss: sum, why_loss: first+mean,
+            w_code: 1.0, w_why: 1.0, w_notes: 0.5, w_aux: 0.5, log_every: 8, seed: 42}
+  - name: m3_train_full
+    kind: train
+    model: q38_27b
+    fold: null
+    sft_targets: derived/sft/m3_full_targets.jsonl
+    sft_notes_max_tokens: 2500
+    image: {max_side: 1024, question_max_side: 448}
+    train_budget_s: 9000
+    train: {tasks: [proto_sft], epochs: 2, lr: 0.0001, accum: 8, lora_r: 32, lora_alpha: 64, lora_dropout: 0.05,
+            lora_from_layer: 40, prefix_with_adapter: true, grad_checkpointing: true, code_loss: sum, why_loss: first+mean,
+            w_code: 1.0, w_why: 1.0, w_notes: 0.5, w_aux: 0.5, log_every: 100, seed: 42}
+  - {name: m3_merge_full, kind: merge, model: q38_27b, adapter_from: m3_train_full, out_model: m3_full_merged}
+  - {name: m3_test_gen, kind: sft_gen, model: m3_full, split: test, order_seed: 0,
+     image: {max_side: 1024, question_max_side: 448}, max_tokens: 3200, concurrency: 64, guard_rows: 24, guard_min_complete: 0.25,
+     max_failed: 0.05, request_timeout_s: 1200, tag: gen,
+     server: {max_model_len: 16000, gpu_memory_utilization: 0.90, max_num_seqs: 64, startup_s: 900, pip: "vllm==0.31.0 transformers==5.17.0"}}
+  - {name: m3_test_rank, kind: predict, model: m3_full, fold: null, sft_from: m3_test_gen/gen, probes: [proto_rank],
+     predict: [{split: test, tag: test, probes: [proto_rank]}],
+     image: {max_side: 1024, question_max_side: 448}, batch: 6, beams: 74, finish_tokens: 320,
+     prefix_cache_tol: 0.12, prefix_cache_same_top: false, prefix_cache_check_rows: 4, save_every: 25, drop_model: true}

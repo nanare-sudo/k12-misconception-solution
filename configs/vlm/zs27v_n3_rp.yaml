@@ -1,0 +1,34 @@
+# Reasoning channel, draw n (WITHOUT question block; prompt as for zs27t) for the test rows and the remaining training rows:
+# the reasoning channel of the strictly inductive line, and the second reasoning text of the best-CV line (averaged with
+# draw g in the narrow gate).
+# Rows = union of the narrow gates of both lines PLUS the extended gate: rows outside the wide gate with P(NONE) of the
+# fast channel (zs27q or zs27t) below 0.95. These rows had never received a reasoning text and carry 12.9 % of the loss;
+# the gate test added +0.0059 ± 0.0022 to the blend over all folds.
+#   Test   derived/think_rows/test_n3.npy   2,126 of 3,498 rows (narrow gates 1,787, band 414, with overlap)
+#   Train  derived/think_rows/train_n3.npy  634 rows (narrow gates not covered so far 483, band 203, without the rows
+#                                            already covered by zs27v_n_rp)
+# Photos unchanged (straightened photos do not help the reasoning channel). Settings as in zs27v_n_rp: greedy, effort
+# xhigh, limit 1,800 tokens, topic block and examples, NO teacher labels. Test rows first. About 2.9 h, about 7.30 USD.
+# For test rows only aggregates in the log.
+run: zs27v_n3_rp
+models:
+  q38_27b: {repo: Qwen/Qwen3.8-27B, revision: 1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0, dtype: bf16, max_beam_tokens: 600000}
+workers:
+- gpu: 0
+  jobs:
+  - {name: gen_nte, kind: think_gen, model: q38_27b, split: test, fold: null, rows: {only: derived/think_rows/test_n3.npy}, tag: think,
+     taxonomy: full, topic_codes: 10, topic_none: true,
+     image: {max_side: 1024, question_max_side: 448}, examples: true, max_examples: 4,
+     max_think_tokens: 1800, concurrency: 64, server: {max_model_len: 16000, gpu_memory_utilization: 0.93, max_num_seqs: 64, startup_s: 900}}
+  - {name: think_nte, kind: predict, fold: null, model: q38_27b, taxonomy: full, topic_codes: 10, topic_none: true,
+     image: {max_side: 1024, question_max_side: 448}, examples: true, max_examples: 4,
+     think_from: gen_nte/think, batch: 6, beams: 74, prefix_cache_tol: 0.12, prefix_cache_check_rows: 4, prefix_cache_same_top: false, save_every: 25,
+     predict: [{split: test, tag: test, probes: [think], rows: {only: derived/think_rows/test_n3.npy}}]}
+  - {name: gen_ntr, kind: think_gen, model: q38_27b, split: train, rows: {only: derived/think_rows/train_n3.npy}, tag: think,
+     taxonomy: full, topic_codes: 10, topic_none: true,
+     image: {max_side: 1024, question_max_side: 448}, examples: true, max_examples: 4,
+     max_think_tokens: 1800, concurrency: 64, server: {max_model_len: 16000, gpu_memory_utilization: 0.93, max_num_seqs: 64, startup_s: 900}}
+  - {name: think_ntr, kind: bench, model: q38_27b, taxonomy: full, topic_codes: 10, topic_none: true,
+     image: {max_side: 1024, question_max_side: 448}, examples: true, max_examples: 4,
+     rows: {only: derived/think_rows/train_n3.npy},
+     probes: [think], think_from: gen_ntr/think, batch: 6, beams: 74, prefix_cache_tol: 0.12, prefix_cache_check_rows: 4, prefix_cache_same_top: false, save_every: 25}

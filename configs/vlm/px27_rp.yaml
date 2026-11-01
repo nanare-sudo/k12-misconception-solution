@@ -1,0 +1,50 @@
+# Exact ranking of ALL codes behind the notes of the protocol channel (channel pr27x; its mean with pr27 is pr27xm).
+# Cost about 2.80 USD (training rows including the system-text control).
+#
+# The channel pr27 consists of at most three NAMED codes with named probabilities; the rest is uniform. Here the same model
+# (own Qwen3.8-27B without training, bf16, one 96 GB card, offline) scores every code exactly through the prefix tree
+# behind its own frozen notes, as for the reasoning channel. Prompt (vlm/proto.rank_sample): system text with the verdict
+# rules of the protocol WITHOUT the JSON format and with the taxonomy, user message as in the protocol (question, diagram,
+# key, photo; NO labelled row, no block, no teacher labels), the notes as a closed thinking block, forced answer prefix
+# "Root:". Notes = reasoning of the first pass (data/derived/proto_notes/train_pr27.jsonl, 1,500 rows; state per note: 296
+# finished, 317 drafted (there the ranking essentially copies), 887 open (only there does it decide by itself)).
+#
+# The swap changes several things at once: a distribution over all codes instead of three levels, a different decision
+# maker, no JSON intermediate step, a different system text, floor 0.01 instead of 0.05. The job rank_k5 measures the
+# system-text factor directly.
+#
+# Before the run (local):  python tools/export_proto_notes.py --name train_pr27 --from pr27_rp/proto_a/proto --from pr27_rp/proto_b/proto
+# Inputs:        data/derived/proto_notes (notes of training rows only; test notes are exported to proto_notes_test/)
+# Checks after the run, BEFORE the evaluation: log line of the prompt-header check "-> an" per job, pre-run 'rows': 8,
+#                'failed': 0, rank_tr 1,500 rows without 'oom_retries'.
+# Evaluation:    python -I eda/a8_proto_oof.py pr27x runs/pr27_rp/proto_a/proto+runs/pr27_rp/proto_b/proto --rank runs/px27_rp/rank_tr/bench
+#                (aborts if not all rows were computed or codes fell out of the search; reports the mass of the
+#                candidates behind "Root:")
+# Decision rule fixed before the run, per line: adopt if Δ >= +0.004, z >= 1.5 (larger σ of rows and questions) and at
+# least four of five folds not negative; below +0.002 no adoption in this form; in between undecided. Floor of the new
+# channel 0.01. LogLoss is no criterion for this swap. The measurement decides reliably only from a true effect of about
+# +0.006 to +0.008, so "undecided" is a possible, honest outcome.
+#
+#   rank_smoke  8 random training rows (must_pass; also fails on single failed rows).
+#   rank_tr     all 1,500 training rows, longest prompts first. Context median about 6,700, at most about 7,400 tokens
+#               (header 3,390, photo about 1,000, notes up to 2,500); `beams: 74` is exact (at most 34 prefixes are alive
+#               at the same time). Expected 1.5 to 1.8 s per row as for the reasoning channel, about 40 to 45 minutes.
+#   rank_k5     control: 200 random training rows under the system text under which the notes were CREATED (instruction
+#               with JSON form), with the same forced "Root:"; separates the system-text factor (top-code agreement and
+#               MAP@3 against rank_tr on the same rows; about 6 minutes, 0.25 USD).
+# Checked locally with the smallest model: configs/vlm/local_proto_rank.yaml.
+run: px27_rp
+models:
+  q38_27b: {repo: Qwen/Qwen3.8-27B, revision: 1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0, dtype: bf16, max_beam_tokens: 600000}
+workers:
+- gpu: 0
+  jobs:
+  - {name: rank_smoke, kind: bench, must_pass: true, model: q38_27b, image: {max_side: 1024, question_max_side: 448},
+     rows: {sample: 8, seed: 0}, probes: [proto_rank], proto_from: derived/proto_notes/train_pr27.jsonl,
+     batch: 6, beams: 74, prefix_cache_tol: 0.12, prefix_cache_same_top: false, prefix_cache_check_rows: 4, save_every: 25}
+  - {name: rank_tr, kind: bench, model: q38_27b, image: {max_side: 1024, question_max_side: 448},
+     probes: [proto_rank], proto_from: derived/proto_notes/train_pr27.jsonl,
+     batch: 6, beams: 74, prefix_cache_tol: 0.12, prefix_cache_same_top: false, prefix_cache_check_rows: 4, save_every: 25}
+  - {name: rank_k5, kind: bench, model: q38_27b, image: {max_side: 1024, question_max_side: 448},
+     rows: {sample: 200, seed: 1}, probes: [proto_rank], proto_from: derived/proto_notes/train_pr27.jsonl, proto_system: protocol,
+     batch: 6, beams: 74, prefix_cache_tol: 0.12, prefix_cache_same_top: false, prefix_cache_check_rows: 4, save_every: 25}

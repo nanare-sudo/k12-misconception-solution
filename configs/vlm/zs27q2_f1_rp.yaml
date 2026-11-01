@@ -1,0 +1,17 @@
+# Channel zs27q on fold 1, with the question block built from the WHOLE pool: 27B without training with topic block and
+# question block, but with the teacher labels of all 50,000 pool workings (pool_a + pool_b) instead of the first 40 per
+# question; on average about four times as many error rows per question.
+#   zs27qa8_f1     whole pool, up to eight codes in the block (the setting of the channel zs27q)
+#   zs27qa12_f1    whole pool, up to twelve codes
+run: zs27q2_f1_rp
+models:
+  q38_27b_4bit: {repo: Qwen/Qwen3.8-27B, revision: 1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0, dtype: bf16, quant: 4bit, max_beam_tokens: 200000}
+workers:
+  - gpu: 0
+    jobs:
+      - {name: zs27qa8_f1, kind: bench, model: q38_27b_4bit, taxonomy: full, topic_codes: 10, topic_none: true, teacher_labels: [pool_a, pool_b], question_codes: 8,
+         image: {max_side: 1024, question_max_side: 448}, examples: true, max_examples: 4, rows: {folds: [1]}, probes: [diag], save_hidden: true,
+         batch: 4, exact_chunk: 40, prefix_cache_tol: 0.12, prefix_cache_check_rows: 4, save_every: 25}
+      - {name: zs27qa12_f1, kind: bench, model: q38_27b_4bit, taxonomy: full, topic_codes: 10, topic_none: true, teacher_labels: [pool_a, pool_b], question_codes: 12,
+         image: {max_side: 1024, question_max_side: 448}, examples: true, max_examples: 4, rows: {folds: [1]}, probes: [diag], save_hidden: true,
+         batch: 4, exact_chunk: 40, prefix_cache_tol: 0.12, prefix_cache_check_rows: 4, save_every: 25}

@@ -1,0 +1,12 @@
+# Channel zs27q (27B without training, topic block and question block from the whole pool): out-of-fold predictions for folds 0, 2, 3 and 4 (fold 1 comes from zs27q2_f1_rp, job zs27qa8_f1).
+# Prompt and settings as in zs27q2_f1_rp. Examples of the same question and topic block never from the row's fold; teacher
+# labels depend on no fold and no test row. A40, 4-bit, all 74 codes exactly. For test rows only aggregates are logged.
+run: zs27q_oof_rp
+models:
+  q38_27b_4bit: {repo: Qwen/Qwen3.8-27B, revision: 1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0, dtype: bf16, quant: 4bit, max_beam_tokens: 200000}
+workers:
+  - gpu: 0
+    jobs:
+      - {name: zs27q_oof4, kind: bench, model: q38_27b_4bit, taxonomy: full, topic_codes: 10, topic_none: true, teacher_labels: [pool_a, pool_b], question_codes: 8,
+         image: {max_side: 1024, question_max_side: 448}, examples: true, max_examples: 4, save_hidden: true, batch: 4, exact_chunk: 40,
+         prefix_cache_tol: 0.12, prefix_cache_check_rows: 4, save_every: 25, rows: {folds: [0, 2, 3, 4]}, probes: [diag]}

@@ -1,0 +1,37 @@
+# M3: local functional check of the proto_sft compute path (vlm/sft.py) on the CPU with the smallest model.
+# No measurement, only: does every step run? Training target with notes, finding and code (joint tokenisation), header
+# with the current adapter (prefix_with_adapter), merging into the weight files, generation (here on the in-house path
+# instead of vLLM), ranking of all codes in sft mode including the completion of missing findings.
+#     python tools/make_sft_targets.py
+#     cd src && OMP_NUM_THREADS=6 python -m vlm.runner --config ../configs/vlm/local_m3_test.yaml --out <folder>
+# Small sizes instead of the pilot values: notes up to 96 tokens, images 224 px, LoRA r 8 from layer 12 of 24, 4 steps; the
+# taxonomy stays complete (header as in the pilot, about 3,350 tokens). Generation up to 48 tokens: the small model does
+# not close the thinking block there, which is exactly the case in which scoring generates the finding itself. Exact
+# ranking in groups (exact_chunk 8, limited memory on the CPU; the pilot uses beams 74 as px27).
+run: local_m3_test
+models_dir: data/models
+models:
+  q35_08b: {repo: Qwen/Qwen3.5-0.8B, revision: 2fc06364715b967f1860aea9cf38778875588b17, dtype: fp32}
+  m3_local: {merged: m3_local_merged, dtype: fp32}
+workers:
+  - gpu: null
+    jobs:
+      - name: m3_train
+        kind: train
+        must_pass: true
+        max_s_per_step: 600
+        model: q35_08b
+        fold: 1
+        sft_targets: derived/sft/m3_fold1_targets.jsonl
+        sft_notes_max_tokens: 96
+        image: {max_side: 224, question_max_side: 160}
+        train_rows: {sample: 4, seed: 0}
+        train: {tasks: [proto_sft], epochs: 1, accum: 2, max_steps: 4, log_every: 2, lora_r: 8, lora_alpha: 16, lora_from_layer: 12,
+                prefix_with_adapter: true, grad_checkpointing: true, code_loss: sum, why_loss: first+mean,
+                w_code: 1.0, w_why: 1.0, w_notes: 0.5, w_aux: 0.5, seed: 42}
+      - {name: m3_merge, kind: merge, must_pass: true, model: q35_08b, adapter_from: m3_train, out_model: m3_local_merged}
+      - {name: m3_gen, kind: sft_gen, must_pass: true, model: m3_local, backend: hf, split: train, rows: {folds: [1], sample: 3, seed: 1},
+         max_tokens: 48, image: {max_side: 224, question_max_side: 160}, guard_rows: 3, guard_min_complete: 0.0, tag: gen}
+      - {name: m3_rank, kind: bench, must_pass: true, model: m3_local, rows: {folds: [1], sample: 3, seed: 1}, probes: [proto_rank],
+         sft_from: m3_gen/gen, image: {max_side: 224, question_max_side: 160}, batch: 2, exact_chunk: 8, finish_tokens: 24,
+         prefix_cache_check_rows: 1, prefix_cache_same_top: false, drop_model: true}

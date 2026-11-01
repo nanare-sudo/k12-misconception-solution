@@ -1,0 +1,35 @@
+# Thinking mode with the fast generation path: a local vLLM server (only 127.0.0.1) writes the reasoning texts, the code
+# ranking behind them is computed on the usual path (probe think with think_from). Reason: the in-house generation path
+# needs 13 s per row (bf16, 96 GB) up to 40 s (4-bit, A40) and usually cuts the reasoning at 700 tokens; for all test
+# rows that would be too expensive. Fold 2, bf16, 96 GB card, prompt as for the channel zs27q.
+#   gen_smoke / think_smoke   12 rows: sets up the vLLM environment and checks the whole path (aborts on error)
+#   gen700  / think700v_f2    up to 700 tokens: the same limit as the in-house path on the same fold (cross-check)
+#   gen2500 / think2500v_f2   up to 2,500 tokens: does the reasoning finish if it is allowed to?
+# Paired against oof_zs27q (without reasoning) and against the in-house path on the same 300 rows.
+run: zs27v_f2_rp
+models:
+  q38_27b: {repo: Qwen/Qwen3.8-27B, revision: 1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0, dtype: bf16, max_beam_tokens: 600000}
+workers:
+- gpu: 0
+  jobs:
+  - {name: gen_smoke, kind: think_gen, must_pass: true, model: q38_27b, split: train, rows: {folds: [2], limit: 12}, tag: think,
+     taxonomy: full, topic_codes: 10, topic_none: true, teacher_labels: [pool_a, pool_b], question_codes: 8,
+     image: {max_side: 1024, question_max_side: 448}, examples: true, max_examples: 4, max_think_tokens: 700, concurrency: 12,
+     server: {max_model_len: 16000, gpu_memory_utilization: 0.90, max_num_seqs: 24, startup_s: 900}}
+  - {name: think_smoke, kind: bench, must_pass: true, model: q38_27b, taxonomy: full, topic_codes: 10, topic_none: true, teacher_labels: [pool_a, pool_b], question_codes: 8,
+     image: {max_side: 1024, question_max_side: 448}, examples: true, max_examples: 4, rows: {folds: [2], limit: 12}, probes: [think], think_from: gen_smoke/think,
+     batch: 6, beams: 74, prefix_cache_tol: 0.12, prefix_cache_check_rows: 4, save_every: 1}
+  - {name: gen700, kind: think_gen, model: q38_27b, split: train, rows: {folds: [2]}, tag: think,
+     taxonomy: full, topic_codes: 10, topic_none: true, teacher_labels: [pool_a, pool_b], question_codes: 8,
+     image: {max_side: 1024, question_max_side: 448}, examples: true, max_examples: 4, max_think_tokens: 700, concurrency: 24,
+     server: {max_model_len: 16000, gpu_memory_utilization: 0.90, max_num_seqs: 24, startup_s: 900}}
+  - {name: think700v_f2, kind: bench, model: q38_27b, taxonomy: full, topic_codes: 10, topic_none: true, teacher_labels: [pool_a, pool_b], question_codes: 8,
+     image: {max_side: 1024, question_max_side: 448}, examples: true, max_examples: 4, rows: {folds: [2]}, probes: [think], think_from: gen700/think,
+     batch: 6, beams: 74, prefix_cache_tol: 0.12, prefix_cache_check_rows: 4, save_every: 5}
+  - {name: gen2500, kind: think_gen, model: q38_27b, split: train, rows: {folds: [2]}, tag: think,
+     taxonomy: full, topic_codes: 10, topic_none: true, teacher_labels: [pool_a, pool_b], question_codes: 8,
+     image: {max_side: 1024, question_max_side: 448}, examples: true, max_examples: 4, max_think_tokens: 2500, concurrency: 24,
+     server: {max_model_len: 16000, gpu_memory_utilization: 0.90, max_num_seqs: 24, startup_s: 900}}
+  - {name: think2500v_f2, kind: bench, model: q38_27b, taxonomy: full, topic_codes: 10, topic_none: true, teacher_labels: [pool_a, pool_b], question_codes: 8,
+     image: {max_side: 1024, question_max_side: 448}, examples: true, max_examples: 4, rows: {folds: [2]}, probes: [think], think_from: gen2500/think,
+     batch: 6, beams: 74, prefix_cache_tol: 0.12, prefix_cache_check_rows: 4, save_every: 5}

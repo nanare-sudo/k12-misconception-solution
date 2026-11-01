@@ -1,0 +1,17 @@
+# Functional check of the probe proto_rank on the local CPU with the smallest model; no measurement, only: does the path
+# run (system text of the sample, notes as a thinking block, prompt-header cache, scoring of all codes)?
+#     python tools/export_proto_notes.py --name train_pr27 --from pr27_rp/proto_a/proto --from pr27_rp/proto_b/proto
+#     cd src && python -m vlm.runner --config ../configs/vlm/local_proto_rank.yaml --out <folder>
+run: local_proto_rank
+models_dir: data/models
+models:
+  q35_08b: {repo: Qwen/Qwen3.5-0.8B, revision: 2fc06364715b967f1860aea9cf38778875588b17, dtype: fp32}
+workers:
+  - gpu: null
+    jobs:
+      - {name: rank_tiny, kind: bench, model: q35_08b, image: {max_side: 224, question_max_side: 160}, rows: {sample: 3, seed: 1},
+         probes: [proto_rank], proto_from: derived/proto_notes/train_pr27.jsonl, batch: 1, beams: 4, prefix_cache_check_rows: 1}
+      # Control: the same probe under the system text under which the notes were created (instruction with JSON form)
+      - {name: rank_tiny_protocol, kind: bench, model: q35_08b, image: {max_side: 224, question_max_side: 160}, rows: {sample: 1, seed: 1},
+         probes: [proto_rank], proto_from: derived/proto_notes/train_pr27.jsonl, proto_system: protocol, batch: 1, beams: 4, prefix_cache_check_rows: 1,
+         prefix_cache_same_top: false}
