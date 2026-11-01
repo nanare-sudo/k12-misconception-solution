@@ -49,20 +49,37 @@ the test set is processed. Definitions and uncertainty are in [docs/VALIDATION.m
 ## How it works
 
 ```mermaid
-flowchart LR
-    IN["Photo of the working<br/>+ question, diagram, answer key, grade, topic"]
-    IN --> C1["9B fine-tuned scorer<br/>(rotation-corrected)"]
-    IN --> C2["27B zero-shot scorer<br/>(topic block / task block)"]
-    IN --> C3["27B reason-then-name"]
-    IN --> C4["27B protocol channel"]
-    IN --> C5["M3: fine-tuned 27B reasoner<br/>(mean of 3 draws)"]
-    IN --> C6["397B notes, named by M3<br/>(primary line only)"]
-    C1 & C2 & C3 & C4 & C5 & C6 --> FL["Probability floors"]
-    FL --> BL["Log-linear blend + arithmetic share β<br/>(weights fitted on LogLoss)"]
-    BL --> AL["Class-marginal alignment<br/>(transductive: primary · inductive: secondary)"]
-    AL --> RR["Conditional-logit reranker over the top 5<br/>(primary line only)"]
-    RR --> BK["Blank photo → REL-01 at rank 1"]
-    BK --> OUT["Top-3 codes per row"]
+flowchart TD
+    IN["Photo of the working, question, diagram, answer key, grade, topic"]
+    C1["9B fine-tuned scorer, rotation-corrected"]
+    C2["27B zero-shot scorer with topic or task block"]
+    C3["27B reason-then-name"]
+    C4["27B protocol channel"]
+    C5["M3: fine-tuned 27B reasoner, mean of 3 draws"]
+    C6["397B notes named by M3, primary line only"]
+    FL["Probability floors"]
+    BL["Log-linear blend with arithmetic share, weights fitted on LogLoss"]
+    AL["Class-marginal alignment: transductive in the primary line, inductive in the strictly inductive line"]
+    RR["Conditional-logit reranker over the top 5 candidates, primary line"]
+    BK["Blank photo: REL-01 at rank 1"]
+    OUT["Top-3 codes per row"]
+    IN --> C1
+    IN --> C2
+    IN --> C3
+    IN --> C4
+    IN --> C5
+    IN --> C6
+    C1 --> FL
+    C2 --> FL
+    C3 --> FL
+    C4 --> FL
+    C5 --> FL
+    C6 --> FL
+    FL --> BL
+    BL --> AL
+    AL --> RR
+    RR --> BK
+    BK --> OUT
 ```
 
 | Channel | Code name | Model | Trained | OOF MAP@3 | Lines |
