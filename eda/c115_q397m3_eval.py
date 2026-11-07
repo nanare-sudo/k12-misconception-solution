@@ -127,11 +127,11 @@ GROUPS = C107.GROUPS
 STATES = {name: MQ.RECORDED_STATE[name] for name in ("complete", "draft", "open")}
 
 
-class Technik(RuntimeError):
+class TechnicalError(RuntimeError):
     """Technical finding: abort with exit 4, no verdict, nothing written."""
 
 
-class Missing(Technik):
+class Missing(TechnicalError):
     """Input still missing (run not finished or not fetched): exit 3, nothing written."""
 
 
@@ -168,14 +168,14 @@ def decide(add: dict, rep: dict, n_same: int, n_rows: int) -> dict:
     """The rule fixed in advance (reading above). add/rep: comparisons with delta_exact, z_q, ll_new, ll_base; n_same/n_rows: same top."""
     fa, fr = form_check(add), form_check(rep)
     take = same_top_ok(n_same, n_rows)
-    weiter = (fa["ok"] or fr["ok"]) and take
+    proceed = (fa["ok"] or fr["ok"]) and take
     reason = []
     if not take:
         reason.append(f"same top q397m3/q397 {n_same}/{n_rows} = {n_same / max(1, n_rows):.3f} > 0.90 (takeover)")
     for lab, f in (("addition", fa), ("replacement", fr)):
         if not f["ok"]:
             reason.append(f"{lab}: " + ", ".join(k for k, v in f["checks"].items() if not v) + " missed")
-    return {"verdict": "CONTINUE" if weiter else "STOP", "addition": fa, "replacement": fr, "same_top": {"n_same": int(n_same), "n_rows": int(n_rows),
+    return {"verdict": "CONTINUE" if proceed else "STOP", "addition": fa, "replacement": fr, "same_top": {"n_same": int(n_same), "n_rows": int(n_rows),
             "share": n_same / max(1, n_rows), "ok": take}, "passed_forms": [lab for lab, f in (("addition", fa), ("replacement", fr)) if f["ok"]],
             "reasons": reason, "rule": RULE_TEXT}
 
@@ -243,21 +243,21 @@ def assemble(shards, n: int, seen: np.ndarray, folds: np.ndarray, require_all: b
             R, h, st = A8.load_rank(shard, n, seen, table="train", allow_partial=False, require_full_table=False)
         except SystemExit as exc:
             if require_all:
-                raise Technik(str(exc)) from None
+                raise TechnicalError(str(exc)) from None
             continue
         if not st["completion_manifest"]:
-            raise Technik(f"{shard}: completeness mask missing")
+            raise TechnicalError(f"{shard}: completeness mask missing")
         rows = np.flatnonzero(h)
         want = np.flatnonzero(folds == k)
         if not np.array_equal(rows, want):
-            raise Technik(f"{shard}: covers {len(rows)} rows, exactly the {len(want)} rows of fold {k} are required (fold assignment violated)")
+            raise TechnicalError(f"{shard}: covers {len(rows)} rows, exactly the {len(want)} rows of fold {k} are required (fold assignment violated)")
         if (have & h).any():
-            raise Technik(f"{shard}: overlaps with an earlier shard")
+            raise TechnicalError(f"{shard}: overlaps with an earlier shard")
         P[h], have[h] = R[h], True
         info.append({"shard": shard, "fold": k, **{x: st[x] for x in ("rows_probe", "rows_done", "rows_exact", "mass_median", "mass_p05",
                                                                         "mass_below_half", "idx_sha256")}})
     if require_all and not have.all():
-        raise Technik(f"channel covers {int(have.sum())} of {n} rows")
+        raise TechnicalError(f"channel covers {int(have.sum())} of {n} rows")
     return P, have, info
 
 
@@ -271,9 +271,9 @@ def check_shard_settings(shards, ref_shards, notes_rel: str = NOTES_REL) -> dict
     got = [A9.rank_settings(shard_meta(s)) for s in shards]
     src = [(shard_meta(s).get("sft") or {}).get("sft_from") for s in shards]
     if any(x != notes_rel for x in src):
-        raise Technik(f"sft_from of the shards {sorted(set(map(str, src)))} instead of {notes_rel}")
+        raise TechnicalError(f"sft_from of the shards {sorted(set(map(str, src)))} instead of {notes_rel}")
     if len({json.dumps(g, sort_keys=True, default=str) for g in got}) != 1:
-        raise Technik("the shards were computed differently (a9.rank_settings)")
+        raise TechnicalError("the shards were computed differently (a9.rank_settings)")
     ref = None
     try:
         refs = [A9.rank_settings(shard_meta(s)) for s in ref_shards]
@@ -282,7 +282,7 @@ def check_shard_settings(shards, ref_shards, notes_rel: str = NOTES_REL) -> dict
         ref = None
     if ref is not None and json.dumps(ref, sort_keys=True, default=str) != json.dumps(got[0], sort_keys=True, default=str):
         diff = {k: (got[0].get(k), ref.get(k)) for k in set(got[0]) | set(ref) if got[0].get(k) != ref.get(k)}
-        raise Technik(f"ranking settings differ from d3: {diff}")
+        raise TechnicalError(f"ranking settings differ from d3: {diff}")
     return {"settings": got[0], "same_as_d3": ref is not None, "sft_from": notes_rel}
 
 
@@ -297,14 +297,14 @@ def check_notes(root: Path, n: int) -> dict:
     meta = json.loads(meta_f.read_text())
     sha = sha256_file(f)
     if meta.get("sha256") != sha:
-        raise Technik(f"{NOTES_REL}: checksum does not match the meta file")
+        raise TechnicalError(f"{NOTES_REL}: checksum does not match the meta file")
     if not up.is_file() or sha256_file(up) != sha:
-        raise Technik(f"{UPLOAD_REL}: copy in the upload folder missing or different (the remote machine computed with this file)")
+        raise TechnicalError(f"{UPLOAD_REL}: copy in the upload folder missing or different (the remote machine computed with this file)")
     table, notes = S.load_notes(f)
     if table != "train" or sorted(notes) != list(range(n)):
-        raise Technik(f"{NOTES_REL}: table {table}, {len(notes)} rows (required train, all {n})")
+        raise TechnicalError(f"{NOTES_REL}: table {table}, {len(notes)} rows (required train, all {n})")
     if any(fd is not None for _, fd in notes.values()):
-        raise Technik(f"{NOTES_REL}: findings given — M3 is supposed to write the finding itself")
+        raise TechnicalError(f"{NOTES_REL}: findings given — M3 is supposed to write the finding itself")
     states = {}
     for rec in MQ.read_jsonl(f):
         states[int(rec["row"])] = str(rec.get("q397_state") or "")
@@ -343,7 +343,7 @@ def run_recipe(ctx: dict, mats: dict, spec: dict) -> dict:
     fit = C107.cross_fit(ctx["y"], ctx["folds"], ctx["seen"], mats, spec)
     y, seen = ctx["y"], ctx["seen"]
     if not C107.sane(fit["Q"], seen):
-        raise Technik(f"predictions of the recipe {spec['names']} not finite/normalised")
+        raise TechnicalError(f"predictions of the recipe {spec['names']} not finite/normalised")
     return {"fit": fit, "rows": C107.rows_map(y, fit["Q"], seen), "ll": C107.rows_ll(y, fit["Q"]),
             "rows_pre": C107.rows_map(y, fit["P"], seen), "rows_set": C107.rows_map(y, C107.set_align(fit["P"], y, seen), seen)}
 
@@ -352,12 +352,12 @@ def anchor(ctx: dict, base: dict) -> dict:
     units = int(C107.units(base["rows"]).sum())
     ll = float(base["ll"].mean())
     if units != ANCHOR_UNITS or abs(ll - ANCHOR_LL) > 1e-9:
-        raise Technik(f"anchor of the six-channel recipe missed: {units}/9000, log loss {ll:.10f} (required {ANCHOR_UNITS}, {ANCHOR_LL:.10f})")
+        raise TechnicalError(f"anchor of the six-channel recipe missed: {units}/9000, log loss {ll:.10f} (required {ANCHOR_UNITS}, {ANCHOR_LL:.10f})")
     out = {"map3": units / 9000, "units": units, "logloss": ll}
     if ANCHOR_JSON.is_file():
         js = json.loads(ANCHOR_JSON.read_text())
         if int(js["cross"]["units"]) != units:
-            raise Technik(f"anchor differs from {ANCHOR_JSON.name}")
+            raise TechnicalError(f"anchor differs from {ANCHOR_JSON.name}")
         out["c110_json"] = str(ANCHOR_JSON.relative_to(COMP))
     return out
 
@@ -436,7 +436,7 @@ def evaluate(ctx: dict, mats: dict, P: np.ndarray, states: dict[int, str], texts
     # mandatory check: replacing q397 by a copy of q397 reproduces the six-channel recipe bit-identically
     probe = run_recipe(ctx, {**mats, "q397copy": mats["q397"]}, replaced(sb, "q397", "q397copy"))
     if not np.array_equal(probe["fit"]["Q"], base["fit"]["Q"]):
-        raise Technik("mandatory check: replacement q397 := copy of q397 does not reproduce the six-channel recipe bit-identically")
+        raise TechnicalError("mandatory check: replacement q397 := copy of q397 does not reproduce the six-channel recipe bit-identically")
     rep["mandatory_check"] = "replacement q397 := copy of q397 bit-identical to the six-channel recipe"
 
     spec_add, spec_rep = C107.with_channel(sb, CH, FLOOR), replaced(sb, "q397", CH)
@@ -679,13 +679,13 @@ def cmd_eval(dry: bool) -> int:
         recs = C108.fold_check("+".join(SHARDS), ctx["folds"], {})
         bad = [f"{r['run']}/{r['job']}: {p}" for r in recs for p in r["problems"]]
         if bad:
-            raise Technik("fold integrity violated: " + "; ".join(bad))
+            raise TechnicalError("fold integrity violated: " + "; ".join(bad))
         tech["fold_check"] = recs
         tech["fold_check_unknown"] = [f"{r['run']}/{r['job']}: {u}" for r in recs for u in r["unknown"]]
         f = ART / f"oof_{CH}.npy"
         if f.is_file():
             if not np.array_equal(np.load(f), P):
-                raise Technik(f"{f.name} exists but is not the channel from the five shards")
+                raise TechnicalError(f"{f.name} exists but is not the channel from the five shards")
             tech["oof_artifact_bit_identical"] = True
         tech["channel_sha256"] = npy_sha256(P)
     rep, rows = evaluate(ctx, mats, P, nt["states_by_row"], nt["texts"], dry)
@@ -725,7 +725,7 @@ def main(argv: list[str] | None = None) -> int:
     except Missing as exc:
         print(f"NOT YET EVALUABLE: {exc}", file=sys.stderr)
         return 3
-    except Technik as exc:
+    except TechnicalError as exc:
         print(f"ABORT (technical): {exc}", file=sys.stderr)
         return 4
 

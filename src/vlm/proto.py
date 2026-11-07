@@ -125,7 +125,7 @@ def rank_notes(rec: dict, note_chars: int = 16000) -> str:
 
 
 def load_rank_notes(path) -> tuple[str, dict[int, str]]:
-    """Exported notes (tools/export_proto_notes.py): per line {"table": …, "row": table position, "text": …}.
+    """Exported notes (frozen files): per line {"table": …, "row": table position, "text": …}.
     -> (table, {position: notes}). The table is given on EVERY line: positions of different tables must never mix
     (a training row would otherwise silently receive the notes of a test row)."""
     tables, notes = set(), {}

@@ -17,16 +17,16 @@ data folder), exactly like `eda/a6_assemble_oof.py --mean` on the training rows:
     --test think3=<run>/<job>/test/think@derived/think_rows/test.npy,<run2>/…/test/think@derived/think_rows/test_tight_q.npy
     --fill think3=zs27q
 
-MARGIN ALIGNMENT (`--align <s>`, transductive — primary line only): the split is stratified by root_code, so the class
-frequencies of the test set are those of the training set. Class weights bring the mean predicted mass per class over all
-test rows to the training frequency (iteratively; only classes with at least `--align-min` training rows, the others keep
-weight 1) and are applied with strength s (eda/c21_margin_align.py). Only the set of predictions is used, no label and no
-individual row. `--suffix` appends a suffix to the names of the output files (e.g. `_ra`) so that the version without
+MARGIN ALIGNMENT (`--align <s>`, transductive — primary line and safety line with set alignment): the split is stratified by
+root_code, so the class frequencies of the test set are those of the training set. Class weights bring the mean predicted mass
+per class over all test rows to the training frequency (iteratively; only classes with at least `--align-min` training rows, the
+others keep weight 1) and are applied with strength s (eda/c21_margin_align.py). Only the set of predictions is used, no label and
+no individual row. `--suffix` appends a suffix to the names of the output files (e.g. `_ra`) so that the version without
 alignment is kept.
 
 BLANK IMAGES (`--blank-rows derived/blank/test_rows.npy`): a black photo shows no work; the only such training row carries
 the meta code REL-01 (upload does not match the task), while the channels invent a flawless solution there. For the listed
-test rows (tools/make_blank_list.py — a property of the individual image, inductive) `--blank-code` is put at rank 1; the
+test rows (frozen list — a property of the individual image, inductive) `--blank-code` is put at rank 1; the
 rest of the order stays.
 
 TASK-AGNOSTIC CHANNEL (`--proto <channel>=runs/<run>/<job>/<tag>[+…][,<more draws>]`): answers in the teacher protocol for
@@ -96,7 +96,7 @@ for THESE rows (the target is, as always, the class frequencies of all training 
 ARITHMETIC SHARE (`arith_beta` in the blend file): the blend is P = (1 − β)·log-linear + β·Σ w_i·p_i with w = θ/Σθ and p_i
 the channel with its floor (normalised per row over the training classes); β = 0 is the pure log-linear blend of the
 earlier blend files. The same step is part of the predictions for the training rows (`oof_mixture`) from which the inductive
-alignment takes its class weights. Measurement: eda/c104_blend_variants.py.
+alignment takes its class weights. Measurement: docs/METHOD.md §7 (the evaluation script is not included).
 
 SHARE BY CODE NOVELTY (`arith_beta_novel` in the blend file, eda/c110_q397_deploy.py): per (row, class) β_new instead of β
 for codes that were never the root among the reference rows of the same task (question_id with the same topic_name; NONE
@@ -129,6 +129,30 @@ distribution per level, word-identical notes per pair, each against its own trai
 the two-sample binomial test (n_ref = number of training rows, checked; n_test = number of test rows); the rule only widens.
 Without the fields everything stays as above, byte-identical down to the statistics file. There is no switch to override
 the guard.
+MAIN_GUARD MODELS (only if a model of the deployment file names the fields, e.g. artifacts/stage2_s035.json): `feature_set`
+selects the feature set of the model (main_guard = main form + general-code identifiers; a fallback model must never read the
+notes), `protect_none` the NONE guard (base top NONE -> the base order of the row stays; applied before guard (c), like the OOF
+share of the set). Without the fields everything stays as above, byte-identical down to the statistics file.
+SECOND STAGE OF THE INDUCTIVE LINE (only if the deployment file names `align_mode` "inductive", e.g.
+artifacts/stage2_s036_safe.json from eda/c120_s036_safe_stage2.py fit; without the field everything stays as above,
+byte-identical): requires `--align-inductive` and `--align-min` as in the file (instead of --align) and computes
+apply_stage2_safe: feature set of the file (only "fallback": no notes and therefore no note guard), knowledge from all training
+rows, M3 test draws = those named in `test_draws` (in the order of the file), then the NONE guard (`protect_none`; base top NONE
+-> the base order of the row stays), guard (c) on the share of new top codes after the guard (½ to 2 times the OOF share,
+otherwise abort without a file), (b) reported only. A null model (`null`) changes no order: the file is byte-identical to the
+file without --stage2 (copy null point).
+SECOND STAGE OF THE SAFETY LINE WITH SET ALIGNMENT (only if the deployment file names `align_mode` "set", e.g.
+artifacts/stage2_safety_final.json from eda/c123_safety_set.py fit): requires `--align` and `--align-min` as in the file (margin
+alignment as one set over the test rows, as in the primary line) and computes the same path apply_stage2_safe (feature set "fallback"
+or "fallback_i1", no notes, NONE guard, guard (c)); only in this mode also the class-mass statistic (`class_mass`: L1 distance of the
+mean test mass per class from the target of the alignment — training shares of the classes with at least align_min rows —, before
+and after the alignment; aggregates only). Files with `align_mode` "inductive" and files without the field stay byte-identical down
+to the statistics file.
+INTERACTION MODELS: a main model may name the feature set main_guard_i1 (main_guard + interactions I1; checks as for main_guard, a
+fallback model with this set is rejected). Only if the main model names the feature set main_guard_i1_mm (e.g.
+artifacts/stage2_primary_final.json): in addition the column minor_x_mech27 — row feature mech27 from the frozen pr27 test answers
+(field mech27.test of the deployment file: file and SHA-256, the check is required), final answer = answer key compared by
+src/answer_match.py (without eval); statistics as shares only (field mech27 of the report).
 
 Written are artifacts/test_<blend>.npy, artifacts/submissions/sub_<blend>.csv and artifacts/submissions/sub_<blend>.json
 (sources, SHA-256, statistics). Only aggregates over the test rows are printed, plus the same statistics on the OOF rows
@@ -153,6 +177,7 @@ sys.path[:0] = [str(COMP), str(COMP / "src")]
 import labels  # noqa: E402
 import metric  # noqa: E402
 import stage2 as S2  # noqa: E402
+import answer_match as AM  # noqa: E402  (mechanical comparison final answer = answer key, without eval)
 import submission_io  # noqa: E402
 from vlm import common as C  # noqa: E402
 from vlm.engine import probs_from_logp  # noqa: E402
@@ -746,7 +771,7 @@ def train_novelty(train: pd.DataFrame, folds: np.ndarray, classes: list[str]) ->
 
 def mix_channels(stack: dict, chans: list[np.ndarray], none_feats: np.ndarray | None, seen_cls: np.ndarray,
                  novel: np.ndarray | None = None) -> np.ndarray:
-    """Blend of the channels (log probabilities with floor) as in eda/c104_blend_variants.py:
+    """Blend of the channels (log probabilities with floor):
     P = (1 − β)·log-linear + β·Σ w_i·p_i with w = θ/Σθ and p_i the channel with its floor, normalised per row over the training
     classes; β = 0 is the pure log-linear blend (a2.apply_mix, classes without a training example zero, normalised).
     With `arith_beta_novel` in the blend file, β_new applies per (row, class) where `novel` (code_novelty) is true, otherwise β."""
@@ -838,6 +863,52 @@ def _test_notes_texts(root: Path, rel_file: str, rank_spec: str, n_test: int) ->
     return [texts[i] for i in range(n_test)], {"file": rel_file, "sha256": sha, "rank": rank_spec, "rank_sha256": meta.get("rank_sha256")}
 
 
+def _stage2_model_form(model: dict, fs: str, classes: list[str]) -> tuple[str, bool]:
+    """Feature set and NONE guard of a model of the deployment file. Without the fields feature_set/protect_none: (fs, False) — exactly
+    as before. A fallback model must never read the notes (otherwise the note guard would have no effect); the guard requires NONE as class 0."""
+    fs_feat = model.get("feature_set", fs)
+    if fs_feat not in (*S2.FEATURE_SETS, S2.GUARD_SET, S2.I1_SET, S2.MM_SET):  # main_guard_i1/main_guard_i1_mm read the notes, so never as fallback
+        raise SystemExit(f"--stage2: unknown feature set {fs_feat!r} in model {fs}")
+    if fs == "fallback" and S2.uses_notes(fs_feat):
+        raise SystemExit(f"--stage2: the fallback model names the feature set {fs_feat!r}, which reads the notes")
+    protect = model.get("protect_none", False)
+    if not isinstance(protect, bool):
+        raise SystemExit(f"--stage2: protect_none of model {fs} is not a boolean ({protect!r})")
+    if protect and classes[S2.NONE_IDX] != "NONE":
+        raise SystemExit("--stage2: the NONE guard requires NONE as class 0")
+    return fs_feat, protect
+
+
+def _test_mech27(s2: dict, test: pd.DataFrame, classes: list[str], root: Path) -> tuple[np.ndarray, np.ndarray, dict]:
+    """Row feature mech27 of the test side — the final answer of the frozen pr27 test answer (last readable JSON answer per row) matches
+    the answer key mechanically (src/answer_match.py); file and SHA-256 from the field mech27.test of the deployment file, the meta file
+    next to it must name the table test; class mask minor from taxonomy_v1.csv, checked against mech27.minor_codes. Aggregates only."""
+    spec = s2.get("mech27") or {}
+    ts = spec.get("test") or {}
+    f = Path(str(ts.get("file") or ""))
+    path = f if f.is_absolute() else COMP / f
+    if not ts.get("file") or not path.is_file():
+        raise SystemExit(f"--stage2: test answers for mech27 missing ({ts.get('file')})")
+    sha = _file_sha256(path)
+    if sha != ts.get("sha256"):
+        raise SystemExit(f"--stage2: test answers {f} have SHA-256 {sha[:16]}… instead of {str(ts.get('sha256'))[:16]}… (deployment file)")
+    meta_file = path.parent / "proto_meta.json"
+    if meta_file.is_file() and json.loads(meta_file.read_text()).get("table") != "test":
+        raise SystemExit(f"--stage2: {meta_file} does not name the table test")
+    answers = AM.last_answers([path], len(test))
+    mech = AM.mech_rows(answers, test["correct_answer"].tolist())
+    tax = pd.read_csv(root / "competition_data" / "taxonomy_v1.csv", dtype=str, keep_default_na=False)
+    minor = AM.minor_mask(classes, dict(zip(tax["id"], tax["default_severity"])))
+    codes = [c for c, v in zip(classes, minor) if v]
+    if codes != list(spec.get("minor_codes") or []):
+        raise SystemExit(f"--stage2: minor codes of the taxonomy {codes} != deployment file {spec.get('minor_codes')}")
+    info = {"file": str(f), "sha256": sha, "share_with_answer": float(np.mean([o is not None for o in answers])),
+            "share_mech": float(mech.mean()), "minor_codes": len(codes), "oof_share_mech": spec.get("train_share_mech")}
+    print(f"    SECOND STAGE, mech27: test answers {f.name} (SHA-256 {sha[:16]}…), answer present {info['share_with_answer']:.4f}, "
+          f"mechanically correct {info['share_mech']:.4f} (training {spec.get('train_share_mech')}); {len(codes)} minor codes (aggregates only)")
+    return mech, minor, info
+
+
 def apply_stage2(path: Path, stack_file: Path, stack: dict, Q: np.ndarray, P_pre: np.ndarray, raw_chans: dict, draw_keep: dict, rank_only: dict,
                  train: pd.DataFrame, test: pd.DataFrame, classes: list[str], seen_cls: np.ndarray, root: Path,
                  report_path: Path | None = None) -> tuple[np.ndarray, dict]:
@@ -883,7 +954,7 @@ def apply_stage2(path: Path, stack_file: Path, stack: dict, Q: np.ndarray, P_pre
                            "d2-d3": S2.identical_share(texts[1], texts[2])}
     rule = s2.get("guard_rule") or {}
     rel_tol = float(rule.get("notes_rel_tolerance", 0.10))
-    r_w2 = {}  # widened note-guard rule only if the deployment file names it; without the fields exactly as before
+    widened_args = {}  # widened note-guard rule only if the deployment file names it; without the fields exactly as before
     if "share_z_max" in rule or "n_ref" in rule:
         if "share_z_max" not in rule or "n_ref" not in rule:
             raise SystemExit("--stage2: guard_rule names share_z_max and n_ref only together (widened rule)")
@@ -894,15 +965,25 @@ def apply_stage2(path: Path, stack_file: Path, stack: dict, Q: np.ndarray, P_pre
         if float(rule["share_z_max"]) != 3.0 or rel_tol != 0.10:
             raise SystemExit(f"--stage2: guard_rule differs from the widened rule (share_z_max {rule['share_z_max']}, notes_rel_tolerance {rel_tol}; "
                              "required 3 and 0.10)")
-        r_w2 = {"share_z_max": float(rule["share_z_max"]), "n_ref": int(rule["n_ref"]), "n_test": n_test}
-    ga = S2.guard_notes(s2["guard_reference"], tstats, rel_tol, **r_w2)
+        widened_args = {"share_z_max": float(rule["share_z_max"]), "n_ref": int(rule["n_ref"]), "n_test": n_test}
+    ga = S2.guard_notes(s2["guard_reference"], tstats, rel_tol, **widened_args)
     fs = "main" if ga["ok"] else "fallback"
     model = s2["models"][fs]
+    fs_feat, protect = _stage2_model_form(model, fs, classes)  # feature set and NONE guard of the model itself; without the fields = fs, no guard
+    mm_info = None
+    if fs_feat == S2.MM_SET:  # row feature mech27 from the frozen pr27 test answers of the deployment file
+        mech, minor, mm_info = _test_mech27(s2, test, classes, root)
+        S2.attach_mech(st, mech, minor)
     rows = np.arange(n_test)
-    X, cand, names = S2.pair_features(st, rows, Q, P_pre, kn, fs)
+    X, cand, names = S2.pair_features(st, rows, Q, P_pre, kn, fs_feat)
     if names != model["features"] or not np.array_equal(cand, cand0):
         raise SystemExit(f"--stage2: features of the test side ({len(names)}) do not match the deployment file ({len(model['features'])})")
     top = S2.reorder(cand, S2.scores(model, X))
+    n_protected = 0
+    if protect:  # NONE guard: base top NONE -> the base order of the row stays (before guard (c), like the OOF share of the set)
+        top_unprotected = top
+        top = S2.protect_none(top, cand)
+        n_protected = int((top_unprotected != top).any(1).sum())
     changed = float((top[:, 0] != cand[:, 0]).mean())
     oof_share = float(model.get("oof_changed_top_share", 0.0))
     lo_f, hi_f = (s2.get("guard_rule") or {}).get("changed_top_factor", [0.5, 2.0])
@@ -918,25 +999,145 @@ def apply_stage2(path: Path, stack_file: Path, stack: dict, Q: np.ndarray, P_pre
             "share_top3_changed": float((t0 != t1).any(1).mean()), "share_top3_changed_oof": model.get("oof_changed_top3_share"),
             "rows_tie_fixed": int(ties), "test_notes": notes_src,
             "order": "blend -> margin alignment -> second stage -> REL-01"}
-    if r_w2:  # only with the widened rule: rule and sample sizes in the statistics (otherwise the statistics file stays unchanged)
-        info["guard_notes"].update({"rule": str(rule.get("rule", "widened")), **r_w2})
-    print(f"  SECOND STAGE ({Path(path).name}{', NULL MODEL' if null else ''}): note guard{' (widened rule: band or |z| ≤ ' + format(r_w2['share_z_max'], 'g') + ')' if r_w2 else ''} {'passed' if ga['ok'] else 'FAILED'} -> feature set {fs} "
+    if "feature_set" in model or "protect_none" in model:  # only with the main_guard fields (otherwise the statistics file stays unchanged)
+        info.update({"model_feature_set": fs_feat, "protect_none": protect, "rows_protected": n_protected})
+    if mm_info is not None:  # only with main_guard_i1_mm
+        info["mech27"] = mm_info
+    if widened_args:  # only with the widened rule: rule and sample sizes in the statistics (otherwise the statistics file stays unchanged)
+        info["guard_notes"].update({"rule": str(rule.get("rule", "widened")), **widened_args})
+    print(f"  SECOND STAGE ({Path(path).name}{', NULL MODEL' if null else ''}): note guard{' (widened rule: band or |z| ≤ ' + format(widened_args['share_z_max'], 'g') + ')' if widened_args else ''} {'passed' if ga['ok'] else 'FAILED'} -> feature set {fs} "
           f"({len(names)}); new top code in {changed:.4f} of the test rows (OOF {oof_share:.4f}, band ×{lo_f:g}…×{hi_f:g} -> "
           f"{'ok' if gc_ok else 'VIOLATED'}); first three changed {info['share_top3_changed']:.4f} (OOF {float(info['share_top3_changed_oof'] or 0.0):.4f}); \"novel for the task\" among the first 5: test "
           f"{novel:.4f}, OOF {info['guard_novel_task_top5']['oof']:.4f}")
+    if fs_feat != fs or protect:  # only with the main_guard fields
+        print(f"    SECOND STAGE, model {fs}: feature set {fs_feat} ({len(names)}), NONE guard {'on' if protect else 'off'} -> "
+              f"{n_protected} test rows keep the base order (count only)")
     for c in ga["checks"]:
         if not c["ok"]:
             print(f"    note guard failed: {c['stat']} test {c['test']:.4f} outside [{c['lo']:.4f}, {c['hi']:.4f}]"
-                  + (f", |z| {abs(c['z']):.2f} > {r_w2['share_z_max']:g} (training value {c['ref']:.4f})" if r_w2 and c.get("z") is not None else ""))
-        elif r_w2 and c.get("passed_by") == "z":
+                  + (f", |z| {abs(c['z']):.2f} > {widened_args['share_z_max']:g} (training value {c['ref']:.4f})" if widened_args and c.get("z") is not None else ""))
+        elif widened_args and c.get("passed_by") == "z":
             print(f"    note guard (widened rule): {c['stat']} test {c['test']:.4f} outside [{c['lo']:.4f}, {c['hi']:.4f}], passed via |z| {abs(c['z']):.2f} "
-                  f"≤ {r_w2['share_z_max']:g} (training value {c['ref']:.4f})")
+                  f"≤ {widened_args['share_z_max']:g} (training value {c['ref']:.4f})")
     if report_path is not None:
         report_path.parent.mkdir(parents=True, exist_ok=True)
         report_path.write_text(json.dumps(info, indent=1, ensure_ascii=False, default=float) + "\n")
     if not null and not gc_ok:
         raise SystemExit(f"--stage2: guard (c) violated — new top code in {changed:.4f} of the test rows, required {lo_f * oof_share:.4f}…{hi_f * oof_share:.4f} "
                          f"(OOF {oof_share:.4f}); no file written")
+    return Q_new, info
+
+
+def class_mass_stats(Q: np.ndarray, P_pre: np.ndarray, y_train: np.ndarray, min_rows: int, classes: list[str]) -> dict:
+    """L1 distance of the mean class mass of the test rows from the target of the alignment (training shares of the classes with at
+    least min_rows rows; sum over the classes with a target) after (Q) and before (P_pre) the alignment, plus the NONE mass and the
+    mass of the general codes against their targets. Aggregates only."""
+    K = len(classes)
+    counts = np.bincount(np.asarray(y_train, dtype=np.int64), minlength=K)
+    target = np.where(counts >= min_rows, counts, 0) / len(y_train)
+    used = target > 0
+    mq, mp = np.asarray(Q, np.float64).mean(0), np.asarray(P_pre, np.float64).mean(0)
+    gen = [classes.index(c) for c in S2.GENERAL_CODES]
+    return {"l1_after": float(np.abs(mq - target)[used].sum()), "l1_before": float(np.abs(mp - target)[used].sum()), "classes": int(used.sum()),
+            "min_rows": int(min_rows), "none_after": float(mq[0]), "none_before": float(mp[0]), "none_target": float(target[0]),
+            "general_after": float(mq[gen].sum()), "general_target": float(target[gen].sum()), "mass_without_target_after": float(mq[~used].sum())}
+
+
+def stage2_safe_order(model: dict, X: np.ndarray, cand: np.ndarray, protect: bool) -> tuple[np.ndarray, int]:
+    """New order of the first K candidates (stage2.reorder) and then — with protect — the NONE guard: if the base order has NONE (class 0)
+    at the top and the model wants another top code, the base order of the whole row stays.
+    -> (order [R, K], number of guarded rows)."""
+    top = S2.reorder(cand, S2.scores(model, X))
+    if not protect:
+        return top, 0
+    m = (cand[:, 0] == 0) & (top[:, 0] != 0)
+    top = top.copy()
+    top[m] = cand[m]
+    return top, int(m.sum())
+
+
+def apply_stage2_safe(path: Path, stack_file: Path, stack: dict, Q: np.ndarray, P_pre: np.ndarray, raw_chans: dict, draw_keep: dict, rank_only: dict,
+                      train: pd.DataFrame, test: pd.DataFrame, classes: list[str], seen_cls: np.ndarray, root: Path,
+                      report_path: Path | None = None) -> tuple[np.ndarray, dict]:
+    """SECOND STAGE of the SAFETY line (deployment file with align_mode "inductive" or "set"; see the module docstring). Q = test blend
+    after the alignment (inductive, or as one set over the test rows), P_pre = the blend before it. Feature set "fallback" or
+    "fallback_i1" without notes (no note guard), NONE guard as in the file, guard (c) on the share of new top codes after the guard;
+    with "set" also the class masses (class_mass). Aggregates only. -> (Q with a new order of the first K, statistics)."""
+    s2 = json.loads(Path(path).read_text())
+    n_test, K = len(test), len(classes)
+    null = bool(s2.get("null"))
+    model = s2.get("model") or {}
+    fs = s2.get("feature_set")
+    protect = s2.get("protect_none", False)
+    mode = s2.get("align_mode")
+    trans = mode == "set"  # margin alignment as one set over the test rows; otherwise inductive as before
+    lab = "transductive" if trans else "inductive"
+    problems = []
+    if mode not in ("inductive", "set"):
+        problems.append(f"align_mode {mode!r} instead of 'inductive' (or 'set')")
+    if s2.get("stack_sha256") != _file_sha256(stack_file):
+        problems.append(f"blend file {stack_file.name} is not the one of the deployment file ({s2.get('stack')})")
+    if s2.get("channels") != list(stack["channels"]) or float(s2.get("arith_beta", -1)) != arith_beta_of(stack):
+        problems.append("channels or β of the deployment file do not match the blend file")
+    if int(s2.get("K", -1)) != S2.K_CAND or float(s2.get("lambda", -1)) != S2.LAMBDA:
+        problems.append(f"K {s2.get('K')} / λ {s2.get('lambda')} instead of {S2.K_CAND} / {S2.LAMBDA}")
+    if fs not in ("fallback", S2.FB_I1_SET):  # fallback_i1 = fallback + interactions I1 (without notes)
+        problems.append(f"feature set {fs!r}: the safety line only knows \"fallback\" and \"fallback_i1\" (without notes)")
+    if not isinstance(protect, bool) or (protect and classes[0] != "NONE"):
+        problems.append(f"protect_none {protect!r} (boolean; the guard requires NONE as class 0)")
+    dch = s2.get("draws_channel")
+    draws = draw_keep.get(dch) or []
+    specs = (rank_only.get(dch) or "").split(",")
+    if len(draws) != len(S2.DRAWS) or specs != list(s2.get("test_draws") or []):
+        problems.append(f"M3 test draws of channel {dch}: {len(draws)} matrices, test rankings {specs} against the deployment file {s2.get('test_draws')}")
+    missing = [nm for nm in stack["channels"] if nm not in raw_chans]
+    if missing:
+        problems.append(f"channels without a test matrix {missing}")
+    if problems:
+        raise SystemExit(f"--stage2 ({lab}): " + "; ".join(problems))
+    st = S2.Static(stack["channels"], raw_chans, draws, test["grade"].to_numpy().astype(float), seen_cls, classes, None)
+    y_tr = labels.encode(train["root_code"], classes)
+    kn = S2.knowledge(S2.task_keys(train["question_id"].to_numpy(), train["topic_name"].to_numpy()),
+                      np.asarray(train["topic_name"].to_numpy()).astype(str), y_tr,
+                      S2.task_keys(test["question_id"].to_numpy(), test["topic_name"].to_numpy()),
+                      np.asarray(test["topic_name"].to_numpy()).astype(str), K)
+    cand0 = S2.candidates(Q, seen_cls)
+    X, cand, names = S2.pair_features(st, np.arange(n_test), Q, P_pre, kn, fs)
+    if names != model.get("features") or not np.array_equal(cand, cand0):
+        raise SystemExit(f"--stage2 ({lab}): features of the test side ({len(names)}) do not match the deployment file ({len(model.get('features') or [])})")
+    top, n_protected = stage2_safe_order(model, X, cand, protect)
+    changed = float((top[:, 0] != cand[:, 0]).mean())
+    oof_share = float(model.get("oof_changed_top_share", 0.0))
+    lo_f, hi_f = (s2.get("guard_rule") or {}).get("changed_top_factor", [0.5, 2.0])
+    gc_ok = bool(lo_f * oof_share <= changed <= hi_f * oof_share)
+    novel = float(X[:, names.index("novel_task")].mean())
+    Q_new, ties = S2.apply_to_probs(Q, cand, top, seen_cls)
+    t0, t1 = metric.top3_indices(Q, seen_cls), metric.top3_indices(Q_new, seen_cls)
+    info = {"file": str(path), "sha256": _file_sha256(Path(path)), "null": null, "align_mode": mode, "feature_set": fs, "fallback": True,
+            "n_features": len(names), "K": S2.K_CAND, "lambda": S2.LAMBDA, "protect_none": protect, "rows_protected": n_protected,
+            "guard_notes": None, "guard_novel_task_top5": {"test": novel, "oof": float(s2.get("novel_task_share_top5", float("nan")))},
+            "guard_changed_top": {"test": changed, "oof": oof_share, "factor": [lo_f, hi_f], "ok": gc_ok, "enforced": not null},
+            "share_top3_changed": float((t0 != t1).any(1).mean()), "share_top3_changed_oof": model.get("oof_changed_top3_share"),
+            "rows_tie_fixed": int(ties), "test_draws": specs,
+            "order": ("blend -> margin alignment (one set over the test rows) -> second stage -> NONE guard -> REL-01" if trans
+                      else "blend -> inductive alignment -> second stage -> NONE guard -> REL-01")}
+    if trans:  # class masses after the alignment against their target (aggregates only; only in this mode, otherwise the report stays byte-identical)
+        info["class_mass"] = class_mass_stats(Q, P_pre, y_tr, int(s2.get("align_min", 3)), classes)
+    print(f"  SECOND STAGE, SAFETY LINE ({Path(path).name}{', NULL MODEL' if null else ''}): feature set {fs} ({len(names)}), no notes; "
+          f"NONE guard {'on' if protect else 'off'} ({n_protected} test rows keep the base order); new top code in {changed:.4f} of the test rows "
+          f"(OOF {oof_share:.4f}, band ×{lo_f:g}…×{hi_f:g} -> {'ok' if gc_ok else 'VIOLATED'}); first three changed {info['share_top3_changed']:.4f} "
+          f"(OOF {float(info['share_top3_changed_oof'] or 0.0):.4f}); \"novel for the task\" among the first 5: test {novel:.4f}, OOF {info['guard_novel_task_top5']['oof']:.4f}")
+    if trans:
+        cm = info["class_mass"]
+        print(f"    margin alignment as one set: class masses of the test rows against the target ({cm['classes']} classes with at least {cm['min_rows']} "
+              f"training rows) L1 {cm['l1_before']:.4f} before -> {cm['l1_after']:.4f} after the alignment; NONE {cm['none_after']:.4f} (target "
+              f"{cm['none_target']:.4f}), general codes {cm['general_after']:.4f} (target {cm['general_target']:.4f}) (aggregates only)")
+    if report_path is not None:
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text(json.dumps(info, indent=1, ensure_ascii=False, default=float) + "\n")
+    if not null and not gc_ok:
+        raise SystemExit(f"--stage2 ({lab}): guard (c) violated — new top code in {changed:.4f} of the test rows, required {lo_f * oof_share:.4f}…"
+                         f"{hi_f * oof_share:.4f} (OOF {oof_share:.4f}); no file written")
     return Q_new, info
 
 
@@ -967,12 +1168,12 @@ def main() -> int:
     ap.add_argument("--rank-none-band-for", action="append", default=[], help="<channel>=<lo>,<hi>: own malfunction band fixed in advance for the share of NONE at "
                                                                               "the top of the ranking of ONE channel under --rank-only (instead of --rank-none-band)")
     ap.add_argument("--out")
-    ap.add_argument("--align", type=float, default=0.0, help="margin alignment to the training class frequencies with this strength (0 = off; transductive, primary line only)")
+    ap.add_argument("--align", type=float, default=0.0, help="margin alignment to the training class frequencies with this strength (0 = off; transductive: the test rows as one set)")
     ap.add_argument("--align-min", type=int, default=3, help="margin alignment only for classes with at least this many training rows")
     ap.add_argument("--align-inductive", type=float, default=0.0, help="inductive alignment with this strength: class weights from the blend's predictions for the training rows "
                                                                        "(0 = off; for the inductive line; not together with --align)")
     ap.add_argument("--suffix", default="", help="suffix for the names of the output files")
-    ap.add_argument("--blank-rows", help="table positions of the test rows with a blank image (tools/make_blank_list.py; path relative to the data folder): --blank-code is put at rank 1 there")
+    ap.add_argument("--blank-rows", help="table positions of the test rows with a blank image (frozen list; path relative to the data folder): --blank-code is put at rank 1 there")
     ap.add_argument("--blank-code", default="REL-01", help="code for blank images (meta code of the taxonomy: upload does not match the task)")
     ap.add_argument("--stage2", help="deployment file of the second stage (eda/c118_stage2.py fit): conditional logit over the first K candidates "
                                      "after the margin alignment; requires --align as in the file; guards on the test notes and the change rate")
@@ -986,7 +1187,11 @@ def main() -> int:
         raise SystemExit("--stage2-report only with --stage2")
     if a.stage2:  # the second stage was fitted on the alignment over the whole set: the same strength and class limit are required
         s2j = json.loads(Path(a.stage2).read_text())
-        if a.align_inductive or float(a.align) != float(s2j.get("align", -1)) or int(a.align_min) != int(s2j.get("align_min", -1)):
+        if s2j.get("align_mode") == "inductive":  # inductive line: inductive alignment as in the fit (per fold)
+            if a.align or float(a.align_inductive) != float(s2j.get("align_inductive", -1)) or int(a.align_min) != int(s2j.get("align_min", -1)):
+                raise SystemExit(f"--stage2 (inductive) requires --align-inductive {s2j.get('align_inductive')} --align-min {s2j.get('align_min')} "
+                                 "(as in the fit) and no --align")
+        elif a.align_inductive or float(a.align) != float(s2j.get("align", -1)) or int(a.align_min) != int(s2j.get("align_min", -1)):
             raise SystemExit(f"--stage2 requires --align {s2j.get('align')} --align-min {s2j.get('align_min')} (transductive, as in the fit)")
 
     stack = json.loads((COMP / "artifacts" / f"stack_{a.name}.json").read_text())
@@ -1119,7 +1324,7 @@ def main() -> int:
                 print(f"  channel {name}: {int(miss.sum())} of {n_test} test rows taken from channel {fill[name]}")
         raw_chans[name] = np.array(P, dtype=np.float64, copy=True)
         eps_floor = float((stack.get("floor") or {}).get(name, 0.0))
-        if eps_floor:  # the same floor as when the weights were fitted (eda/c6_blend_two_stage.py --floor)
+        if eps_floor:  # the same floor as when the weights were fitted (field floor of the blend file)
             P = a2.floor_probs(P, eps_floor, seen_cls)
             sources[name].append({"floor": eps_floor})
             print(f"  channel {name}: floor {eps_floor:g} (mixed with the uniform distribution)")
@@ -1143,8 +1348,7 @@ def main() -> int:
                                   test["question_id"].to_numpy(), test["topic_name"].to_numpy(), K)
     P = mix_channels(stack, chans, none_feats, seen_cls, novel=novel_test)
     if arith_beta_of(stack):
-        print(f"  blend: log-linear with arithmetic share β = {arith_beta_of(stack):g} (field arith_beta of the blend file; "
-              f"eda/c104_blend_variants.py)")
+        print(f"  blend: log-linear with arithmetic share β = {arith_beta_of(stack):g} (field arith_beta of the blend file)")
     if beta_new is not None:
         print(f"  blend: share for novel codes β_new = {beta_new:g} (field arith_beta_novel) — novel are "
               f"{float(novel_test[:, seen_cls].mean()):.3f} of the pairs (test row, class with a training example)")
@@ -1205,12 +1409,13 @@ def main() -> int:
                       "share_rank1_changed": round(float((t0[:, 0] != t1[:, 0]).mean()), 4), "share_top3_changed": round(float((t0 != t1).any(1).mean()), 4),
                       "max_abs_gap_before": round(float(np.abs(P_before.mean(0) - target)[used].max()), 4),
                       "max_abs_gap_after_full_strength": round(float(np.abs(c21.apply_weights(P_before, align_w, 1.0).mean(0) - target)[used].max()), 6)}
-        print(f"  margin alignment (transductive, primary line only): strength {a.align:g}, {align_info['classes']} classes with at least {a.align_min} training rows; "
+        print(f"  margin alignment (transductive, the test rows as one set): strength {a.align:g}, {align_info['classes']} classes with at least {a.align_min} training rows; "
               f"weights 10/50/90 % {align_info['weights_q10_q50_q90']}; rank 1 changed in {align_info['share_rank1_changed']:.3f} of the test rows, "
               f"the first three in {align_info['share_top3_changed']:.3f}")
     stage2_info = None
     if a.stage2:  # second stage: reranker over the first K candidates AFTER the alignment, BEFORE REL-01
-        P, stage2_info = apply_stage2(Path(a.stage2), COMP / "artifacts" / f"stack_{a.name}.json", stack, P, P_pre_align, raw_chans, draw_keep,
+        apply_fn = apply_stage2_safe if s2j.get("align_mode") in ("inductive", "set") else apply_stage2  # safety line: inductive / as one set
+        P, stage2_info = apply_fn(Path(a.stage2), COMP / "artifacts" / f"stack_{a.name}.json", stack, P, P_pre_align, raw_chans, draw_keep,
                                       rank_only, train, test, classes, seen_cls, root, Path(a.stage2_report) if a.stage2_report else None)
     blank_info = None
     if a.blank_rows:  # blank images (black photo): the meta code at rank 1, the rest of the order stays (inductive, per row)
@@ -1267,7 +1472,7 @@ def main() -> int:
             "cv": stack.get("cv"), "sources": sources, "check": stats, "aggregates": line}
     if align_info:
         info["align"] = align_info
-        info["kind"] = "transductive (margin alignment over the set of test predictions; primary line only)"
+        info["kind"] = "transductive (margin alignment over the set of test predictions)"
     if ind_info:
         info["align_inductive"] = ind_info
         info["kind"] = "inductive (class weights only from the predictions of the blend on the training rows; fixed before inference)"

@@ -349,7 +349,7 @@ CONT_TAIL_TOKENS = 256  # upper estimate for the appended text without notes (CO
 NOTE_TOKEN_FACTOR, NOTE_TOKEN_PAD = 1.05, 64  # notes re-tokenised: at most +5 % + 64 tokens compared with the generated ones (checked)
 # Only for displaying an expectation (the 27B in the same protocol): mean output of the continuation at +5,000 tokens
 # 4,058.5; afterwards without a valid answer (finishing pass needed) 53.2 % of the rows.
-E092_CONT_OUT, E092_FINISH_SHARE = 4058.5, 0.532
+CONT_OUT_TOKENS_TYPICAL, FINISH_SHARE_TYPICAL = 4058.5, 0.532
 FINISH_OUT_DEFAULT = 403  # mean output of the finishing pass for q397 if the source contains no finishing pass
 TAG_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,40}")
 RECIPE_FILE = "continue_generation.json"
@@ -610,7 +610,7 @@ def print_estimate(a, prep: dict) -> None:
     todo, firsts = prep["todo"], prep["firsts"]
     full = [i for i, s in todo if s == "continue"]
     pess = sum(typical_usd(a.model, firsts[i], a.max_tokens, prep["finish_out"], a.max_tokens, 1.0) for i in full)
-    exp = sum(typical_usd(a.model, firsts[i], a.max_tokens, prep["finish_out"], E092_CONT_OUT * a.max_tokens / 5000, E092_FINISH_SHARE) for i in full)
+    exp = sum(typical_usd(a.model, firsts[i], a.max_tokens, prep["finish_out"], CONT_OUT_TOKENS_TYPICAL * a.max_tokens / 5000, FINISH_SHARE_TYPICAL) for i in full)
     rest = sum(v for (_i, s), (_u, v) in zip(todo, prep["uppers"]) if s == "finish")
     c = prep["plan"]["counts"]
     print(f"plan: {c['rows']} rows in the list — to do {len(todo)} (of which finishing pass only {c['resume_finish']}), done {c['done']}, "

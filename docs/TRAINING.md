@@ -1,11 +1,11 @@
 # Training
 
-*Status: 2026-11-01 (version 0). This document lists every component that is trained or fitted on the labelled data:
+*Status: 2026-11-07 (version 0.2). This document lists every component that is trained or fitted on the labelled data:
 inputs, command, hardware, duration and the values to check. Model details are in [METHOD.md](METHOD.md); inference is
-in [INFERENCE.md](INFERENCE.md).*
+in [INFERENCE.md](INFERENCE.md); every script is listed in [CODEMAP.md](CODEMAP.md).*
 
 **The trained weights are delivered, not retrained.** The competition host reproduces inference only. GPU training is
-not bit-reproducible (see §14), so a retrained model is a new model with a new test file. The adapters used for the
+not bit-reproducible (see §15), so a retrained model is a new model with a new test file. The adapters used for the
 submissions are stored privately with their checksums ([DATA_AND_COMPLIANCE.md](DATA_AND_COMPLIANCE.md)).
 
 ## 1. Overview
@@ -13,9 +13,9 @@ submissions are stored privately with their checksums ([DATA_AND_COMPLIANCE.md](
 ```
 train.csv + training photos + question diagrams + taxonomy
   │
-  ├─ (§3)  folds ────────────────────────────────────────────────── configs/folds.parquet
+  ├─ (§3)  folds ────────────────────────────────────────────────── configs/folds.parquet, artifacts/folds.npy
   ├─ (§4)  9B LoRA: 5 fold adapters + full fit ──────────────────── v1_f0 … v1_f4, v1_full  → oof_v1
-  ├─ (§5)  orientation network (CPU) → rotation lists ──────────── orient_cnn.pt            → oof_v1r
+  ├─ (§5)  orientation network (CPU) → rotation lists ──────────── orient_cnn.pt            → oof_v1r (first-version list)
   ├─ (§6)  teacher pool labels (API, primary line only) ────────── pool_a, pool_b (frozen)
   ├─ (§7)  27B zero-shot scorers ────────────────────────────────── oof_zs27q, oof_zs27t
   ├─ (§8)  gates → reasoning draws g / n → scoring ──────────────── oof_think18nb, oof_think18sb
@@ -24,12 +24,12 @@ train.csv + training photos + question diagrams + taxonomy
   │         → OOF draws d1, d2, d3 ──────────────────────────────── oof_m3x3_full
   ├─ (§11) 397B training side (API) → notes → M3 scores behind them oof_q397m3          [primary line]
   ├─ (§12) blend weights (CPU) ──────────────────────────────────── stack_*.json
-  └─ (§13) second stage (CPU) ───────────────────────────────────── stage2_*.json       [primary line]
+  └─ (§13) second stages (CPU) ──────────────────────────────────── stage2_*.json
 ```
 
 | Component | Kind | Hardware | Deterministic |
 |---|---|---|---|
-| Folds, OOF assembly, blend weights, second stage, orientation network | fitting on CPU | CPU | yes, bit-identical |
+| Folds, OOF assembly, blend weights, second stages, orientation network | fitting on CPU | CPU | yes, bit-identical on the reference CPU class |
 | 9B adapter | LoRA fine-tuning | A40 48 GB | no (GPU) |
 | M3 adapter | LoRA fine-tuning | RTX PRO 6000 96 GB | no (GPU) |
 | OOF of the untrained channels and of M3 | inference: exact scoring behind generated texts | A40, RTX PRO 6000 | scoring yes on given hardware; text generation no |
@@ -39,12 +39,12 @@ train.csv + training photos + question diagrams + taxonomy
 
 | Environment | Use | Definition |
 |---|---|---|
-| GPU base | Training, adapter merge, exact scoring | Docker image `runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404`, Python 3.12. Pinned in `solution/env/base.lock`: torch 2.8.0+cu128, transformers 5.15.1, peft 0.21.2, accelerate 1.15.0, flash-linear-attention 0.5.2, triton 3.4.0, bitsandbytes 0.50.2 |
-| vLLM | Text generation (reasoning, protocol answers, M3 draws) | Separate virtual environment, `solution/env/vllm.lock`: vllm 0.31.0, transformers 5.17.0, torch 2.13.0 |
-| CPU | OOF assembly, blend, second stage, assembly | `solution/env/cpu.lock`: Python 3.13.5, numpy 2.4.2, scipy 1.17.1, pandas 2.3.3, scikit-learn 1.8.0 |
+| GPU base | Training, adapter merge, exact scoring | Docker image `runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404`, Python 3.12; torch 2.8.0+cu128, transformers 5.15.1, peft 0.21.2, accelerate 1.15.0, flash-linear-attention 0.5.2, triton 3.4.0, bitsandbytes 0.50.2 |
+| vLLM | Text generation (reasoning, protocol answers, M3 draws) | Separate virtual environment: vllm 0.31.0, transformers 5.17.0, torch 2.13.0 |
+| CPU | OOF assembly, blend, second stages, assembly | Python 3.13.5, numpy 2.4.2, scipy 1.17.1, pandas 2.3.3, scikit-learn 1.8.0, pyarrow 23.0.1, PyYAML 6.0.3, Pillow 11.3.0, torch 2.11.0 and transformers 5.15.1 (imported by shared model helpers; used on the CPU); pytest 8.4.2 for the tests |
 
-> **TODO.** The lock files pin exact versions; their hashes are completed by the offline wheelhouse build
-> (`kernels/wheelhouse/`). Until then, install the pinned versions without hash checking.
+Lock files with hashes and an offline wheelhouse are **planned** ([ROADMAP.md](ROADMAP.md)); until then, install the
+versions listed above.
 
 **Base models** (fixed revisions; all Apache 2.0):
 
@@ -74,9 +74,9 @@ K12_DATA=../data K12_MODELS=/path/to/models PYTHONPATH="$PWD:$PWD/.." \
 
 | | |
 |---|---|
-| Command | `python -I tools/make_folds.py` *(TODO: in preparation; reproduces `kaggle_core.folds.make_folds` with 5 folds, seed 42, stratified by `root_code`)* |
-| Output | `configs/folds.parquet` (row position → fold) |
-| Check | Fold hash `07ec381cc58b2a80`. Every run verifies it |
+| Split | `configs/folds.parquet` (row position of `train.csv` → fold), part of this repository. It was created once with `kaggle_core.folds.make_folds` (5 folds, seed 42, stratified by `root_code`); `python -I tools/make_folds.py --recompute` recomputes it from `train.csv` and confirms that it is identical |
+| Fold array | `python -I tools/make_folds.py` writes `artifacts/folds.npy` (int64, row order of `train.csv`); `--check` compares an existing file. The second stages record its SHA-256 among their inputs |
+| Checks | Fold hash `07ec381cc58b2a80` (every run verifies it through `vlm.common.load_folds`); `artifacts/folds.npy` SHA-256 `fadf2771203c19d19e057d69a02413d9f01b26f85bbf76490046f2a6f8773b73` |
 
 ## 4. 9B fine-tuned scorer (`v1`)
 
@@ -84,7 +84,7 @@ K12_DATA=../data K12_MODELS=/path/to/models PYTHONPATH="$PWD:$PWD/.." \
 |---|---|
 | Inputs | `train.csv`, training photos, question diagrams, taxonomy, folds. Training targets (code, answer check, cleaned transcription, findings) are built at run time from `train.csv`; there is no derived file |
 | Configurations | `ft_v1a_rp` (folds 0 and 2), `ft_sum1_rp` (fold 1), `ft_v1b_rp` (folds 3 and 4), `ft_v1c_rp` (full fit on all 1,500 rows → adapter `v1_full`) |
-| Recipe | LoRA r 32, α 64, dropout 0.05 on layers 20–31; 3 epochs; batch 8, gradient accumulation 8; learning rate 1.5e-4; summed code loss with weight 1.0, answer check 0.5, auxiliary targets 0.5; up to 4 same-question examples, dropped for 15 % of samples; photo 1,024 px, diagram 448 px; seed 42 |
+| Recipe | LoRA r 32, α 64, dropout 0.05 on layers 20–31; 3 epochs, one sample per step with gradient accumulation 8 (scoring batch 8); learning rate 1.5e-4; summed code loss with weight 1.0, answer check 0.5, auxiliary targets 0.5; up to 4 same-question examples, dropped for 15 % of samples; photo 1,024 px, diagram 448 px; seed 42 |
 | Hardware and time | A40 48 GB, bf16; 0.8–1.0 s per step, about 0.5 USD per fold. Full fit: 4,500 steps in 59 min |
 | OOF assembly | `python -I eda/a6_assemble_oof.py v1 ft_v1a_rp/v1_f0/oof0 ft_sum1_rp/ft9b_sum_f1/oof1 ft_v1a_rp/v1_f2/oof2 ft_v1b_rp/v1_f3/oof3 ft_v1b_rp/v1_f4/oof4` |
 | Checks | Each training job reports all planned steps done. `oof_v1` MAP@3 0.6406 ± 0.0105. `v1_full/adapter_model.safetensors`: 110,906,720 bytes, SHA-256 `321108733ee1ae9eafe14d98047eb592f2f8084df372f600aa46f4a0f0f1d9ca` |
@@ -97,16 +97,20 @@ is identical, and its OOF probabilities enter the blend in that form.
 | | |
 |---|---|
 | Ink maps | `python -I tools/orient_net.py maps --tables train,test,unlabelled` (CPU) |
-| Training | `python -I tools/orient_net.py train --seed 0 --threads 2 --weights artifacts/orient/orient_cnn.pt`. Training photos plus a fixed sample of 10,000 pool photos (seed 20261010); details in [METHOD.md](METHOD.md#6-orientation-network) |
-| Rotation lists | `python -I tools/orient_net.py infer --from-images --tables train,test --out data/derived/orient_repro`. This writes a `c50` list (photos turned upright for the 9B run, with their rotation) and a `c80` list (rows on which the upright reading replaces the plain one), in the format of `tools/make_orient.py` |
-| Rotated 9B reading | Configuration `v1rot_t4` (Kaggle T4×2, fp16): the fold adapters read the rotated training photos (jobs `rot_f0` … `rot_f4`) |
+| Training | `python -I tools/orient_net.py train --seed 0 --threads 2 --weights artifacts/orient/orient_cnn.pt`. Training photos plus a fixed sample of 10,000 pool photos (seed 20261010); details in [METHOD.md](METHOD.md#6-orientation-network). Writes the description `artifacts/orient/orient_cnn.json` next to the weights |
+| Rotation lists | `python -I tools/orient_net.py infer --from-images --tables train,test --weights artifacts/orient/orient_cnn.pt --out data/derived/orient_repro`. This writes a `c50` list (photos turned upright for the 9B run, with their rotation) and a `c80` list (rows on which the upright reading replaces the plain one), in the format of `tools/make_orient.py`. Give `--weights` exactly in this form: the path is written into the meta file of each list, and `tools/orient_list.py check` requires it |
+| Rotated 9B reading | Configuration `v1rot_t4` (Kaggle T4×2, fp16): the fold adapters read the rotated training photos (jobs `rot_f0` … `rot_f4`) and the rotated test photos (`rot_test`) |
 | OOF assembly | `python -I eda/a6_assemble_oof.py v1r --mean --fill v1 v1rot_t4/rot_f0/oof0+v1rot_t4/rot_f1/oof1+v1rot_t4/rot_f2/oof2+v1rot_t4/rot_f3/oof3+v1rot_t4/rot_f4/oof4@derived/orient/train_c80_rows.npy` |
 | Hardware and time | CPU, minutes for the network. Rotated reading on Kaggle T4 |
-| Checks | `orient_cnn.pt` SHA-256 `83cc1224da0edbea0af640a8682ecb0b882f33b107cf89de9a7673ce19223abe`, bit-identical over three training runs. 124 training rows in the `c80` list. `oof_v1r` MAP@3 0.6474 |
+| Checks | `orient_cnn.pt` SHA-256 `83cc1224da0edbea0af640a8682ecb0b882f33b107cf89de9a7673ce19223abe`, bit-identical over three training runs. Released lists: 132 training rows and 344 test rows in the `c80` lists; the test list has SHA-256 `aa6515c8bf17bf593c5c90aa90d9240e9992d84f650c5445a37a5f015dbbff1d`. `oof_v1r` MAP@3 0.6474 |
 
-> **Note.** The submissions made so far use the rotation lists of an earlier, unseeded version of the network. The
-> released network reproduces itself exactly but changes the test list on 24 of 3,498 photos. The switch to the
-> released lists is part of the [roadmap](ROADMAP.md).
+**Two rotation lists.** The earlier submissions and the training side of `v1r` use the lists of an unseeded first version
+of the network (`data/derived/orient/`; 124 training rows and 350 test rows in the `c80` lists), whose weights were not
+stored. The test side of the final candidates uses the released network's list (344 rows; it differs on 24 of 3,498 test
+photos). All of its rows were already computed by the rotation run with the same rotation, so only the row filter of the
+`v1r` source changes ([INFERENCE.md](INFERENCE.md#2-lines-and-expected-checksums)). The training side (`oof_v1r` and the
+blend weights fitted on it) stays on the first-version list: with the released list the channel's training-side MAP@3
+would be 0.6471 instead of 0.6474 (−0.0003 ± 0.0011), which is not distinguishable from zero.
 
 ## 6. Teacher pool labels (primary line only)
 
@@ -150,21 +154,22 @@ No training is involved. Same-question examples and topic blocks are drawn from 
 |---|---|
 | Protocol answers | `pr27_rp` (jobs `proto_a`, `proto_b`; thinking up to 2,500 tokens, then a completion without thinking). RTX PRO 6000, 3.3–3.5 s per row, about 4.3 USD for the 1,500 training rows |
 | Stated-codes channel | `python -I eda/a8_proto_oof.py pr27 runs/pr27_rp/proto_a/proto+runs/pr27_rp/proto_b/proto` |
-| Frozen notes | `python -I tools/export_proto_notes.py --name train_pr27 --from pr27_rp/proto_a/proto --from pr27_rp/proto_b/proto` → `data/derived/proto_notes/train_pr27.jsonl` |
+| Frozen notes | `data/derived/proto_notes/train_pr27.jsonl`: the first-pass reasoning of the protocol answers, exported per row. The export script is not part of this repository; the file is delivered frozen with its checksum |
 | Exact ranking behind the notes | `px27_rp` (job `rank_tr`), about 2.8 USD for the training side |
 | Channel | `python -I eda/c95_rank_mean.py` (defaults: name `pr27xm`, the two answer jobs above and `runs/px27_rp/rank_tr/bench`) |
-| Checks | `pr27` MAP@3 about 0.745, `pr27xm` 0.7459. Rebuilding the notes file and `oof_pr27` from the frozen answers is bit-identical |
+| Checks | `pr27` MAP@3 about 0.745, `pr27xm` 0.7459. Rebuilding `oof_pr27` from the frozen answers is bit-identical |
 
 ## 10. M3: fine-tuned 27B reasoner (`m3x3_full`)
 
-**10.1 Training targets.** `python -I tools/make_sft_targets.py --full` writes `data/derived/sft/m3_fold{0..4}_targets.jsonl`
-(each with the 1,200 rows of the other folds) and `m3_full_targets.jsonl` (all 1,500 rows). The inputs are:
+**10.1 Training targets.** `data/derived/sft/m3_fold{0..4}_targets.jsonl` (each with the 1,200 rows of the other folds) and
+`m3_full_targets.jsonl` (all 1,500 rows). They are built from:
 - `train.csv`, which gives the gold code and the annotators' explanation of the root finding;
 - the folds;
 - the frozen protocol notes `data/derived/proto_notes/train_pr27.jsonl`;
 - `oof_pr27`, which decides where the notes carry loss.
 
-Rebuilding all six files from the frozen inputs is bit-identical.
+The target builder is not part of this repository; the six files are delivered frozen with their checksums (a rebuild
+from the frozen inputs was bit-identical). `src/vlm/sft.py` reads and checks them at training time.
 
 **10.2 Adapters and first draw.**
 
@@ -180,9 +185,13 @@ Rebuilding all six files from the frozen inputs is bit-identical.
 
 | Draw | Configurations | Settings |
 |---|---|---|
-| d1 | fold jobs of `m3_pilot_rp`, `m3_f034_rp`; combined by `eda/c95_m3_full_eval.py` into `runs/m3_5f` | greedy, up to 3,200 tokens |
-| d2 | `m3long_rp` (folds 1, 2; combined by `eda/c98d_m3long_eval.py` into `runs/m3long_comb`), `cv01_m3d2_f034` (folds 0, 3, 4) | greedy, up to 5,200 tokens |
+| d1 | fold jobs of `m3_pilot_rp`, `m3_f034_rp`; the five fold rankings are combined into the run folder `runs/m3_5f` | greedy, up to 3,200 tokens |
+| d2 | `m3long_rp` (folds 1, 2; combined into `runs/m3long_comb`), `cv01_m3d2_f034` (folds 0, 3, 4) | greedy, up to 5,200 tokens |
 | d3 | `m3d3_oof_rp` (all folds) | sampled: temperature 0.6, top-p 0.95, top-k 20, seed 3; up to 5,200 tokens |
+
+The combined run folders `runs/m3_5f` and `runs/m3long_comb` are delivered frozen; the scripts that combined the fold
+runs are not part of this repository. `eda/a9_m3_draws_oof.py` checks each draw (fold coverage, settings) when it reads
+them.
 
 **10.4 Channel.**
 
@@ -192,11 +201,13 @@ python -I eda/a9_m3_draws_oof.py m3x3_full \
   --draw runs/m3long_comb/m3l_rank/bench+runs/cv01_m3d2_f034/m3l_rank_f0/bench+runs/cv01_m3d2_f034/m3l_rank_f3/bench+runs/cv01_m3d2_f034/m3l_rank_f4/bench \
   --draw runs/m3d3_oof_rp/m3d3_rank_f0/bench+runs/m3d3_oof_rp/m3d3_rank_f1/bench+runs/m3d3_oof_rp/m3d3_rank_f2/bench+runs/m3d3_oof_rp/m3d3_rank_f3/bench+runs/m3d3_oof_rp/m3d3_rank_f4/bench \
   --rows-out derived/m3x3_full_rows.npy
-python -I eda/c108_m3_three_draws.py     # evaluation of the three-draw channel in both lines; read by the build scripts
+python -I eda/c108_m3_three_draws.py     # evaluation of the three-draw channel in both lines (see below)
 ```
 
 Checks: MAP@3 of d1 0.7621, d2 0.767, d3 0.7701; mean of three 0.8020. `python -I eda/a9_m3_draws_oof.py --verify m3x3_full`
-recomputes the channel from the sources recorded in its metadata.
+recomputes the channel from the sources recorded in its metadata. The build scripts read the stored verdict of
+`c108_m3_three_draws.py` (`artifacts/eda/private/m3_draws_eval/c108_m3_three_draws.json`); its posterior step needs a
+development helper that is not part of this repository, so the stored report is delivered frozen.
 
 ## 11. 397B training side and `q397m3` (primary line only)
 
@@ -204,7 +215,7 @@ recomputes the channel from the sources recorded in its metadata.
 |---|---|---|
 | 397B protocol answers on training rows | `tools/open_teacher.py` (Tinker sampling API, `Qwen/Qwen3.5-397B-A17B`, training rows only) | 1,496 of 1,500 valid, about 0.03 USD per row. Frozen; it cannot be regenerated without the API |
 | Copy into the run layout | `python -I eda/c110_q397_deploy.py source` | byte-identical copy of the frozen answers |
-| 397B answer channel (reference) | `python -I eda/a8_proto_oof.py q397 runs/q397_tinker/proto_t/proto` | MAP@3 about 0.744 |
+| 397B answer channel (reference) | `python -I eda/a8_proto_oof.py q397 runs/q397_tinker/proto_t/proto` | MAP@3 0.7432 |
 | Notes for M3 | `tools/make_q397m3_notes.py` | first-pass reasoning notes without the answer text |
 | M3 scores behind the notes | configuration `q397m3_oof_rp` (fold adapters, one shard per fold) | about 3.4 s per row, about 5.4 USD |
 | Channel | `python -I eda/c117_q397m3_deploy.py oof --save` | MAP@3 0.7442 |
@@ -217,28 +228,139 @@ recomputes the channel from the sources recorded in its metadata.
 | Primary | `python -I eda/c110_q397_deploy.py stack --line best --m3 m3x3_full --replace-q397 q397m3 --arith-beta-select --stem s032_stage2 --save` | `artifacts/stack_s032_stage2.json` | `d278bbedf7fb4d7564e584a55d45959b826748dfe937d8becf1e0818007281eb` |
 
 Weights are fitted on LogLoss over all 1,500 OOF rows, on the CPU in seconds. The rebuild is character-identical, and
-the build scripts verify it before every assembly.
+the build scripts verify it before every assembly. The blend files do not depend on the rotation list of the test side.
 
-## 13. Second stage (primary line only)
+## 13. Second stages
+
+### 13.1 Primary line
 
 ```bash
-python -I eda/c118_stage2.py oof                                                   # nested OOF reproduction of the reranker
-python -I eda/c118_stage2.py fit --stack s032_stage2 --save                        # → artifacts/stage2_s032.json (original band rule)
-python -I eda/c118_stage2.py fit --stack s032_stage2 --guard-rule widened --save   # → artifacts/stage2_s034.json (corrected notes-guard rule)
+python -I eda/c118_stage2.py oof --stack s032_stage2                              # nested OOF reproduction of the reranker
+python -I eda/c118_stage2.py fit --stack s032_stage2 --save                       # → artifacts/stage2_s032.json (original band rule)
+python -I eda/c118_stage2.py fit --stack s032_stage2 --guard-rule widened --save  # → artifacts/stage2_s034.json (widened note guard)
+python -I eda/c118_stage2.py guard-oof --stack s032_stage2                        # nested reproduction of main_guard (+ NONE guard)
+python -I eda/c118_stage2.py guard-fit --stack s032_stage2 --save                 # → artifacts/stage2_s035.json
 ```
 
 | File | SHA-256 | Content |
 |---|---|---|
-| `artifacts/stage2_s032.json` | `c33174e3ab203b5c2559586eb6b02f67f1588aca4da6bde25078cfb318fed73e` | Weights and standardisation of both feature sets; notes guard with the original ±10 % band |
-| `artifacts/stage2_s034.json` | `377d863bf08b07dda20bb37fab1af4a0c929e7fbbb8c3f221f1aed6e14f4397a` | Identical weights, feature lists, β, K, λ and gate; notes guard with the corrected rule (adds a binomial test with \|z\| ≤ 3 for share statistics) |
+| `artifacts/stage2_s032.json` | `c33174e3ab203b5c2559586eb6b02f67f1588aca4da6bde25078cfb318fed73e` | Weights and standardisation of both feature sets; note guard with the original ±10 % band |
+| `artifacts/stage2_s034.json` | `377d863bf08b07dda20bb37fab1af4a0c929e7fbbb8c3f221f1aed6e14f4397a` | Identical weights, feature lists, β, K, λ and gate; note guard with the widened rule (adds a binomial test with \|z\| ≤ 3 for share statistics) |
+| `artifacts/stage2_s035.json` | `12f15243872681aeddad83c407e3e36955db18426e62331ee729869d474f4b86` | `stage2_s034.json` with only the main model replaced: feature set `main_guard` (the 43 main features + identifiers of the five general codes, 48) and the NONE guard; fallback model, note guard, β, K, λ unchanged |
 
-Checks: the abstention gate does not abstain (inner 0.8351 against base 0.8286). CV per fold / without the last step /
-as one set: 0.83756 / 0.83011 / 0.83456 for the main form and 0.83556 / 0.82989 / 0.83378 for the fallback form.
+Checks:
+- Main and fallback forms: the abstention gate does not abstain (inner 0.8351 for the main form and 0.8347 for the fallback form,
+  against base 0.8286). CV per fold / without the
+  last step / as one set: 0.83756 / 0.83011 / 0.83456 for the main form and 0.83556 / 0.82989 / 0.83378 for the fallback
+  form.
+- `main_guard`: `guard-oof` reproduces the main form bit for bit and passes the copy null point (identifiers 0 and NONE
+  guard off give the main form exactly). CV per fold / without the last step / as one set: 0.83889 / 0.83522 / 0.83767,
+  against the main form +0.0013 ± 0.0014 / +0.0051 ± 0.0016 / +0.0031 ± 0.0015. The gate does not abstain (inner 0.8381
+  against base 0.8286). `guard-fit` first recomputes `stage2_s034.json` character for character; a further null point
+  requires the deployment features to equal the evaluated rows of `guard-oof`.
 
-## 14. Reproducibility of training
+**Row × candidate interactions and the final primary form** (version 0.2; run by `tools/builds/primary_i1.sh` and
+`tools/builds/primary_final.sh`):
 
-- **CPU steps are bit-identical:** folds, training targets, OOF assembly, blend weights, second stage and the orientation
-  network.
+```bash
+python -I eda/c121_stage2_i1.py oof --stack s032_stage2                  # nested reproduction: guard form bit for bit, I1, placebos
+python -I eda/c121_stage2_i1.py splits --stack s032_stage2 --n 20        # 20 new meta-splits (about 8 minutes)
+python -I eda/c121_stage2_i1.py rule                                     # expected-value rule
+python -I eda/c121_stage2_i1.py fit --stack s032_stage2 --save           # → artifacts/stage2_primary_i1.json
+python -I eda/c124_stage2_mm.py parser                                   # mech27 on the training and test answers (shares only)
+python -I eda/c124_stage2_mm.py oof                                      # nested reproduction: I1 form bit for bit, the column, placebos
+python -I eda/c124_stage2_mm.py splits --n 20
+python -I eda/c124_stage2_mm.py rule
+python -I eda/c124_stage2_mm.py fit --save                               # → artifacts/stage2_primary_final.json
+```
+
+| File | SHA-256 | Content |
+|---|---|---|
+| `artifacts/stage2_primary_i1.json` | `f5e24adfd382d24b36bd88b57deb8904a9d5288863250d5d314ceb09e54b181d` | `stage2_s035.json` with only the main model replaced: feature set `main_guard_i1` (the 48 guard-form features + 15 interactions, 63) and the NONE guard; fallback model, note guard, β, K, λ unchanged |
+| `artifacts/stage2_primary_final.json` | `40481bc4c83d0ce41b69ebfd10b0d1aaea0a8156c693f1ee7fc89ceb99674604` | `stage2_primary_i1.json` with only the main model replaced: feature set `main_guard_i1_mm` (64) and the NONE guard; adds the field `mech27` (file and SHA-256 of the frozen test answers of the protocol channel, training sources, minor codes) |
+
+Checks:
+- `main_guard_i1`: `c121 oof` reproduces the guard form bit for bit and passes the copy null point (I1 columns 0). CV per
+  fold / without the last step / as one set: 0.84078 / 0.83322 / 0.83867; against the guard form in sixths +17 / −18 / +9. The gate does not
+  abstain (inner 0.8389 against base 0.8286).
+- `main_guard_i1_mm`: `c124 oof` reproduces the I1 form bit for bit and passes the copy null point (column 0). CV per fold
+  / without the last step / as one set: 0.84089 / 0.83433 / 0.83978; against the I1 form in sixths +1 / +10 / +10. The gate does not abstain
+  (inner 0.8391 against base 0.8286).
+- Both `fit` commands first recompute their predecessor file character for character (`stage2_s035.json` and
+  `stage2_primary_i1.json`), require the deployment features to equal the evaluated rows of their `oof` run, and write
+  only if the expected-value rule is met (exit code 5 otherwise). The meta-split files
+  (`artifacts/eda/private/stage2_i1/c121_i1_splits.json`, `artifacts/eda/private/stage2_mm/c124_mm_splits.json`) are
+  written only if absent and pinned by the build scripts; `PRIMARY_I1_SPLITS=1` or `PRIMARY_FINAL_SPLITS=1` recomputes
+  them and requires byte identity.
+
+### 13.2 Strictly inductive line
+
+```bash
+python -I eda/c120_s036_safe_stage2.py oof          # nested OOF reproduction (per-fold form, inductive alignment)
+python -I eda/c120_s036_safe_stage2.py fit --save   # → artifacts/stage2_s036_safe.json
+```
+
+| File | SHA-256 | Content |
+|---|---|---|
+| `artifacts/stage2_s036_safe.json` | `7acd67bc7602369b75838870f1e362a2b4065a7deb3dca515dc81a9dedaa145f` | Conditional logit over the first 5 candidates after the inductive alignment, feature set `fallback` (40 features, no notes), NONE guard, `align_mode: inductive` |
+
+Checks: anchor of the inductive line per fold MAP@3 0.81844; deployment form with gate and NONE guard 0.82333
+(+0.0049 ± 0.0022, bootstrap over questions); the gate does not abstain (inner 0.8247 against base 0.8184); the
+copy null point (weight 0) reproduces the inductive line bit for bit. The fit uses the same per-fold form.
+
+### 13.3 Safety line with alignment over the test set
+
+Run by `OVERRIDE_CV_II=override_cv_condition_ii bash tools/builds/safety_final.sh`:
+
+```bash
+python -I eda/c123_safety_set.py oof                   # nested reproduction: variants a and b, copy null points, placebos
+python -I eda/c123_safety_set.py splits --n 20         # 20 new meta-splits: b − a
+python -I eda/c123_safety_set.py splits-inductive      # evaluation only, not run by the build script: a − strictly inductive form
+python -I eda/c123_safety_set.py test-mass --name v1r_zs27t_think18sb_pr27xm_m3x3_full_ar --align-mode set -- <sources>
+python -I eda/c123_safety_set.py test-mass --name v1r_zs27t_think18sb_pr27xm_m3x3_full_ar --align-mode inductive -- <sources>
+python -I eda/c123_safety_set.py rule --test-report artifacts/eda/private/safety_set/c123_test_mass_set.json \
+  --override-ii override_cv_condition_ii               # safety-set rule; without the switch: exit code 5
+python -I eda/c123_safety_set.py fit --override-ii override_cv_condition_ii --save   # → artifacts/stage2_safety_final.json
+python -I eda/c123_safety_set.py fit --probe --variant a --out artifacts/eda/private/safety_set/probe/stage2_safety_a_probe.json --save
+```
+
+`<sources>` are the test-side sources of the strictly inductive line without the alignment, REL-01 and second-stage
+switches (as in the build script).
+
+| File | SHA-256 | Content |
+|---|---|---|
+| `artifacts/stage2_safety_final.json` | `9b6dfbed3ac97a6083e45bab68a52b55118c3b0e3a35dd58371bad47c6e8c81a` | Conditional logit over the first 5 candidates after the alignment as one set, feature set `fallback_i1` (variant b, 55 features, no notes), NONE guard, `align_mode: set`, `align` 0.75, `align_min` 3; the field `override_ii` names the decision file |
+| `artifacts/eda/private/safety_set/probe/stage2_safety_a_probe.json` | `49c37d1e5cb903e26adc5f7af4894ea3bb9ea32aa6ca1ae9f68a45c3b057b546` | The same fit for variant a (`fallback`, 40 features), marked as a probe: used only by the copy null point of variant b |
+
+Checks: base as one set 7,377 of 9,000 sixths; variant a with gate and guard 7,430 / 7,404 / 7,391 per fold / without the
+last step / as one set, variant b 7,450 / 7,417 / 7,395; copy null points a (weight 0 -> base) and b (I1 columns 0 -> a)
+exact; test-side class masses after the alignment L1 0.028, with the inductive alignment 0.087. The deployment fit on
+all 1,500 rows does not abstain (inner 0.8269 against base 0.8197).
+
+All seven deployment files are rebuilt character for character by the build scripts (`--verify`) or written by them on
+the first run (`--save`), and pinned there by checksum.
+
+## 14. Scripts per channel
+
+Every script that a training, OOF or test run of the deployed channels needs, with its role. Scripts not in this repository
+are marked; their outputs are frozen inputs ([CODEMAP.md](CODEMAP.md#10-steps-whose-scripts-are-not-part-of-this-repository)).
+
+| Channel | Training and OOF side | Test side |
+|---|---|---|
+| all | `tools/make_folds.py` (fold array), `src/vlm/runner.py` (all model runs) | `tools/make_submission.py` (assembly), `tools/builds/*.sh` (build scripts); blank-photo list (frozen, script not included) |
+| `v1` | runner (`train`, `bench`), `eda/a6_assemble_oof.py` | runner (`bench` on the test table) |
+| `v1r` | `tools/orient_net.py` (maps, training), `tools/make_orient.py`, runner (`rot_f*`), `eda/a6_assemble_oof.py` | `tools/orient_net.py infer`, `tools/orient_list.py` (choice and checks), runner (`rot_test`) |
+| `zs27q`, `zs27t` | runner (`bench`), `eda/a6_assemble_oof.py` | runner (`bench`) |
+| `think18nb`, `think18sb` | `tools/replay/gates.py`, runner (`think_gen` + scoring), `eda/a6_assemble_oof.py` | `tools/replay/gates.py check`, runner |
+| `pr27xm` | runner (`proto_gen`, `proto_rank`), `eda/a8_proto_oof.py`, `eda/c95_rank_mean.py`; notes export (frozen, script not included) | runner; notes export (frozen, script not included) |
+| `m3x3_full` | runner (`train`, `merge`, `sft_gen`, ranking), M3 targets (frozen, builder not included), combination of fold runs (frozen, script not included), `eda/a9_m3_draws_oof.py`, `eda/c108_m3_three_draws.py` | runner, `tools/freeze_m3_texts.py`, `eda/a9_m3_draws_oof.py --gen-status`, `eda/c99_m3_deploy.py --variant` |
+| `q397m3` | `tools/open_teacher.py` (development only), `eda/c110_q397_deploy.py`, `tools/make_q397m3_notes.py`, runner, `eda/c117_q397m3_deploy.py`, `eda/c115_q397m3_eval.py` | runner, `tools/make_q397m3_notes.py`, `eda/c117_q397m3_deploy.py test-guard`, `eda/c110_q397_deploy.py test-status`; parity check (stored verdict, script not included) |
+| Blends | `eda/c99_m3_deploy.py`, `eda/c110_q397_deploy.py`, `eda/c107_q397_full.py`, `eda/a2_probe_stack.py`, `eda/c21_margin_align.py` | `tools/make_submission.py` |
+| Second stages | `eda/c118_stage2.py`, `eda/c120_s036_safe_stage2.py`, `eda/c121_stage2_i1.py`, `eda/c123_safety_set.py`, `eda/c124_stage2_mm.py`, `src/stage2.py`, `src/answer_match.py` | `tools/make_submission.py --stage2`, `eda/c121_stage2_i1.py submit` |
+
+## 15. Reproducibility of training
+
+- **CPU steps are bit-identical:** folds, OOF assembly, blend weights, second stages and the orientation network.
 - **GPU training is not bit-identical.** Deterministic algorithms are not enforced. Flash-linear-attention uses Triton
   kernels, sums run in bf16, and a different GPU changes the kernels. A retrained adapter follows the same recipe but is
   a new model. The submissions are therefore reproduced from the delivered adapters.

@@ -6,7 +6,7 @@ import metric
 
 
 def test_examples_from_evaluation_page():
-    # „the three submissions below all score 1.0 for a row whose correct label is ALG-06"
+    # "the three submissions below all score 1.0 for a row whose correct label is ALG-06"
     for row in (["ALG-06", "CAL-01", "ANS-01"], ["ALG-06", "ALG-06", "ALG-06"], ["ALG-06", "CAL-01", "ALG-06"]):
         assert metric.map3(["ALG-06"], [row]) == 1.0
 

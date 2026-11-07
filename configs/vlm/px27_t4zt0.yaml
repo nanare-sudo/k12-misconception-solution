@@ -5,8 +5,8 @@
 # 40, without hidden states. Measured on 24 training rows: 18.9 s per row, prompt-header check deviation 0.0039, top-code
 # agreement with the A40 run 0.958 -> 1,749 rows about 9.2 h + 4-24 min loading.
 # Test rows: only aggregates in the log (runner), outputs only as files under artifacts/runs/ (gitignored), never inspected.
-# Comparison afterwards only as an aggregate: python -I eda/c59_hardware_agreement.py --a zs27t_all_rp/zs27t_test/test
-#   --b px27_t4zt0/zs27t_test_t4/test --b px27_t4zt1/zs27t_test_t4/test --descriptive-only
+# Comparison afterwards only as an aggregate: top-code agreement with zs27t_all_rp/zs27t_test/test (comparison script of
+#   the development phase, not included; result in docs/INFERENCE.md §6.3)
 run: px27_t4zt0
 offline: true
 expected_hours: 9.8

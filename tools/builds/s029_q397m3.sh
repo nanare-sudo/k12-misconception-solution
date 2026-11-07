@@ -14,7 +14,8 @@
 #     bash tools/builds/s029_q397m3.sh best        # -> artifacts/submissions/sub_s029_best_q397m3.csv
 #
 # Primary line only. Exit 3 while the q397m3 test side is missing or incomplete (nothing written); 4 = checksum or
-# recomputation; 5 = guard of the test side violated; 6 = c108 verdict for m3x3 missing.
+# recomputation; 5 = guard of the test side violated; 6 = c108 verdict for m3x3 missing; 1 = a check inside a called
+# Python script that stops with a message.
 # STEPS: 0 q397m3 test side present and complete (c95 --status), 397B test run chosen; 1 checksums (base, M3, pr27xm, q397 for
 #   the cross-check, notes, reference files); 2 OOF artifact q397m3 (c117 oof --save on the first call, otherwise --verify;
 #   checksum fixed); 3 M3 from three draws (a9 --verify, c108 verdict, generation and training regime of the three test draws);
@@ -28,6 +29,12 @@
 # DRY RUN (code check only): PLACEHOLDER=1 uses the d3 test ranking (runs/m3d3te_rp/m3d3_test_rank/test) as q397m3 — the note
 #   guard skips the test notes (c117 test-guard --placeholder, make_submission --rank-only-placeholder); file, JSON and test
 #   matrix go to a throw-away directory and are deleted at the end — NEVER submit.
+# ROTATION LIST (tools/builds/orient_list.sh): ORIENT=repro (default) reads for v1r the rotation list of the released orientation
+#   network, derived/orient_repro/test_c80_rows.npy (tools/orient_list.py check before, verify-sub after make_submission), and
+#   writes the intermediate file artifacts/submissions/sub_s032n_q397m3.csv (test matrix test_s029_best_q397m3_s032n.npy;
+#   reference of copy null point (a) of tools/builds/s033n_stage2.sh); all other inputs and guards as with ORIENT=legacy, plus a
+#   comparison with the legacy-list file as aggregates. ORIENT=legacy rebuilds the historical file sub_s029_best_q397m3.csv
+#   with the first-version rotation list byte-identically; the released-list build needs that file first.
 #
 # Only aggregates and checksums are printed. Nothing is submitted from here.
 set -euo pipefail
@@ -58,6 +65,13 @@ NOTES_TEST_SHA="4b29f057d50c7decfc3db73ddb37182d26b51326e3af05683d4665a56f20eb60
 # M3 band 0.30–0.38 (--rank-none-band) would lie only 0.01 below this channel's OOF value; it still applies to all other ranking channels
 NONE_BAND_Q397M3="0.27,0.35"
 check() { echo "$1  $2" | sha256sum -c --quiet || { echo "ABORT: $2 differs (checksum)" >&2; exit 4; }; }
+. tools/builds/orient_list.sh  # rotation list of the v1r test side: ORIENT=repro (default, released list) | legacy (first-version list)
+orient_select
+RSUF=""  # suffix of the output files: empty = legacy-list file
+if [ "$ORIENT" = repro ]; then
+  RSUF="_s032n"
+  LEGACY_OUT="artifacts/submissions/sub_s029_best_q397m3.csv"; LEGACY_OUT_SHA="768b7778ea049caeb23455ecad26b9bc90ebff52bee3cb97e356aac7cadf07e8"  # legacy-list file of this build
+fi
 
 # 0. q397m3 test side present and complete (otherwise exit 3, nothing written); 397B test run (source of the test notes)
 if [ "$PLACEHOLDER" = 1 ]; then
@@ -92,6 +106,7 @@ check 5a8fb7358bf9a25bcd4f6b12b28c02b31e5ad345a3ee21f9d94bc182bf180d52 data/deri
 [ "$PLACEHOLDER" = 1 ] || check "$NOTES_TEST_SHA" data/derived/sft/q397m3_test_notes.jsonl
 check "$REF_Q397_SHA" "$REF_Q397"
 check "$REF_5CH_SHA" "$REF_5CH"
+[ "$ORIENT" = repro ] && check "$LEGACY_OUT_SHA" "$LEGACY_OUT"
 python -I eda/c110_q397_deploy.py verify-oof || { echo "ABORT: oof_q397 is not the channel of the c107 decision" >&2; exit 4; }
 
 # 2. OOF artifact q397m3: pure ranking of the five shards, bit-identical to the channel of the c115 evaluation (fold fidelity, notes, settings)
@@ -116,7 +131,7 @@ import numpy as np
 
 path = Path(sys.argv[1])
 if not path.is_file():
-    raise SystemExit(f"ABORT: {path} missing — run python -I eda/c108_m3_three_draws.py first")
+    raise SystemExit(f"ABORT: {path} missing — stored verdict of the M3 evaluation (frozen input, see docs/CODEMAP.md §10)")
 ev = json.loads(path.read_text())
 if ev.get("mode") != "real":
     raise SystemExit(f"ABORT: {path} comes from a check run (mode {ev.get('mode')!r})")
@@ -157,7 +172,7 @@ from pathlib import Path
 
 f = Path("artifacts/eda/private/q397_deploy/c109_parity.json")
 if not f.is_file():
-    print(f"{f} missing — python -I eda/c109_q397_parity.py runs/q397p_rp/proto_p/proto", file=sys.stderr)
+    print(f"{f} missing — stored verdict of the 397B parity check (frozen input, see docs/CODEMAP.md §10)", file=sys.stderr)
     raise SystemExit(5)
 r = json.loads(f.read_text())
 print(f"  fidelity check (c109, training rows): {r['verdict']} — valid {r['valid_own']}/{r['rows']}, same top {r['same_top']:.3f}")
@@ -177,23 +192,28 @@ for R in "$RANK1" "$RANK2" "$RANK3" "$RANK_XM"; do
 done
 
 # 8. test file (channels as in the six-channel file with q397, q397m3 instead of --proto q397)
+[ "$ORIENT" = repro ] && { python -I tools/orient_list.py check --mode repro --spec "$V1R_TEST" || exit $?; }
 if [ "$PLACEHOLDER" = 1 ]; then
   TMP="$(mktemp -d "${TMPDIR:-/tmp}/s029_q397m3_placeholder.XXXXXX")"
-  OUT="$TMP/sub_${STEM}_PLACEHOLDER.csv"
-  TESTNPY="artifacts/test_${STEM}_PLACEHOLDER.npy"
+  OUT="$TMP/sub_${STEM}${RSUF}_PLACEHOLDER.csv"
+  TESTNPY="artifacts/test_${STEM}${RSUF}_PLACEHOLDER.npy"
   trap 'rm -rf -- "${TMP:?}"; rm -f -- "${TESTNPY:?}"; echo "PLACEHOLDER: file, JSON and test matrix deleted" >&2' EXIT
-  OUTARGS=(--suffix "_PLACEHOLDER" --out "$OUT" --rank-only-placeholder "$CH")
+  OUTARGS=(--suffix "${RSUF}_PLACEHOLDER" --out "$OUT" --rank-only-placeholder "$CH")
 else
   OUT="artifacts/submissions/sub_${STEM}.csv"
   OUTARGS=()
+  if [ "$ORIENT" = repro ]; then  # intermediate file with the released rotation list: own file and test matrix; the legacy-list file stays untouched
+    OUT="artifacts/submissions/sub_s032n_q397m3.csv"
+    OUTARGS=(--suffix "$RSUF" --out "$OUT")
+  fi
   if [ -f "$OUT" ]; then  # replace only by a byte-identical rebuild: back up, compare after the build
     BAK="$(mktemp -d "${TMPDIR:-/tmp}/s029_q397m3_backup.XXXXXX")"
     trap 'rm -rf -- "${BAK:?}"' EXIT  # the backup holds test identifiers: never leave it behind
-    for F in "$OUT" "${OUT%.csv}.json" "artifacts/test_${STEM}.npy"; do [ -f "$F" ] && cp -p "$F" "$BAK/"; done
+    for F in "$OUT" "${OUT%.csv}.json" "artifacts/test_${STEM}${RSUF}.npy"; do [ -f "$F" ] && cp -p "$F" "$BAK/"; done
   fi
 fi
 PYTHONDONTWRITEBYTECODE=1 python -I tools/make_submission.py --name "$STEM" \
-  --test "v1r=v1rot_t4/rot_test/test@derived/orient/test_c80_rows.npy" --fill "v1r=v1" --test "$V1_T4" \
+  --test "$V1R_TEST" --fill "v1r=v1" --test "$V1_T4" \
   --test "zs27q=zs27q_test0_rp/zs27q_test0/test+zs27q_test1_rp/zs27q_test1/test" --fill "think18nb=zs27q" \
   --test "think18nb=zs27v_te_rp/think_te/test/think@derived/think_rows/test.npy,zs27v_n3_rp/think_nte/test/think@derived/think_rows/test_tb_q.npy" \
   --proto "pr27xm=runs/pr27te_rp/proto_te/proto" --rank "pr27xm=$RANK_XM" \
@@ -204,11 +224,12 @@ PYTHONDONTWRITEBYTECODE=1 python -I tools/make_submission.py --name "$STEM" \
 if [ "$PLACEHOLDER" != 1 ] && [ -n "${BAK:-}" ]; then
   if ! cmp -s "$OUT" "$BAK/$(basename "$OUT")"; then
     for F in "$OUT" "${OUT%.csv}.json"; do [ -f "$BAK/$(basename "$F")" ] && cp -p "$BAK/$(basename "$F")" "$F"; done
-    [ -f "$BAK/test_${STEM}.npy" ] && cp -p "$BAK/test_${STEM}.npy" "artifacts/test_${STEM}.npy"
+    [ -f "$BAK/test_${STEM}${RSUF}.npy" ] && cp -p "$BAK/test_${STEM}${RSUF}.npy" "artifacts/test_${STEM}${RSUF}.npy"
     echo "ABORT: rebuild differs from the existing $OUT — backup restored, investigate the cause" >&2; exit 4
   fi
   echo "  existing $OUT rebuilt byte-identically"
 fi
+[ "$ORIENT" = repro ] && { python -I tools/orient_list.py verify-sub --mode repro "${OUT%.csv}.json" || exit $?; }
 
 # 9. reference files unchanged; deviation only as an aggregate
 check "$REF_Q397_SHA" "$REF_Q397"
@@ -230,9 +251,16 @@ for path, label in ((sys.argv[2], "six-channel file with q397"), (sys.argv[3], "
     print(f"  against {label}: different top code in {(ref.str.split().str[0] != b.str.split().str[0]).mean():.4f} of the rows, "
           f"different first three (with order) in {(ref != b).mean():.4f}")
 PY
+if [ "$ORIENT" = repro ]; then  # legacy-list file unchanged; difference from it only as aggregates (split by the rows whose list membership differs)
+  check "$LEGACY_OUT_SHA" "$LEGACY_OUT"
+  python -I tools/orient_list.py compare "$LEGACY_OUT" "$OUT" --label "primary line without second stage, first-version rotation list"
+fi
 sha256sum "$STACK" "$OUT"
 if [ "$PLACEHOLDER" = 1 ]; then
   echo "PLACEHOLDER RUN: code path checked (two --rank-only channels, note guard with placeholder, last step) — the file is NOT a candidate and is deleted"
+elif [ "$ORIENT" = repro ]; then
+  sha256sum "${OUT%.csv}.json" "artifacts/test_${STEM}${RSUF}.npy"
+  echo "s029_q397m3 best (ORIENT=repro): $OUT built (intermediate file with the released rotation list, reference of copy null point (a) of s033n_stage2.sh; not meant for submission)"
 else
   echo "s029_q397m3 best: $OUT built"
 fi

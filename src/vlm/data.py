@@ -72,7 +72,7 @@ class SampleBuilder:
             raise ValueError(f"think_effort: unknown level {think_effort!r}")
         self.think_effort = think_effort
         # Candidates from an earlier stage per row: {trace_id: [code, …]} (best first); the first `candidates_k` go into
-        # the prompt. For training rows they must come from out-of-fold predictions (eda/c9_candidates.py).
+        # the prompt. For training rows they must come from out-of-fold predictions.
         self.candidates = candidates
         self.candidates_k = int(candidates_k)
         cases = None

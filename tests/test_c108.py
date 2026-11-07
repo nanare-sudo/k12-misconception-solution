@@ -442,7 +442,7 @@ def test_build_script_s029():
                  'c99_m3_deploy.py --channel "$CH" --rows "$ROWS" --lines "$LINE" --save', "--align 0.75 --align-min 3", "--align-inductive 0.75 --align-min 3",
                  'ev.get("mode") != "real"', 'm3x3_npy_sha256', "stack_cv01_best_l2.json", "inductive_check", "IGNORE_VERDICT"):
         assert need in s, need
-    assert "submit.py --" not in s and "kaggle competitions submit" not in s
+    assert "kaggle competitions submit" not in s and not any(f"submit.{ext}" in s for ext in ("py", "sh"))
     assert var("RANK3") == "runs/m3d3te_rp/m3d3_test_rank/test"
 
 

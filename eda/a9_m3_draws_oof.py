@@ -17,7 +17,7 @@ draw nor between draws; the settings of the generation (<tag>_generation.json be
 temperature, system text, image, backend) and of the ranking (beams, image, finish, number format, sft_examples) must be
 identical and known within a draw.
 CONVERSION: per draw a8.load_rank (vlm.engine.probs_from_logp with absent = classes without a training example — the same
-as a8 --rank and eda/c98d_m3long_eval.py), then per row Σ P_j / number of draws of the row. Rows with ONE draw carry its
+as a8 --rank), then per row Σ P_j / number of draws of the row. Rows with ONE draw carry its
 distribution bit-identically (a8 --rank), rows with two draws bit-identically 0.5·(P_1 + P_2) (addition is commutative,
 division by 2 is exact). Every training row needs at least one draw (no neutral remainder).
 ROW LIST (--rows-out, relative to the data folder; default derived/<name>_rows.npy): sorted table positions (int64) of the
@@ -31,7 +31,7 @@ script (without rank.draws, e.g. m3p5) is never overwritten.
 CHECKS before writing (abort on deviation):
   --ref <channel> the draw with the same source as meta_<channel>.json (rank.source) is bit-identical to oof_<channel>.npy
                   on all its rows, and the artifact is bit-identical to oof_<channel>.npy on the rows with ONE draw;
-  --check-c98d    on the rows of the two-draw evaluation bit-identical to the mean computed as in eda/c98d_m3long_eval.py
+  --check-c98d    on the rows of the two-draw evaluation bit-identical to the mean as computed there (script not included)
                   (c98b.load_rank, probs_from_logp, 0.5·(new + pilot)); MAP@3 of the mean and of the pilot draw are reported.
 --verify <name>: recomputes the artifact from the sources in its meta file (bit-identical) and checks the row list; exit 0 / 4.
 --gen-status: state of the generation behind a ranking (sft.sft_from -> <tag>_meta.json; aggregates ONLY, also for test
@@ -70,7 +70,7 @@ DEFINITION = ("mean of the probabilities of several draws: per draw the exact di
               "proto_rank, a8.load_rank / vlm.engine.probs_from_logp with absent = classes without a training example), per row "
               "Σ P_j / number of draws of the row; floor only in the blend (eda/c99_m3_deploy.py: 0.05)")
 GEN_FREE_KEYS = ("table", "model_dir", "rows_sha256")  # free between runs: table, path of the merged model, row set
-C98D_SOURCES = (("m3long_comb", "m3l_rank"), ("m3_pilot_rp", "m3_rank"))  # (new draw, pilot) as in eda/c98d_m3long_eval.py
+C98D_SOURCES = (("m3long_comb", "m3l_rank"), ("m3_pilot_rp", "m3_rank"))  # (new draw, pilot) of the two-draw evaluation
 
 
 def rows_sha256(rows) -> str:
@@ -243,8 +243,8 @@ def check_ref(ref: str, P: np.ndarray, cnt: np.ndarray, draws: list[tuple[np.nda
 
 
 def check_c98d(P: np.ndarray, cnt: np.ndarray, y: np.ndarray, seen: np.ndarray) -> dict:
-    """--check-c98d: recompute the mean on the rows of the two-draw evaluation with the computation of eda/c98d_m3long_eval.py
-    (bit-identical) and report MAP@3 of the mean and of the pilot draw."""
+    """--check-c98d: recompute the mean on the rows of the two-draw evaluation with its computation (development script,
+    not included; bit-identical) and report MAP@3 of the mean and of the pilot draw."""
     B = load("a9_c98b", COMP / "eda" / "c98b_pool_eval.py")
     new, pil = B.load_rank(*C98D_SOURCES[0]), B.load_rank(*C98D_SOURCES[1])
     rows = np.array(sorted(set(new) & set(pil)), dtype=np.int64)
@@ -320,7 +320,7 @@ def main() -> int:
     ap.add_argument("--draw", action="append", default=[], help="one draw: runs/<run>/<job>/<tag>[+runs/… more shards]; at least twice")
     ap.add_argument("--rows-out", help="row list of the rows with all draws (relative to the data folder; default derived/<name>_rows.npy)")
     ap.add_argument("--ref", help="channel whose artifact must carry the draw with its source bit-identically (e.g. m3p5)")
-    ap.add_argument("--check-c98d", action="store_true", help="check the mean on the rows of the two-draw evaluation against the computation of eda/c98d_m3long_eval.py")
+    ap.add_argument("--check-c98d", action="store_true", help="check the mean on the rows of the two-draw evaluation against its computation (development script, not included)")
     ap.add_argument("--verify", metavar="NAME", help="only recompute: artifact from the sources in its meta file (writes nothing)")
     ap.add_argument("--gen-status", metavar="RANK", help="only report the state of the generation behind a ranking (aggregates)")
     ap.add_argument("--table", default="test", choices=["train", "test"], help="table for --gen-status")

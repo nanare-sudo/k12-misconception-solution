@@ -103,7 +103,7 @@ NOTES_TEST, UPLOAD_TEST = "derived/sft/q397m3_test_notes.jsonl", "derived/sft_q3
 TEST_SOURCE_RUNS = tuple(C110.TEST_RUNS)  # 397B test side: q397te_rp (4×H200) or q397te8_rp (8×H100)
 TEST_MODEL = C110.TEST_MODEL  # Qwen/Qwen3.5-397B-A17B-FP8
 PR27_NAMED = "runs/pr27_rp/proto_a/proto+runs/pr27_rp/proto_b/proto"  # answers that a call to a8 with the pr27 answers would use
-B_PLUS_UNITS, ERSATZ_UNITS = 7463, 7494  # six-channel recipe 0.8292222, with q397m3 instead of q397 0.8326667 (units of 1/6)
+SIX_CHANNEL_UNITS, REPLACEMENT_UNITS = 7463, 7494  # six-channel recipe 0.8292222, with q397m3 instead of q397 0.8326667 (units of 1/6)
 RECIPE_SAME = ("task", "system_sha256", "taxonomy", "notes_max_tokens", "image", "model")  # full fit equal to the fold adapters
 # Malfunction band for the share of NONE at the top of the test ranking: OOF value of the channel 0.310 ± 0.04 (half-width as
 # for the common M3 band 0.30–0.38 around 0.34, make_submission --rank-none-band). Fixed in advance, before the test side was
@@ -166,8 +166,8 @@ def load_c115(notes_sha: str, path: Path = C115_JSON) -> dict:
         abort("c115 evaluated different shards")
     er, anc = js["recipes"]["replacement"], js["anchor"]
     units = int(round(float(er["map_new"]) * 9000))
-    if int(anc["units"]) != B_PLUS_UNITS or units != ERSATZ_UNITS:
-        abort(f"c115: anchor {anc['units']} / replacement {units} instead of {B_PLUS_UNITS} / {ERSATZ_UNITS}")
+    if int(anc["units"]) != SIX_CHANNEL_UNITS or units != REPLACEMENT_UNITS:
+        abort(f"c115: anchor {anc['units']} / replacement {units} instead of {SIX_CHANNEL_UNITS} / {REPLACEMENT_UNITS}")
     return {"json": rel(path), "channel_sha256": tech["channel_sha256"], "verdict": dec["verdict"], "passed_forms": list(dec["passed_forms"]),
             "anchor_units": int(anc["units"]), "anchor_logloss": float(anc["logloss"]), "replacement_units": units,
             "replacement_map3": float(er["map_new"]), "replacement_logloss": float(er["ll_new"]), "replacement_delta_exact": str(er["delta_exact"]),
@@ -191,10 +191,10 @@ def a8_counter(shards, n: int, seen: np.ndarray, classes: list[str], named_sourc
     order = np.argsort(idx, kind="stable")
     idx, lp, done = idx[order], lp[order], done[order]
     if len(idx) != n or not np.array_equal(idx, np.arange(n)):
-        raise C115.Technik("combined ranking does not cover exactly all training rows")
+        raise C115.TechnicalError("combined ranking does not cover exactly all training rows")
     done = done & np.isfinite(lp).any(axis=1)
     if not (done & np.isfinite(lp[:, seen]).all(axis=1)).all():
-        raise C115.Technik("combined ranking not completely exact")
+        raise C115.TechnicalError("combined ranking not completely exact")
     R = np.zeros((n, len(seen)))
     R[idx[done]] = probs_from_logp(lp[done], absent=~seen)
     if named_source is None:
@@ -217,27 +217,27 @@ def build_oof(ctx: dict) -> tuple[np.ndarray, dict, dict]:
         nt = C115.check_notes(root, n)
         meta_n = json.loads((root / NOTES_TRAIN).with_suffix(".meta.json").read_text())
         if meta_n.get("labels_sha256") != C110.TINKER_SHA256 or meta_n.get("source_kind") != "tinker":
-            raise C115.Technik(f"{NOTES_TRAIN}: not from the Tinker measurement of the c107 decision (labels_sha256 {meta_n.get('labels_sha256')})")
+            raise C115.TechnicalError(f"{NOTES_TRAIN}: not from the Tinker measurement of the c107 decision (labels_sha256 {meta_n.get('labels_sha256')})")
         c115 = load_c115(nt["sha256"])
         P, have, info = C115.assemble(SHARDS, n, seen, folds, require_all=True)
         settings = C115.check_shard_settings(SHARDS, C115.REF_SHARDS)
         if not settings["same_as_d3"]:
-            raise C115.Technik("settings of the d3 ranking not readable — comparison with d3 not possible")
+            raise C115.TechnicalError("settings of the d3 ranking not readable — comparison with d3 not possible")
         recs = C108.fold_check(SOURCE, folds, {})
         bad = [f"{r['run']}/{r['job']}: {p}" for r in recs for p in r["problems"] + r["unknown"]]
         if bad:
-            raise C115.Technik("fold integrity violated or cannot be determined: " + "; ".join(bad))
+            raise C115.TechnicalError("fold integrity violated or cannot be determined: " + "; ".join(bad))
         sha = C115.npy_sha256(P)
         if sha != c115["channel_sha256"]:
-            raise C115.Technik(f"channel ({sha[:16]}…) is not the one evaluated by c115 ({c115['channel_sha256'][:16]}…)")
+            raise C115.TechnicalError(f"channel ({sha[:16]}…) is not the one evaluated by c115 ({c115['channel_sha256'][:16]}…)")
         R, Pa8 = a8_counter(SHARDS, n, seen, classes)
         if not np.array_equal(R, P):
-            raise C115.Technik("recomputation over the combined ranking (a8 path) not bit-identical")
+            raise C115.TechnicalError("recomputation over the combined ranking (a8 path) not bit-identical")
         if Pa8 is not None and not np.array_equal(Pa8, P):
-            raise C115.Technik("a8 path with fallback to the pr27 codes not bit-identical (not every row computed exactly?)")
+            raise C115.TechnicalError("a8 path with fallback to the pr27 codes not bit-identical (not every row computed exactly?)")
     except C115.Missing as exc:
         abort(str(exc), 3)
-    except C115.Technik as exc:
+    except C115.TechnicalError as exc:
         abort(str(exc), 4)
     if not C110.C107.sane(P, seen):
         abort("channel not finite/normalised or with mass on classes without a training example")
@@ -348,7 +348,7 @@ def adapter_recipe(run: str, model: str) -> tuple[dict | None, dict, list[str]]:
     return rec, where, problems
 
 
-def bauart(spec: str, folds: np.ndarray, n_train: int) -> tuple[list[str], dict]:
+def training_regime_of(spec: str, folds: np.ndarray, n_train: int) -> tuple[list[str], dict]:
     """Test model = merge of the full fit belonging to the five fold adapters of the OOF ranking."""
     problems: list[str] = []
     recs = C108.fold_check(SOURCE, folds, {})
@@ -472,7 +472,7 @@ def test_guard(spec: str, placeholder: bool = False, notes_source: str | None = 
         p, li = run_log_check(spec, n_test)
         problems += p
         info["log"] = li
-    p, bi = bauart(spec, folds, n_train)
+    p, bi = training_regime_of(spec, folds, n_train)
     problems += p
     info["training_regime"] = bi
     tr = bi["test_recipe"]

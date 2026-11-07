@@ -316,7 +316,7 @@ def cheap_from_small(small: np.ndarray) -> dict:
         k, mean = _uniform_band(g8, axis, end, max_range=6.0, max_std=1.5)
         o[f"b8_{name}"] = k
         o[f"b8_{name}_mean"] = mean
-    # Wahrnehmungs-Hashes
+    # perceptual hashes
     t64 = cv2.resize(g8, (64, 64), interpolation=cv2.INTER_AREA).astype(np.float32)
     for k in range(4):
         r = np.ascontiguousarray(np.rot90(t64, k))

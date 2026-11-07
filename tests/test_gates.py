@@ -144,6 +144,6 @@ def test_compare_reports_counts_only(tmp_path):
 
 @pytest.mark.skipif(not (COMP_ROOT / "data" / "train.csv").is_file() or not (COMP_ROOT / "data" / "derived" / "think_rows" / "train_tb_t.npy").is_file()
                     or not (COMP_ROOT / "artifacts" / "oof_zs27t.npy").is_file(), reason="competition data or artifacts missing")
-def test_real_train_lists_safe_line_bitgleich(tmp_path):
+def test_real_train_lists_safe_line_bit_identical(tmp_path):
     rc = G.main(["check", "--table", "train", "--line", "safe", "--json", str(tmp_path / "r.json")])
     assert rc == 0

@@ -27,7 +27,16 @@
 #   c118 oof); 8 checksums. An existing output file is only replaced by a byte-identical rebuild. Statistics and logs under
 #   artifacts/eda/private/stage2_main/.
 # EXIT: 2 usage; 3 input missing; 4 checksum/recomputation/null point/positive control; 5 form not "main" or guard (c) violated
-#   (codes from step 0 are passed on, see s032_stage2.sh).
+#   (codes from step 0 are passed on, see s032_stage2.sh); 1 a check inside a called Python script that stops with a message.
+# ROTATION LIST (tools/builds/orient_list.sh): ORIENT=repro (default; entry point tools/builds/s034n_stage2_main.sh) reads for v1r
+#   the rotation list of the released orientation network, derived/orient_repro/test_c80_rows.npy: step 0 builds the fallback form
+#   with the released list (s032_stage2.sh, which builds the released-list intermediate file), file swap and checks refer to these
+#   two files, and the main file is the main form with the released list -> artifacts/submissions/sub_s034n_stage2_main.csv (test
+#   matrix test_s032_stage2_s034n.npy; statistics stage2_main/*_s034n.json; throw-away suffixes with _s034n). Deployment file
+#   stage2_s034.json, blend file and all other inputs and guards as with ORIENT=legacy; in addition tools/orient_list.py
+#   check/verify-sub, the comparison with the legacy-list main-form file as aggregates and fixed checksums of the three
+#   released-list files. ORIENT=legacy rebuilds the historical files with the first-version rotation list byte-identically
+#   (main form d9dc8b48…, never submitted); the released-list build needs them first.
 #
 # Only aggregates and checksums are printed. Nothing is submitted from here.
 set -euo pipefail
@@ -56,6 +65,27 @@ RANK2="runs/m3d2te_rp/m3d2_test_rank/test"
 RANK3="runs/m3d3te_rp/m3d3_test_rank/test"
 Q397M3_TEST="runs/q397m3te_rp/q397m3_test_rank/test"
 check() { echo "$1  $2" | sha256sum -c --quiet || { echo "ABORT: $2 differs (checksum)" >&2; exit 4; }; }
+. tools/builds/orient_list.sh  # rotation list of the v1r test side: ORIENT=repro (default, released list) | legacy (first-version list)
+orient_select
+TSUF=""  # suffix of the throw-away test matrices: empty = legacy-list build
+FB_FILE_LABEL="fallback-form file"; REF_BASE_LABEL="file without second stage"
+PC_JSON="$PRIV/positive_controls.json"; SWAP_JSON="$PRIV/swap_control.json"; CMP_JSON="$PRIV/compare_s034.json"; CV_JSON="$PRIV/cv_main_vs_fallback.json"
+if [ "$ORIENT" = repro ]; then  # main form with the released rotation list on the released-list fallback-form and intermediate files: own file, test matrix, statistics and throw-away suffixes
+  LEGACY_OUT="$OUT"; LEGACY_OUT_SHA="$OUT_SHA"; FB_FILE_OLD="$FB_FILE"; FB_FILE_OLD_SHA="$FB_FILE_SHA"; REF_BASE_OLD="$REF_BASE"; REF_BASE_OLD_SHA="$REF_BASE_SHA"
+  FB_FILE="artifacts/submissions/sub_s033n_stage2.csv"; FB_FILE_SHA="76aba64fbc431b9ad403a5dec9fb2cefdb7fe2e76260149c96176459c4cd8dfe"  # fallback-form file, released list (pinned after the first build)
+  REF_BASE="artifacts/submissions/sub_s032n_q397m3.csv"; REF_BASE_SHA="d1667f6d2fb118844b72ecd8abd85220754a709d468519b7a047a893bbea12f1"  # intermediate file, released list (pinned after the first build)
+  GUARDS_FB="artifacts/eda/private/stage2/guards_s033n.json"
+  GUARDS="$PRIV/guards_s034n.json"
+  SUFFIX="_s034n"
+  OUT="artifacts/submissions/sub_s034n_stage2_main.csv"; OUT_SHA="8b8892e474ace44048d6c02eba7622288599990f5f5f0814cbefaeb6bd9ce242"  # main form, released list (pinned after the first build)
+  TESTMAT="artifacts/test_${STEM}${SUFFIX}.npy"
+  TSUF="_s034n"
+  FB_FILE_LABEL="fallback-form file (released rotation list)"; REF_BASE_LABEL="file without second stage (released rotation list)"
+  PC_JSON="$PRIV/positive_controls_s034n.json"; SWAP_JSON="$PRIV/swap_control_s034n.json"; CMP_JSON="$PRIV/compare_s034n.json"
+  CV_JSON="$PRIV/cv_main_vs_fallback_s034n.json"
+  PRIVF="artifacts/eda/private/orient_check"
+  mkdir -p "$PRIVF"
+fi
 mkdir -p "$PRIV"
 
 # 0. build of the fallback-form file complete (includes the file without second stage, the OOF reproduction, the copy null points (a)/(b) and the guards of the second stage)
@@ -68,19 +98,21 @@ check "$STACK_SHA" "$STACK"
 check "$STAGE2_32_SHA" "$STAGE2_32"
 check "$REF_BASE_SHA" "$REF_BASE"
 if [ -n "$GUARDS_FB_BEFORE" ]; then check "$GUARDS_FB_BEFORE" "$GUARDS_FB"; fi
-python -I - "$GUARDS_FB" <<'PY' || exit 4
+if [ "$ORIENT" = repro ]; then check "$LEGACY_OUT_SHA" "$LEGACY_OUT"; check "$FB_FILE_OLD_SHA" "$FB_FILE_OLD"; check "$REF_BASE_OLD_SHA" "$REF_BASE_OLD"; fi
+python -I - "$GUARDS_FB" "$FB_FILE_LABEL" "${FB_FILE_SHA:0:8}" <<'PY' || exit 4
 import json
 import sys
 
 g = json.load(open(sys.argv[1]))
+label, sha8 = sys.argv[2], sys.argv[3]
 gn = g["guard_notes"]
 failed = [c["stat"] for c in gn["checks"] if not c["ok"]]
 bad = []
 if g["feature_set"] != "fallback" or failed != ["identical[d1-d2]"]:
-    bad.append(f"the fallback-form file no longer falls back because of identical[d1-d2] (form {g['feature_set']}, failed {failed})")
+    bad.append(f"{label} no longer falls back because of identical[d1-d2] (form {g['feature_set']}, failed {failed})")
 if "rule" in gn or any("z" in c for c in gn["checks"]):
     bad.append("guard statistics of the fallback-form build carry fields of the widened rule (path without the widened rule changed)")
-print("  fallback-form file byte-identical (96bafc6f…); path without the widened rule unchanged: the note guard fails only identical[d1-d2] -> fallback"
+print(f"  {label} byte-identical ({sha8}…); path without the widened rule unchanged: the note guard fails only identical[d1-d2] -> fallback"
       if not bad else "ABORT: " + "; ".join(bad))
 raise SystemExit(4 if bad else 0)
 PY
@@ -122,7 +154,8 @@ raise SystemExit(4 if bad or mm else 0)
 PY
 
 # shared sources of the test side (as in tools/builds/s032_stage2.sh)
-SRC=(--test "v1r=v1rot_t4/rot_test/test@derived/orient/test_c80_rows.npy" --fill "v1r=v1" --test "v1=v1te_a_t4/v1_test_a/test+v1te_b_t4/v1_test_b/test"
+[ "$ORIENT" = repro ] && { python -I tools/orient_list.py check --mode repro --spec "$V1R_TEST" --json "$PRIVF/check_orient_s034n.json" || exit $?; }
+SRC=(--test "$V1R_TEST" --fill "v1r=v1" --test "v1=v1te_a_t4/v1_test_a/test+v1te_b_t4/v1_test_b/test"
      --test "zs27q=zs27q_test0_rp/zs27q_test0/test+zs27q_test1_rp/zs27q_test1/test" --fill "think18nb=zs27q"
      --test "think18nb=zs27v_te_rp/think_te/test/think@derived/think_rows/test.npy,zs27v_n3_rp/think_nte/test/think@derived/think_rows/test_tb_q.npy"
      --proto "pr27xm=runs/pr27te_rp/proto_te/proto" --rank "pr27xm=runs/n1_rp/rank_test/test"
@@ -135,8 +168,8 @@ TMP="$(mktemp -d "${TMPDIR:-/tmp}/s034_stage2.XXXXXX")"
 BAK=""
 cleanup() {
   rm -rf -- "${TMP:?}"
-  rm -f -- "artifacts/test_${STEM}_main_base.npy" "artifacts/test_${STEM}_main_null.npy" "artifacts/test_${STEM}_swap.npy" \
-           "artifacts/test_${STEM}_swapcli.npy"
+  rm -f -- "artifacts/test_${STEM}_main_base${TSUF}.npy" "artifacts/test_${STEM}_main_null${TSUF}.npy" "artifacts/test_${STEM}_swap${TSUF}.npy" \
+           "artifacts/test_${STEM}_swapcli${TSUF}.npy"
   [ -n "$BAK" ] && rm -rf -- "$BAK"
   return 0
 }
@@ -145,11 +178,11 @@ trap cleanup EXIT
 # 2. copy null point (b′): weight 0 from the deployment file of the widened rule -> file without second stage byte-identical; the guard uses the widened rule
 echo "== 2. copy null point (b′) with the null model from stage2_s034.json =="
 python -I eda/c118_stage2.py null --stack "$STEM" --source "$STAGE2" --out "$TMP/null_s034.json" >/dev/null
-ms --name "$STEM" "${SRC[@]}" --out "$TMP/sub_base.csv" --suffix _main_base || { echo "ABORT: file without second stage not computed" >&2; exit 4; }
-ms --name "$STEM" "${SRC[@]}" --out "$TMP/sub_null.csv" --suffix _main_null --stage2 "$TMP/null_s034.json" --stage2-report "$TMP/guards_null.json" \
+ms --name "$STEM" "${SRC[@]}" --out "$TMP/sub_base.csv" --suffix "_main_base${TSUF}" || { echo "ABORT: file without second stage not computed" >&2; exit 4; }
+ms --name "$STEM" "${SRC[@]}" --out "$TMP/sub_null.csv" --suffix "_main_null${TSUF}" --stage2 "$TMP/null_s034.json" --stage2-report "$TMP/guards_null.json" \
   || { echo "ABORT: null point (b′) not computed" >&2; exit 4; }
 cmp -s "$TMP/sub_base.csv" "$TMP/sub_null.csv" || { echo "ABORT: null point (b′) violated — weight 0 changes the file" >&2; exit 4; }
-cmp -s "artifacts/test_${STEM}_main_base.npy" "artifacts/test_${STEM}_main_null.npy" || { echo "ABORT: null point (b′) violated — test matrix" >&2; exit 4; }
+cmp -s "artifacts/test_${STEM}_main_base${TSUF}.npy" "artifacts/test_${STEM}_main_null${TSUF}.npy" || { echo "ABORT: null point (b′) violated — test matrix" >&2; exit 4; }
 python -I - "$TMP/guards_null.json" <<'PY' || exit 4
 import json
 import sys
@@ -169,7 +202,7 @@ PY
 
 # 3. positive controls on the REAL test aggregates (statistics from step 2; only aggregates are changed, no row)
 echo "== 3. positive controls of the note guard under the widened rule (real test aggregates) =="
-python -I - "$TMP/guards_null.json" "$STAGE2" "$PRIV/positive_controls.json" <<'PY' || { echo "ABORT: positive control failed" >&2; exit 4; }
+python -I - "$TMP/guards_null.json" "$STAGE2" "$PC_JSON" <<'PY' || { echo "ABORT: positive control failed" >&2; exit 4; }
 import copy
 import json
 import re
@@ -290,7 +323,7 @@ assert s2["test_notes"][0]["file"] == sys.argv[3] and s2["test_notes"][1]["file"
 s2["test_notes"][0]["file"] = sys.argv[4]  # file of d2, test ranking still that of d1
 open(sys.argv[2], "w").write(json.dumps(s2, indent=1, ensure_ascii=False) + "\n")
 PY
-if ms --name "$STEM" "${SRC[@]}" --out "$TMP/sub_swapcli.csv" --suffix _swapcli --stage2 "$TMP/stage2_swapcli.json" \
+if ms --name "$STEM" "${SRC[@]}" --out "$TMP/sub_swapcli.csv" --suffix "_swapcli${TSUF}" --stage2 "$TMP/stage2_swapcli.json" \
      --stage2-report "$TMP/guards_swapcli.json" > "$TMP/swapcli.log"; then
   echo "ABORT: file swap via the command line NOT detected (file written)" >&2; exit 4
 fi
@@ -298,14 +331,14 @@ if [ -f "$TMP/sub_swapcli.csv" ] || ! grep -q "test notes" "$TMP/swapcli.log"; t
   echo "ABORT: file swap via the command line not caught by the provenance check" >&2; cat "$TMP/swapcli.log" >&2; exit 4
 fi
 echo "  (i) command line: aborted without a file — $(grep -m1 -o 'test notes.*' "$TMP/swapcli.log" | cut -c1-200)"
-python -I - "$STAGE2" "$TMP" "$NOTES1" "$NOTES2" "$RANK2" "${SRC[@]}" <<'PY' > "$TMP/swap.log" 2>&1 \
+python -I - "$STAGE2" "$TMP" "$NOTES1" "$NOTES2" "$RANK2" "_swap${TSUF}" "${SRC[@]}" <<'PY' > "$TMP/swap.log" 2>&1 \
   || { echo "ABORT: file swap with consistent provenance not computed" >&2; grep -E "ABORT|Error|SystemExit|--stage2" "$TMP/swap.log" >&2; exit 4; }
 import importlib.util
 import sys
 from pathlib import Path
 
-stage2, tmp, n1, n2, r2 = sys.argv[1:6]
-src = sys.argv[6:]
+stage2, tmp, n1, n2, r2, swap_suffix = sys.argv[1:7]
+src = sys.argv[7:]
 spec = importlib.util.spec_from_file_location("make_submission_swap", Path.cwd() / "tools" / "make_submission.py")
 MS = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(MS)
@@ -322,7 +355,7 @@ def swapped(root, rel_file, rank_spec, n_test):
 
 
 MS._test_notes_texts = swapped
-sys.argv = ["make_submission.py", "--name", "s032_stage2", *src, "--out", f"{tmp}/sub_swap.csv", "--suffix", "_swap", "--stage2", stage2,
+sys.argv = ["make_submission.py", "--name", "s032_stage2", *src, "--out", f"{tmp}/sub_swap.csv", "--suffix", swap_suffix, "--stage2", stage2,
             "--stage2-report", f"{tmp}/guards_swap.json"]
 rc = MS.main()
 if calls != [n1]:
@@ -330,12 +363,13 @@ if calls != [n1]:
 raise SystemExit(rc)
 PY
 grep -E "SECOND STAGE|note guard" "$TMP/swap.log" | cut -c1-320 | sed 's/^/  /' || true
-python -I - "$TMP/guards_swap.json" "$TMP/sub_swap.csv" "$FB_FILE_SHA" "$PRIV/swap_control.json" <<'PY' || exit 4
+python -I - "$TMP/guards_swap.json" "$TMP/sub_swap.csv" "$FB_FILE_SHA" "$SWAP_JSON" "$FB_FILE_LABEL" <<'PY' || exit 4
 import hashlib
 import json
 import sys
 
 g = json.load(open(sys.argv[1]))
+label = sys.argv[5]
 gn = g["guard_notes"]
 failed = {c["stat"]: c for c in gn["checks"] if not c["ok"]}
 sha = hashlib.sha256(open(sys.argv[2], "rb").read()).hexdigest()
@@ -344,12 +378,12 @@ bad = []
 if gn["ok"] or g["feature_set"] != "fallback" or "identical[d1-d2]" not in failed or gn.get("rule") != "widened":
     bad.append(f"guard (a) under the widened rule did not fire on the swap (form {g['feature_set']}, failed {sorted(failed)})")
 if sha != sys.argv[3]:
-    bad.append(f"fallback file {sha[:16]}… != fallback-form file")
+    bad.append(f"fallback file {sha[:16]}… != {label}")
 rep = {"feature_set": g["feature_set"], "failed": {k: {"test": c["test"], "ref": c.get("ref"), "z": c.get("z")} for k, c in failed.items()},
        "sub_sha256": sha, "equals_fallback_form_file": sha == sys.argv[3], "changed_top": g["guard_changed_top"]}
 open(sys.argv[4], "w").write(json.dumps(rep, indent=1, ensure_ascii=False) + "\n")
 print("  (ii) consistent provenance: guard (a) under the widened rule fires (failed " + ", ".join(
-      f"{k} z {c.get('z'):+.1f}" if c.get("z") is not None else k for k, c in failed.items()) + f") -> fallback; file = fallback-form file byte-identical ({sha[:16]}…)"
+      f"{k} z {c.get('z'):+.1f}" if c.get("z") is not None else k for k, c in failed.items()) + f") -> fallback; file = {label} byte-identical ({sha[:16]}…)"
       if not bad else "ABORT: " + "; ".join(bad))
 raise SystemExit(4 if bad else 0)
 PY
@@ -403,12 +437,13 @@ if [ -n "$BAK" ] && [ -f "$BAK/$(basename "$OUT")" ]; then
   fi
   echo "  existing $OUT rebuilt byte-identically"
 fi
+[ "$ORIENT" = repro ] && { python -I tools/orient_list.py verify-sub --mode repro "${OUT%.csv}.json" || { restore; exit 4; }; }
 
 # 6. check of the file and comparison (aggregates only)
 echo "== 6. check and comparison =="
 check "$FB_FILE_SHA" "$FB_FILE"
 check "$REF_BASE_SHA" "$REF_BASE"
-python -I - "$OUT" "$FB_FILE" "$REF_BASE" "$GUARDS" "$PRIV/compare_s034.json" <<'PY' || exit 4
+python -I - "$OUT" "$FB_FILE" "$REF_BASE" "$GUARDS" "$CMP_JSON" "$FB_FILE_LABEL" "$REF_BASE_LABEL" <<'PY' || exit 4
 import json
 import sys
 from pathlib import Path
@@ -436,7 +471,8 @@ def read(p):
 
 new = read(sys.argv[1])
 rep = {"check": stats, "vs": {}}
-for path, label in ((sys.argv[2], "fallback-form file (sub_s032_stage2.csv)"), (sys.argv[3], "file without second stage (sub_s029_best_q397m3.csv, β 0.2)")):
+for path, label in ((sys.argv[2], f"{sys.argv[6]} ({Path(sys.argv[2]).name})"),
+                    (sys.argv[3], f"{sys.argv[7]} ({Path(sys.argv[3]).name}, β 0.2)")):
     ref = read(path)
     b = new.loc[ref.index]
     top = float((ref.str.split().str[0] != b.str.split().str[0]).mean())
@@ -459,10 +495,14 @@ print(f"  guard (c): new top code from the reranker {gc['test']:.4f} (OOF main {
       f"OOF {gn['oof']:.4f}; first three changed test {g['share_top3_changed']:.4f}, OOF {float(g['share_top3_changed_oof'] or 0.0):.4f}")
 Path(sys.argv[5]).write_text(json.dumps(rep, indent=1, ensure_ascii=False) + "\n")
 PY
+if [ "$ORIENT" = repro ]; then  # legacy-list file unchanged; difference from it only as aggregates (split by the rows whose list membership differs)
+  check "$LEGACY_OUT_SHA" "$LEGACY_OUT"
+  python -I tools/orient_list.py compare "$LEGACY_OUT" "$OUT" --label "reranker main form, first-version rotation list" --json "$PRIVF/compare_s034n_vs_s034.json"
+fi
 
 # 7. CV of the main form against the deployed fallback form (training rows; nested row vectors from c118 oof, step 0)
 echo "== 7. CV main form against the deployed fallback form (training rows) =="
-python -I - "artifacts/eda/private/stage2/c118_oof_rows.npz" "artifacts/eda/private/stage2/c118_oof.json" "$PRIV/cv_main_vs_fallback.json" <<'PY' || exit 4
+python -I - "artifacts/eda/private/stage2/c118_oof_rows.npz" "artifacts/eda/private/stage2/c118_oof.json" "$CV_JSON" <<'PY' || exit 4
 import importlib.util
 import json
 import sys
@@ -513,4 +553,9 @@ PY
 echo "== 8. checksums =="
 check "$OUT_SHA" "$OUT"
 sha256sum "$STACK" "$STAGE2_32" "$STAGE2" "$FB_FILE" "$OUT" "$TESTMAT"
-echo "s034_stage2_main best: $OUT built (main form under the widened rule of the note guard)"
+if [ "$ORIENT" = repro ]; then
+  sha256sum "$REF_BASE" "${OUT%.csv}.json" "$GUARDS"
+  echo "s034_stage2_main best (ORIENT=repro): $OUT built (main form under the widened rule of the note guard, released rotation list)"
+else
+  echo "s034_stage2_main best: $OUT built (main form under the widened rule of the note guard)"
+fi

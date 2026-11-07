@@ -684,7 +684,7 @@ def protocol_stats(records: list[dict], n_legacy: int) -> dict:
     return out
 
 
-def report_decision(alone: dict, main_cmp: dict, fix_cmp: dict, rule: dict, lesart: dict, info: dict, wts: dict) -> None:
+def report_decision(alone: dict, main_cmp: dict, fix_cmp: dict, rule: dict, ll_reading: dict, info: dict, wts: dict) -> None:
     """Console output of the decision (aggregates only; only without --dry)."""
     print(f"\nCHANNEL {NEW} alone (valid answers, descriptive): MAP@3 {alone['map3_valid']:.4f}, top correct {alone['top1_valid']:.3f}, "
           f"NONE at the top {alone['none_top_valid']:.3f} (true {alone['none_true_valid']:.3f}) | "
@@ -699,8 +699,8 @@ def report_decision(alone: dict, main_cmp: dict, fix_cmp: dict, rule: dict, lesa
     print("\nPRE-REGISTERED RULE: " + " | ".join(f"{c['criterion']}: {'yes' if c['ok'] else 'NO'}" for c in rule["checks"])
           + f"  =>  {rule['verdict']}")
     print(f"   consequence: {CONSEQUENCE[rule['passed']]}")
-    print("   reading of criterion 3: " + " | ".join(f"{k} z {v['z']:+.2f}" for k, v in lesart["readings"].items())
-          + ("  — changes the criterion: " + ", ".join(lesart["flips"]) if lesart["flips"] else "  — does not change the criterion"))
+    print("   reading of criterion 3: " + " | ".join(f"{k} z {v['z']:+.2f}" for k, v in ll_reading["readings"].items())
+          + ("  — changes the criterion: " + ", ".join(ll_reading["flips"]) if ll_reading["flips"] else "  — does not change the criterion"))
     print("\nFOR INFORMATION ONLY (no decision):")
     for label, c in info.items():
         print(f"   {label}:\n      " + fmt_cmp(c, with_groups=label.startswith("inductive line")))
@@ -811,7 +811,7 @@ def main(argv: list[str] | None = None) -> int:
             "sensitivity: mask before the floor": compare(R["maskfirst_new"], R["maskfirst_base"], ctx, draws,
                                                           LL["maskfirst_new"], LL["maskfirst_base"])}
     rule = evaluate_rule(R["new_best"], R["base_best"], R["fixed_best"], folds, main_cmp["z_q"], main_cmp["ll_z_q"])
-    lesart = ll_readings(LL["base_best"], LL["new_best"], LL["base_best_pre"], LL["new_best_pre"], ctx["q_code"], draws,
+    ll_reading = ll_readings(LL["base_best"], LL["new_best"], LL["base_best_pre"], LL["new_best_pre"], ctx["q_code"], draws,
                          rule["checks"][2]["ok"])
     wts = {"primary": weights_report(fit_n, NEW), "fixed levels": weights_report(fit_f, NEW_FIXED),
            "inductive": weights_report(fit_sn, NEW)}
@@ -841,7 +841,7 @@ def main(argv: list[str] | None = None) -> int:
     result = {"experiment": "q397-sixth-channel", "script": "eda/c107_q397_full.py", "created_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
               "rule_text": RULE_TEXT, "reading": READING, "coverage": cov, "protocol": proto, "integrity": integrity,
               "anchors": anc, "channel_alone": alone, "main": main_cmp, "fixed_levels": fix_cmp, "rule": rule,
-              "verdict": rule["verdict"], "consequence": CONSEQUENCE[rule["passed"]], "ll_readings": lesart, "weights": wts,
+              "verdict": rule["verdict"], "consequence": CONSEQUENCE[rule["passed"]], "ll_readings": ll_reading, "weights": wts,
               "info": info, "boot": {"draws": BOOT, "seed": SEED, "unit": "question_id"}, "seconds": round(time.time() - t0, 1)}
     result_json = to_json(result)  # also built and serialised in the dry run (code path), but never written there
     rows_npz = io.BytesIO()
@@ -866,7 +866,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     # decision: output
-    report_decision(alone, main_cmp, fix_cmp, rule, lesart, info, wts)
+    report_decision(alone, main_cmp, fix_cmp, rule, ll_reading, info, wts)
     (OUT / "c107_result.json").write_text(result_json)
     (OUT / "c107_rows.npz").write_bytes(rows_npz.getvalue())
     print(f"\nduration {time.time() - t0:.0f} s -> {OUT / 'c107_result.json'}, {OUT / 'c107_rows.npz'} (private)")

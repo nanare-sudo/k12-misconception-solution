@@ -5,11 +5,11 @@
     python tools/make_orient.py --source vlm --run orient_t4 [--min-conf 0.8] [--name v80]
 
 Two sources of the orientation estimate:
-  cnn  the image analysis (eda/i5_06_orientation.py cnn -> artifacts/eda/private/i5_rot_cnn_pred.parquet): a
+  cnn  the image analysis of the first version (script not included; artifacts/eda/private/i5_rot_cnn_pred.parquet): a
        self-supervised network on 64x64 ink maps, trained only on train and pool images. Class r means "the upright
        sheet appears rotated by r quarter turns counter-clockwise"; it is straightened with (4 - r) quarter turns
        counter-clockwise (checked on two training images).
-  vlm  the orientation probe `up` of a vision-language model without training (configs/vlm/orient_t4.yaml): jobs
+  vlm  the orientation probe `up` of a vision-language model without training (run orient_t4, not included): jobs
        up0 … up3 measure for every photo in rotation k (k quarter turns counter-clockwise) the margin yes - no for the
        question "upright?". The rotation with the largest margin straightens the photo; the confidence is the softmax
        share of this rotation over the four margins.

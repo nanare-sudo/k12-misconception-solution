@@ -120,7 +120,7 @@ import numpy as np
 
 path, line, ignore_verdict = Path(sys.argv[1]), sys.argv[2], sys.argv[3] == "1"
 if not path.is_file():
-    raise SystemExit(f"ABORT: {path} missing — run python -I eda/c108_m3_three_draws.py first")
+    raise SystemExit(f"ABORT: {path} missing — stored verdict of the M3 evaluation (frozen input, see docs/CODEMAP.md §10)")
 ev = json.loads(path.read_text())
 if ev.get("mode") != "real":
     raise SystemExit(f"ABORT: {path} comes from a check run (mode {ev.get('mode')!r})")
@@ -169,7 +169,7 @@ from pathlib import Path
 
 f = Path("artifacts/eda/private/q397_deploy/c109_parity.json")
 if not f.is_file():
-    print(f"{f} missing — python -I eda/c109_q397_parity.py runs/q397p_rp/proto_p/proto (or q397p8_rp)", file=sys.stderr)
+    print(f"{f} missing — stored verdict of the 397B parity check (frozen input, see docs/CODEMAP.md §10)", file=sys.stderr)
     raise SystemExit(5)
 r = json.loads(f.read_text())
 print(f"  fidelity check (c109, training rows): {r['verdict']} — valid {r['valid_own']}/{r['rows']}, input tokens within 1 % in "
@@ -203,7 +203,7 @@ else
   OUTARGS=(--suffix "$SUFFIX")
 fi
 if [ "$LINE" = best ]; then
-  PYTHONDONTWRITEBYTECODE=1 python tools/make_submission.py --name "$STEM" \
+  PYTHONDONTWRITEBYTECODE=1 python -I tools/make_submission.py --name "$STEM" \
     --test "v1r=v1rot_t4/rot_test/test@derived/orient/test_c80_rows.npy" --fill "v1r=v1" --test "$V1_T4" \
     --test "zs27q=zs27q_test0_rp/zs27q_test0/test+zs27q_test1_rp/zs27q_test1/test" --fill "think18nb=zs27q" \
     --test "think18nb=zs27v_te_rp/think_te/test/think@derived/think_rows/test.npy,zs27v_n3_rp/think_nte/test/think@derived/think_rows/test_tb_q.npy" \
@@ -212,7 +212,7 @@ if [ "$LINE" = best ]; then
     --rank-only "$M3=$M3_TEST" \
     --align 0.75 --align-min 3 --blank-rows "$BLANK" "${OUTARGS[@]}" 2>&1 | grep -vi '^warning' | cut -c1-300
 else
-  PYTHONDONTWRITEBYTECODE=1 python tools/make_submission.py --name "$STEM" \
+  PYTHONDONTWRITEBYTECODE=1 python -I tools/make_submission.py --name "$STEM" \
     --test "v1r=v1rot_t4/rot_test/test@derived/orient/test_c80_rows.npy" --fill "v1r=v1" --test "$V1_T4" \
     --test "zs27t=px27_t4zt0/zs27t_test_t4/test+px27_t4zt1/zs27t_test_t4/test" --fill "think18sb=zs27t" \
     --test "think18sb=zs27v_n3_rp/think_nte/test/think@derived/think_rows/test_tb_t.npy" \

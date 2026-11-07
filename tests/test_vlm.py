@@ -30,7 +30,7 @@ ROW = {
     "transcription_steps": "L1 | 1/2 + 1/3\nL2 | = 2/5",
     "misconceptions": json.dumps([{"step": "L2", "span": "2/5", "category": "FRA-01", "severity": "major", "root": True, "text": "Added tops and bottoms."}]),
 }
-TAX = pd.DataFrame({"id": ["FRA-01", "CAL-01"], "name": ["Adding tops and bottoms", "Calculation slip"], "description": ["d1", "d2"]})
+TAX = pd.DataFrame({"id": ["FRA-01", "CAL-01"], "name": ["Example fraction error", "Calculation slip"], "description": ["d1", "d2"]})
 
 
 def test_candidate_set_trie_and_index():
@@ -85,7 +85,7 @@ def test_build_sample_diag_target_segments():
                        examples_text="- working: x\n  final answer wrong; root: CAL-01")
     kinds = [k for k, _ in s.parts]
     assert kinds == ["text", "text", "image", "text"] and s.prefix == "Root:"
-    assert "FRA-01 | Adding tops and bottoms | d1" in s.parts[0][1] and "NONE |" in s.parts[0][1]
+    assert "FRA-01 | Example fraction error | d1" in s.parts[0][1] and "NONE |" in s.parts[0][1]
     assert "Diagnosed working of other students" in s.parts[1][1]
     assert [tag for _, tag in s.target] == ["code", "aux", "fac", "aux"]
     assert s.target[0][0] == " FRA-01" and s.target[2][0] == " no"
@@ -824,7 +824,7 @@ def test_proto_continuation_network_failure_is_not_a_finished_pair(tmp_path, mon
 
 
 def test_proto_parse_never_raises_and_finish_notes_follow_the_measured_form():
-    """Review findings: the answer parser must not fail on any answer (a non-hashable root_code or an oversized number
+    """Regression: the answer parser must not fail on any answer (a non-hashable root_code or an oversized number
     would otherwise end the job), and the notes of the finish have the form of the API measurement."""
     from vlm import proto as PR
 
@@ -845,7 +845,7 @@ def test_proto_parse_never_raises_and_finish_notes_follow_the_measured_form():
 
 
 def test_proto_generate_row_errors_order_and_failure_limits(tmp_path, monkeypatch):
-    """Review findings: shuffled processing order (priority rows stay in front), request and image errors are row
+    """Regression: shuffled processing order (priority rows stay in front), request and image errors are row
     errors, the guard counts them, and too many open rows make the job fail."""
     from PIL import Image
 

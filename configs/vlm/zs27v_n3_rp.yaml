@@ -1,5 +1,5 @@
 # Reasoning channel, draw n (WITHOUT question block; prompt as for zs27t) for the test rows and the remaining training rows:
-# the reasoning channel of the strictly inductive line, and the second reasoning text of the best-CV line (averaged with
+# the reasoning channel of the strictly inductive line, and the second reasoning text of the primary line (averaged with
 # draw g in the narrow gate).
 # Rows = union of the narrow gates of both lines PLUS the extended gate: rows outside the wide gate with P(NONE) of the
 # fast channel (zs27q or zs27t) below 0.95. These rows had never received a reasoning text and carry 12.9 % of the loss;

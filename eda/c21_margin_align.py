@@ -5,7 +5,7 @@
 The competition split is stratified by root_code: the class frequencies of the test set are (up to rounding) those of
 the training set. Class weights w bring the mean predicted mass per class to these frequencies (iterative fit, only the
 marginal distribution of the set — no labels of individual rows); applied with strength s (w to the power s). This uses
-the test rows as a set: primary line only.
+the test rows as a set: primary line and safety line with set alignment (not the strictly inductive line).
 
 Four measurements on the cross-fitted predictions of the blend (artifacts/oof_<name>.npy):
   A  all 1,500 rows as ONE set, target = their own marginal distribution (too favourable: on the test set the target is

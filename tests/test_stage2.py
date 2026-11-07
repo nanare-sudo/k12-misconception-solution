@@ -35,7 +35,7 @@ import stage2 as S2  # noqa: E402
 
 PY = [sys.executable, "-I"]
 ENV = {**os.environ, "OPENBLAS_NUM_THREADS": "2", "OMP_NUM_THREADS": "2", "PYTHONDONTWRITEBYTECODE": "1"}
-S032_CHANNELS = ["v1r", "zs27q", "think18nb", "pr27xm", "m3x3_full", "q397m3"]
+SIX_CHANNELS = ["v1r", "zs27q", "think18nb", "pr27xm", "m3x3_full", "q397m3"]
 REF_BASE_SHA = "768b7778ea049caeb23455ecad26b9bc90ebff52bee3cb97e356aac7cadf07e8"
 
 
@@ -58,13 +58,13 @@ def classes_toy() -> list[str]:
 # ------------------------------------------------------------------------------------------------ synthetic
 
 def test_feature_names_main_and_fallback():
-    main, fb = S2.feature_names(S032_CHANNELS, "main"), S2.feature_names(S032_CHANNELS, "fallback")
+    main, fb = S2.feature_names(SIX_CHANNELS, "main"), S2.feature_names(SIX_CHANNELS, "fallback")
     assert len(main) == 43 and len(fb) == 40
     assert [f for f in main if f not in fb] == list(S2.NOTE_FEATS)
     assert not any(f.startswith(("q397", "q_")) for f in main) and "row_q_valid" not in main
     assert main[:6] == ["f_logp", "f_rank", "f_gap", "f_p", "p_logp", "p_rank"]
     with pytest.raises(ValueError):
-        S2.feature_names(S032_CHANNELS, "everything")
+        S2.feature_names(SIX_CHANNELS, "everything")
 
 
 def test_mention_features_word_boundaries_case_and_last():
@@ -119,10 +119,10 @@ def _toy_static(n=40, K=10, seed=1):
         P = rng.dirichlet(np.ones(K), size=n)
         return P
 
-    chans = {nm: rnd() for nm in S032_CHANNELS}
+    chans = {nm: rnd() for nm in SIX_CHANNELS}
     draws = [rnd(), rnd(), rnd()]
     notes = S2.notes_features([["CAL-01 ANS-01"] * n, ["WOP-01"] * n, [""] * n], cls)
-    st = S2.Static(S032_CHANNELS, chans, draws, rng.integers(4, 13, n).astype(float), seen, cls, notes)
+    st = S2.Static(SIX_CHANNELS, chans, draws, rng.integers(4, 13, n).astype(float), seen, cls, notes)
     return st, seen, rng
 
 
@@ -137,7 +137,7 @@ def test_pair_features_shapes_and_zero_model_is_bitwise_identity():
     kn = S2.knowledge(key, topic, y, key, topic, K)
     for fs in S2.FEATURE_SETS:
         X, cand, names = S2.pair_features(st, np.arange(n), Q, P, kn, fs)
-        assert X.shape == (n * S2.K_CAND, len(names)) and names == S2.feature_names(S032_CHANNELS, fs)
+        assert X.shape == (n * S2.K_CAND, len(names)) and names == S2.feature_names(SIX_CHANNELS, fs)
         assert not np.isin(cand, np.flatnonzero(~seen)).any()
         top = S2.reorder(cand, S2.scores(S2.zero_model(len(names)), X))
         assert np.array_equal(top, cand)
@@ -220,7 +220,7 @@ GUARD_REF = {"per_draw": {"d1": {"codes_per_row": 2.757, "share_top_mentioned": 
 GUARD_TEST = {"per_draw": {"d1": {"codes_per_row": 2.630, "share_top_mentioned": 0.571}, "d2": {"codes_per_row": 3.411, "share_top_mentioned": 0.617},
                           "d3": {"codes_per_row": 3.472, "share_top_mentioned": 0.618}},
              "mention_hist_top5": [0.509, 0.121, 0.115, 0.254], "identical": {"d1-d2": 0.046, "d1-d3": 0.0003, "d2-d3": 0.0003}}
-R_W2 = {"share_z_max": 3.0, "n_ref": 1500, "n_test": 3498}
+WIDENED = {"share_z_max": 3.0, "n_ref": 1500, "n_test": 3498}
 
 
 def _rnd_stats(rng) -> dict:
@@ -234,7 +234,7 @@ def _check(g: dict, stat: str) -> dict:
     return next(c for c in g["checks"] if c["stat"] == stat)
 
 
-def test_guard_notes_without_r_w2_params_is_exactly_the_old_rule():
+def test_guard_notes_without_widened_params_is_exactly_the_old_rule():
     """Null point: without share_z_max/n_ref/n_test the same return value as the band-rule version (character for character as JSON)."""
     rng = np.random.default_rng(11)
     cases = [(GUARD_REF, GUARD_TEST)] + [(_rnd_stats(rng), _rnd_stats(rng)) for _ in range(300)]
@@ -264,7 +264,7 @@ def test_share_z_two_sample_binomial():
 
 def test_widened_rule_recorded_case_d1_d2_passes_via_z():
     """The recorded case: word-identical d1–d2, test 0.046 against training 0.036, lies outside the old band (0–0.0396), z ≈ 1.6 -> passes."""
-    g = S2.guard_notes(GUARD_REF, GUARD_TEST, **R_W2)
+    g = S2.guard_notes(GUARD_REF, GUARD_TEST, **WIDENED)
     assert g["ok"] and g["rule"] == "widened" and (g["share_z_max"], g["n_ref"], g["n_test"]) == (3.0, 1500, 3498)
     c = _check(g, "identical[d1-d2]")
     assert not c["ok_band"] and c["ok_z"] and c["passed_by"] == "z" and c["ref"] == 0.036 and c["z"] == pytest.approx(1.597, abs=0.002)
@@ -301,32 +301,32 @@ def _value_for_z(p_ref: float, target: float, n_ref: int = 1500, n_test: int = 3
     return 0.5 * (lo + hi)
 
 
-def test_r_w2_positive_controls_still_alarm():
+def test_widened_rule_positive_controls_still_alarm():
     """Positive controls: copied/swapped notes (word-identical 1.0), codes_per_row 1.7, top-code mention 0.40 and a planted |z| 3.5
     outside the old band fire; a planted |z| 2.5 outside the old band passes."""
     for stat, v in (("identical[d1-d2]", 1.0), ("identical[d1-d3]", 1.0), ("codes_per_row[d1]", 1.7), ("share_top_mentioned[d1]", 0.40)):
-        g = S2.guard_notes(GUARD_REF, _plant(GUARD_TEST, stat, v), **R_W2)
+        g = S2.guard_notes(GUARD_REF, _plant(GUARD_TEST, stat, v), **WIDENED)
         assert not g["ok"] and [c["stat"] for c in g["checks"] if not c["ok"]] == [stat], stat
-    assert _check(S2.guard_notes(GUARD_REF, _plant(GUARD_TEST, "codes_per_row[d1]", 1.7), **R_W2), "codes_per_row[d1]")["z"] is None
+    assert _check(S2.guard_notes(GUARD_REF, _plant(GUARD_TEST, "codes_per_row[d1]", 1.7), **WIDENED), "codes_per_row[d1]")["z"] is None
     for stat, ref in (("identical[d1-d2]", 0.036), ("mention_hist_top5[1]", 0.127), ("mention_hist_top5[3]", 0.254)):
         for target, want in ((3.5, False), (2.5, True)):
             v = _value_for_z(ref, target)
-            g = S2.guard_notes(GUARD_REF, _plant(GUARD_TEST, stat, v), **R_W2)
+            g = S2.guard_notes(GUARD_REF, _plant(GUARD_TEST, stat, v), **WIDENED)
             c = _check(g, stat)
             assert c["z"] == pytest.approx(target, abs=1e-6) and not c["ok_band"], (stat, target)
             assert c["ok"] is want and g["ok"] is want and c["passed_by"] == ("z" if want else None), (stat, target)
     # inside the old band even |z| 3.5 passes (the rule only widens): word-identical d1–d3 with training 0
-    c = _check(S2.guard_notes(GUARD_REF, _plant(GUARD_TEST, "identical[d1-d3]", _value_for_z(0.0, 3.5)), **R_W2), "identical[d1-d3]")
+    c = _check(S2.guard_notes(GUARD_REF, _plant(GUARD_TEST, "identical[d1-d3]", _value_for_z(0.0, 3.5)), **WIDENED), "identical[d1-d3]")
     assert c["ok"] and c["ok_band"] and not c["ok_z"] and c["passed_by"] == "band"
 
 
-def test_r_w2_only_widens_never_narrows():
+def test_widened_rule_only_widens_never_narrows():
     rng = np.random.default_rng(5)
     widened = 0
     for i in range(500):
         ref = _rnd_stats(rng)
         test = _rnd_stats(rng) if i % 2 else _plant(ref, "identical[d1-d2]", ref["identical"]["d1-d2"] * float(rng.uniform(0.5, 1.6)))
-        old, new = S2.guard_notes(ref, test), S2.guard_notes(ref, test, **R_W2)
+        old, new = S2.guard_notes(ref, test), S2.guard_notes(ref, test, **WIDENED)
         for a, b in zip(old["checks"], new["checks"]):
             assert (a["stat"], a["test"], a["lo"], a["hi"]) == (b["stat"], b["test"], b["lo"], b["hi"]) and b["ok_band"] == a["ok"]
             assert b["ok"] or not a["ok"]  # what passed before still passes
@@ -335,11 +335,11 @@ def test_r_w2_only_widens_never_narrows():
     assert widened > 0
 
 
-def test_r_w2_identical_against_own_pair_reference():
+def test_widened_rule_identical_against_own_pair_reference():
     """Word-identical notes per pair against the pair's OWN training value: d1–d3 = 0.045 (training 0) fires, although the training
     value of d1–d2 (0.036) would let it pass; d1–d2 = 0.046 passes."""
     test = _plant(_plant(GUARD_TEST, "identical[d1-d3]", 0.045), "identical[d1-d2]", 0.046)
-    g = S2.guard_notes(GUARD_REF, test, **R_W2)
+    g = S2.guard_notes(GUARD_REF, test, **WIDENED)
     c13, c12 = _check(g, "identical[d1-d3]"), _check(g, "identical[d1-d2]")
     assert c13["ref"] == 0.0 and not c13["ok"] and c13["z"] > 3 and S2.share_z(0.036, 1500, 0.045, 3498) < 3
     assert c12["ref"] == 0.036 and c12["ok"] and c12["passed_by"] == "z"
@@ -347,7 +347,7 @@ def test_r_w2_identical_against_own_pair_reference():
     bad_ref = copy.deepcopy(GUARD_REF)
     del bad_ref["identical"]["d2-d3"]
     with pytest.raises(ValueError):
-        S2.guard_notes(bad_ref, GUARD_TEST, **R_W2)
+        S2.guard_notes(bad_ref, GUARD_TEST, **WIDENED)
 
 
 def _toy_apply_stage2(tmp_path, guard_rule: dict):
@@ -365,8 +365,8 @@ def _toy_apply_stage2(tmp_path, guard_rule: dict):
         P = rng.dirichlet(np.ones(K), size=n_test) * seen[None, :]
         return P / P.sum(1, keepdims=True)
 
-    raw, draws, Q, P_pre = {nm: rnd() for nm in S032_CHANNELS}, [rnd(), rnd(), rnd()], rnd(), rnd()
-    stack = {"channels": list(S032_CHANNELS), "arith_beta": 0.6}
+    raw, draws, Q, P_pre = {nm: rnd() for nm in SIX_CHANNELS}, [rnd(), rnd(), rnd()], rnd(), rnd()
+    stack = {"channels": list(SIX_CHANNELS), "arith_beta": 0.6}
     stack_file = tmp_path / "stack_toy.json"
     stack_file.write_text(json.dumps(stack))
     train = pd.DataFrame({"root_code": [cls[i % 9] for i in range(n_train)], "question_id": [f"q{i % 7}" for i in range(n_train)],
@@ -381,10 +381,10 @@ def _toy_apply_stage2(tmp_path, guard_rule: dict):
     cand0 = S2.candidates(Q, seen)
     ref = S2.note_stats(notes["men_per_draw"], notes["m3_men"], cand0, cand0[:, 0])
     ref["identical"] = {"d1-d2": 0.17, "d1-d3": 0.0, "d2-d3": 0.0}
-    models = {fs: {"features": S2.feature_names(S032_CHANNELS, fs), "w": [0.0] * len(S2.feature_names(S032_CHANNELS, fs)),
-                   "mu": [0.0] * len(S2.feature_names(S032_CHANNELS, fs)), "sd": [1.0] * len(S2.feature_names(S032_CHANNELS, fs)),
+    models = {fs: {"features": S2.feature_names(SIX_CHANNELS, fs), "w": [0.0] * len(S2.feature_names(SIX_CHANNELS, fs)),
+                   "mu": [0.0] * len(S2.feature_names(SIX_CHANNELS, fs)), "sd": [1.0] * len(S2.feature_names(SIX_CHANNELS, fs)),
                    "oof_changed_top_share": 0.0, "oof_changed_top3_share": 0.0} for fs in S2.FEATURE_SETS}
-    s2 = {"stack_sha256": sha(stack_file), "channels": list(S032_CHANNELS), "arith_beta": 0.6, "K": S2.K_CAND, "lambda": S2.LAMBDA,
+    s2 = {"stack_sha256": sha(stack_file), "channels": list(SIX_CHANNELS), "arith_beta": 0.6, "K": S2.K_CAND, "lambda": S2.LAMBDA,
           "null": False, "draws_channel": "m3x3_full", "test_notes": [{"file": f"n{d}.jsonl", "rank": f"runs/r{d}/job/test"} for d in (1, 2, 3)],
           "models": models, "guard_reference": ref, "novel_task_share_top5": 0.5, "guard_rule": guard_rule}
     s2_file = tmp_path / "stage2_toy.json"
@@ -394,10 +394,10 @@ def _toy_apply_stage2(tmp_path, guard_rule: dict):
     return args, texts
 
 
-def test_make_submission_apply_stage2_guard_rule_r_w2_fields(tmp_path, monkeypatch):
+def test_make_submission_apply_stage2_widened_rule_fields(tmp_path, monkeypatch):
     """make_submission reads share_z_max/n_ref from guard_rule: without the fields the old guard (fallback), with them the widened
     rule (main form); only one field or n_ref ≠ number of training rows -> abort. No command-line switch."""
-    MS = _load("make_submission_stage2_rw2", "tools/make_submission.py")
+    MS = _load("make_submission_stage2_widened", "tools/make_submission.py")
     old_rule = {"notes_rel_tolerance": 0.10, "changed_top_factor": [0.5, 2.0], "text": "band rule"}
     for rule, want_fs in ((old_rule, "fallback"), ({**old_rule, "rule": "widened", "share_z_max": 3.0, "n_ref": 40}, "main")):
         args, texts = _toy_apply_stage2(tmp_path, rule)
@@ -501,10 +501,10 @@ def test_stage2_file_fields():
     s2 = json.loads((COMP / "artifacts/stage2_s032.json").read_text())
     assert s2["K"] == S2.K_CAND == 5 and s2["lambda"] == S2.LAMBDA == 0.1 and s2["null"] is False
     assert s2["stack_sha256"] == sha(COMP / "artifacts/stack_s032_stage2.json")
-    assert s2["channels"] == S032_CHANNELS and s2["align"] == 0.75 and s2["align_min"] == 3
+    assert s2["channels"] == SIX_CHANNELS and s2["align"] == 0.75 and s2["align_min"] == 3
     for fs in S2.FEATURE_SETS:
         m = s2["models"][fs]
-        assert m["features"] == S2.feature_names(S032_CHANNELS, fs) and len(m["w"]) == len(m["features"])
+        assert m["features"] == S2.feature_names(SIX_CHANNELS, fs) and len(m["w"]) == len(m["features"])
         assert 0.0 < m["oof_changed_top_share"] < 0.2
     assert s2["oof_reproduction"]["reproduction"]["ok"]
 
@@ -627,14 +627,14 @@ def test_build_script_fixed_checksums_match_files():
 
 # ------------------------------------------------------------------------------------------------ widened rule: real files
 
-S034 = COMP / "artifacts" / "stage2_s034.json"
-needs_s034 = pytest.mark.skipif(not (_have(*TRAIN_ART) and S034.is_file()), reason="stage2_s034.json or training artifacts missing")
+MAIN_FORM_FILE = COMP / "artifacts" / "stage2_s034.json"
+needs_main_form = pytest.mark.skipif(not (_have(*TRAIN_ART) and MAIN_FORM_FILE.is_file()), reason="stage2_s034.json or training artifacts missing")
 
 
-@needs_s034
+@needs_main_form
 def test_stage2_s034_equals_s032_except_guard_rule():
     a = json.loads((COMP / "artifacts/stage2_s032.json").read_text())
-    b = json.loads(S034.read_text())
+    b = json.loads(MAIN_FORM_FILE.read_text())
     assert [k for k in b if k != "derived_from"] == list(a)
     assert {k for k in set(a) | set(b) if a.get(k) != b.get(k)} == {"guard_rule", "derived_from"}
     assert all(b["guard_rule"][k] == v for k, v in a["guard_rule"].items())
@@ -644,8 +644,8 @@ def test_stage2_s034_equals_s032_except_guard_rule():
     assert b["derived_from"]["file"] == "artifacts/stage2_s032.json" and b["derived_from"]["sha256"] == sha(COMP / "artifacts/stage2_s032.json")
 
 
-@needs_s034
-def test_c118_fit_r_w2_verify_reproduces_s034():
+@needs_main_form
+def test_c118_fit_widened_verify_reproduces_s034():
     """stage2_s034.json is reproducible: c118 fit --guard-rule widened recomputes everything, requires the band-rule recomputation to be
     character-identical to stage2_s032.json and then compares character for character with stage2_s034.json."""
     r = subprocess.run(PY + ["eda/c118_stage2.py", "fit", "--stack", "s032_stage2", "--guard-rule", "widened", "--verify"], cwd=COMP, env=ENV,
@@ -654,7 +654,7 @@ def test_c118_fit_r_w2_verify_reproduces_s034():
     assert "VERIFIED: artifacts/stage2_s034.json" in r.stdout
 
 
-def test_c118_fit_r_w2_never_writes_s032():
+def test_c118_fit_widened_never_writes_s032():
     before = sha(COMP / "artifacts/stage2_s032.json") if (COMP / "artifacts/stage2_s032.json").is_file() else None
     r = subprocess.run(PY + ["eda/c118_stage2.py", "fit", "--guard-rule", "widened", "--out", "artifacts/stage2_s032.json", "--verify"], cwd=COMP,
                        env=ENV, capture_output=True, text=True, timeout=120)
@@ -672,7 +672,7 @@ def test_widened_rule_on_recorded_test_aggregates():
     gn = json.loads(f.read_text())["guard_notes"]
     old = S2.guard_notes(gn["reference"], gn["test"], gn["rel"])
     assert [c["stat"] for c in old["checks"] if not c["ok"]] == ["identical[d1-d2]"]
-    new = S2.guard_notes(gn["reference"], gn["test"], gn["rel"], **R_W2)
+    new = S2.guard_notes(gn["reference"], gn["test"], gn["rel"], **WIDENED)
     assert new["ok"] and [c["stat"] for c in new["checks"] if c["passed_by"] == "z"] == ["identical[d1-d2]"]
     assert max(abs(c["z"]) for c in new["checks"] if c["z"] is not None) <= 3.0
 
@@ -686,8 +686,8 @@ def test_build_script_s034_fixed_checksums_match_files():
         assert want, var
         if (COMP / rel).is_file():
             assert want.group(1) == sha(COMP / rel), var
-    if S034.is_file():  # pinned, cannot be overridden through the environment
-        assert f'STAGE2_SHA="{sha(S034)}"' in text and "STAGE2_SHA:-" not in text
+    if MAIN_FORM_FILE.is_file():  # pinned, cannot be overridden through the environment
+        assert f'STAGE2_SHA="{sha(MAIN_FORM_FILE)}"' in text and "STAGE2_SHA:-" not in text
     out = COMP / "artifacts" / "submissions" / "sub_s034_stage2_main.csv"
     m = re.search(r'\bOUT_SHA="([0-9a-f]{64})"', text)
     assert m and 'check "$OUT_SHA" "$OUT"' in text

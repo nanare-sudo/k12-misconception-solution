@@ -25,7 +25,16 @@
 #   without second stage at β 0.2 and at the new β (aggregates only). An existing output file is only replaced by a
 #   byte-identical rebuild.
 # EXIT: 2 usage; 3 input missing; 4 checksum/recomputation/null point; 5 guard of the test side violated (including guard (c) of
-#   the second stage); 6 c108 verdict missing (from s029_q397m3.sh).
+#   the second stage); 6 c108 verdict missing (from s029_q397m3.sh); 1 a check inside a called Python script that stops
+#   with a message.
+# ROTATION LIST (tools/builds/orient_list.sh): ORIENT=repro (default; entry point tools/builds/s033n_stage2.sh) reads for v1r the
+#   rotation list of the released orientation network, derived/orient_repro/test_c80_rows.npy: step 0 builds the intermediate
+#   file sub_s032n_q397m3.csv (s029_q397m3.sh with ORIENT=repro), copy null point (a) requires that file byte-identically, and the
+#   main file is the fallback form with the released list -> artifacts/submissions/sub_s033n_stage2.csv (test matrix
+#   test_s032_stage2_s033n.npy, statistics stage2/guards_s033n.json, throw-away suffixes with _s033n). Blend file, deployment
+#   file stage2_s032.json and all other inputs and guards as with ORIENT=legacy; in addition tools/orient_list.py check/verify-sub
+#   and the comparison with the legacy-list file as aggregates. ORIENT=legacy rebuilds the historical file sub_s032_stage2.csv
+#   with the first-version rotation list byte-identically; the released-list build needs it (and sub_s029_best_q397m3.csv) first.
 #
 # Only aggregates and checksums are printed. Nothing is submitted from here.
 set -euo pipefail
@@ -48,6 +57,23 @@ RANK2="runs/m3d2te_rp/m3d2_test_rank/test"
 RANK3="runs/m3d3te_rp/m3d3_test_rank/test"
 Q397M3_TEST="runs/q397m3te_rp/q397m3_test_rank/test"
 check() { echo "$1  $2" | sha256sum -c --quiet || { echo "ABORT: $2 differs (checksum)" >&2; exit 4; }; }
+. tools/builds/orient_list.sh  # rotation list of the v1r test side: ORIENT=repro (default, released list) | legacy (first-version list)
+orient_select
+OUT="artifacts/submissions/sub_${STEM}.csv"
+RSUF=""; MAINARGS=()  # empty = legacy-list file (without --out/--suffix)
+REF_BASE_LABEL="file without second stage (β 0.2)"
+if [ "$ORIENT" = repro ]; then  # fallback form with the released rotation list on the intermediate file: own file, test matrix, statistics and throw-away suffixes
+  REF_BASE_OLD="$REF_BASE"; REF_BASE_OLD_SHA="$REF_BASE_SHA"
+  REF_BASE="artifacts/submissions/sub_s032n_q397m3.csv"; REF_BASE_SHA="d1667f6d2fb118844b72ecd8abd85220754a709d468519b7a047a893bbea12f1"  # intermediate file (pinned after the first build)
+  REF_BASE_LABEL="file without second stage (β 0.2, released rotation list)"
+  LEGACY_OUT="artifacts/submissions/sub_s032_stage2.csv"; LEGACY_OUT_SHA="96bafc6fa4c0fb89a32e45fe24816454685b137d0c8264171bfcea93ea371809"  # legacy-list file of this build
+  RSUF="_s033n"
+  OUT="artifacts/submissions/sub_s033n_stage2.csv"
+  MAINARGS=(--out "$OUT" --suffix "$RSUF")
+  GUARDS="artifacts/eda/private/stage2/guards_s033n.json"
+  PRIVF="artifacts/eda/private/orient_check"
+  mkdir -p "$PRIVF"
+fi
 
 # 0. build of the primary-line file without second stage: test side complete, all guards (q397m3, 397B, M3 draws, note guard), blend file and output file byte-identical
 echo "== 0. primary-line file without second stage (tools/builds/s029_q397m3.sh best) =="
@@ -56,6 +82,7 @@ bash tools/builds/s029_q397m3.sh best || { rc=$?; echo "ABORT: build of the prim
 # 1. checksums
 echo "== 1. checksums =="
 check "$REF_BASE_SHA" "$REF_BASE"
+if [ "$ORIENT" = repro ]; then check "$REF_BASE_OLD_SHA" "$REF_BASE_OLD"; check "$LEGACY_OUT_SHA" "$LEGACY_OUT"; fi
 check "$STACK_BASE_SHA" "$STACK_BASE"
 for d in 1 2 3; do check "${NOTES_SHA[$((d - 1))]}" "data/derived/sft/m3_d${d}_test_frozen_notes.jsonl"; done
 
@@ -101,7 +128,8 @@ fi
 check "$STAGE2_SHA" "$STAGE2"
 
 # shared sources of the test side (as in tools/builds/s029_q397m3.sh)
-SRC=(--test "v1r=v1rot_t4/rot_test/test@derived/orient/test_c80_rows.npy" --fill "v1r=v1" --test "v1=v1te_a_t4/v1_test_a/test+v1te_b_t4/v1_test_b/test"
+[ "$ORIENT" = repro ] && { python -I tools/orient_list.py check --mode repro --spec "$V1R_TEST" || exit $?; }
+SRC=(--test "$V1R_TEST" --fill "v1r=v1" --test "v1=v1te_a_t4/v1_test_a/test+v1te_b_t4/v1_test_b/test"
      --test "zs27q=zs27q_test0_rp/zs27q_test0/test+zs27q_test1_rp/zs27q_test1/test" --fill "think18nb=zs27q"
      --test "think18nb=zs27v_te_rp/think_te/test/think@derived/think_rows/test.npy,zs27v_n3_rp/think_nte/test/think@derived/think_rows/test_tb_q.npy"
      --proto "pr27xm=runs/pr27te_rp/proto_te/proto" --rank "pr27xm=runs/n1_rp/rank_test/test"
@@ -111,11 +139,10 @@ SRC=(--test "v1r=v1rot_t4/rot_test/test@derived/orient/test_c80_rows.npy" --fill
 ms() { PYTHONDONTWRITEBYTECODE=1 python -I tools/make_submission.py "$@" 2>&1 | grep -vi '^warning' | grep -E "SECOND STAGE|note guard|written|ABORT|Traceback|Error|--stage2" | cut -c1-320; return "${PIPESTATUS[0]}"; }
 
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/s032_stage2.XXXXXX")"
-OUT="artifacts/submissions/sub_${STEM}.csv"
 BAK=""
 cleanup() {
   rm -rf -- "${TMP:?}"
-  rm -f -- "artifacts/test_s029_best_q397m3_null_a.npy" "artifacts/test_${STEM}_base.npy" "artifacts/test_${STEM}_null_b.npy"
+  rm -f -- "artifacts/test_s029_best_q397m3_null_a${RSUF}.npy" "artifacts/test_${STEM}_base${RSUF}.npy" "artifacts/test_${STEM}_null_b${RSUF}.npy"
   [ -n "$BAK" ] && rm -rf -- "$BAK"
   return 0
 }
@@ -125,25 +152,25 @@ trap cleanup EXIT
 echo "== 5. copy null points =="
 python -I eda/c118_stage2.py null --stack s029_best_q397m3 --out "$TMP/null_a.json" >/dev/null
 python -I eda/c118_stage2.py null --stack "$STEM" --out "$TMP/null_b.json" >/dev/null
-ms --name s029_best_q397m3 "${SRC[@]}" --out "$TMP/sub_null_a.csv" --suffix _null_a --stage2 "$TMP/null_a.json" --stage2-report "$TMP/guards_null_a.json" \
+ms --name s029_best_q397m3 "${SRC[@]}" --out "$TMP/sub_null_a.csv" --suffix "_null_a${RSUF}" --stage2 "$TMP/null_a.json" --stage2-report "$TMP/guards_null_a.json" \
   || { echo "ABORT: null point (a) not computed" >&2; exit 4; }
 check "$REF_BASE_SHA" "$TMP/sub_null_a.csv"
 echo "  null point (a): weight 0 + β 0.2 -> $(basename "$REF_BASE") byte-identical (${REF_BASE_SHA:0:16}…)"
-ms --name "$STEM" "${SRC[@]}" --out "$TMP/sub_base.csv" --suffix _base || { echo "ABORT: file without second stage not computed" >&2; exit 4; }
-ms --name "$STEM" "${SRC[@]}" --out "$TMP/sub_null_b.csv" --suffix _null_b --stage2 "$TMP/null_b.json" --stage2-report "$TMP/guards_null_b.json" \
+ms --name "$STEM" "${SRC[@]}" --out "$TMP/sub_base.csv" --suffix "_base${RSUF}" || { echo "ABORT: file without second stage not computed" >&2; exit 4; }
+ms --name "$STEM" "${SRC[@]}" --out "$TMP/sub_null_b.csv" --suffix "_null_b${RSUF}" --stage2 "$TMP/null_b.json" --stage2-report "$TMP/guards_null_b.json" \
   || { echo "ABORT: null point (b) not computed" >&2; exit 4; }
 cmp -s "$TMP/sub_base.csv" "$TMP/sub_null_b.csv" || { echo "ABORT: null point (b) violated — weight 0 changes the file" >&2; exit 4; }
-cmp -s "artifacts/test_${STEM}_base.npy" "artifacts/test_${STEM}_null_b.npy" || { echo "ABORT: null point (b) violated — test matrix" >&2; exit 4; }
+cmp -s "artifacts/test_${STEM}_base${RSUF}.npy" "artifacts/test_${STEM}_null_b${RSUF}.npy" || { echo "ABORT: null point (b) violated — test matrix" >&2; exit 4; }
 echo "  null point (b): weight 0 + β $(python -I -c "import json;print(json.load(open('$STACK'))['arith_beta'])") -> file without second stage byte-identical (CSV and test matrix; $(sha256sum "$TMP/sub_base.csv" | cut -c1-16)…)"
 
 # 6. main file (guards of the second stage; guard (c) violated -> no file, exit 5)
 echo "== 6. main file with second stage =="
 if [ -f "$OUT" ]; then  # replace only by a byte-identical rebuild
   BAK="$(mktemp -d "${TMPDIR:-/tmp}/s032_stage2_backup.XXXXXX")"
-  for F in "$OUT" "${OUT%.csv}.json" "artifacts/test_${STEM}.npy"; do [ -f "$F" ] && cp -p "$F" "$BAK/"; done
+  for F in "$OUT" "${OUT%.csv}.json" "artifacts/test_${STEM}${RSUF}.npy"; do [ -f "$F" ] && cp -p "$F" "$BAK/"; done
 fi
 rm -f "$GUARDS"
-if ! ms --name "$STEM" "${SRC[@]}" --stage2 "$STAGE2" --stage2-report "$GUARDS"; then
+if ! ms --name "$STEM" "${SRC[@]}" --stage2 "$STAGE2" --stage2-report "$GUARDS" "${MAINARGS[@]}"; then
   if [ -f "$GUARDS" ] && python -I -c "import json,sys;sys.exit(1 if json.load(open('$GUARDS'))['guard_changed_top']['ok'] else 0)"; then
     echo "ABORT: guard (c) of the second stage violated (statistics in $GUARDS) — no file" >&2; exit 5
   fi
@@ -153,16 +180,17 @@ fi
 if [ -n "$BAK" ] && [ -f "$BAK/$(basename "$OUT")" ]; then
   if ! cmp -s "$OUT" "$BAK/$(basename "$OUT")"; then
     for F in "$OUT" "${OUT%.csv}.json"; do [ -f "$BAK/$(basename "$F")" ] && cp -p "$BAK/$(basename "$F")" "$F"; done
-    [ -f "$BAK/test_${STEM}.npy" ] && cp -p "$BAK/test_${STEM}.npy" "artifacts/test_${STEM}.npy"
+    [ -f "$BAK/test_${STEM}${RSUF}.npy" ] && cp -p "$BAK/test_${STEM}${RSUF}.npy" "artifacts/test_${STEM}${RSUF}.npy"
     echo "ABORT: rebuild differs from the existing $OUT — backup restored, investigate the cause" >&2; exit 4
   fi
   echo "  existing $OUT rebuilt byte-identically"
 fi
+[ "$ORIENT" = repro ] && { python -I tools/orient_list.py verify-sub --mode repro "${OUT%.csv}.json" || exit $?; }
 
 # 7. check of the file and comparison (aggregates only)
 echo "== 7. check and comparison =="
 check "$REF_BASE_SHA" "$REF_BASE"
-python -I - "$OUT" "$REF_BASE" "$TMP/sub_base.csv" "$GUARDS" <<'PY'
+python -I - "$OUT" "$REF_BASE" "$TMP/sub_base.csv" "$GUARDS" "$REF_BASE_LABEL" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -189,7 +217,7 @@ def read(p):
 
 
 new = read(sys.argv[1])
-for path, label in ((sys.argv[2], "file without second stage (β 0.2)"), (sys.argv[3], "file without reranker (new β)")):
+for path, label in ((sys.argv[2], sys.argv[5]), (sys.argv[3], "file without reranker (new β)")):
     ref = read(path)
     b = new.loc[ref.index]
     print(f"  against {label}: different top code in {(ref.str.split().str[0] != b.str.split().str[0]).mean():.4f} of the rows, "
@@ -202,5 +230,14 @@ print(f"  guard (c): new top code from the reranker {gc['test']:.4f} (OOF {gc['o
       f"{'ok' if gc['ok'] else 'VIOLATED'}; (b) \"new for the task\" among the first 5: test {gn['test']:.4f}, OOF {gn['oof']:.4f}; "
       f"first three changed test {g['share_top3_changed']:.4f}, OOF {float(g['share_top3_changed_oof'] or 0.0):.4f}")
 PY
+if [ "$ORIENT" = repro ]; then  # legacy-list file unchanged; difference from it only as aggregates (split by the rows whose list membership differs)
+  check "$LEGACY_OUT_SHA" "$LEGACY_OUT"
+  python -I tools/orient_list.py compare "$LEGACY_OUT" "$OUT" --label "reranker fallback form, first-version rotation list" --json "$PRIVF/compare_s033n_vs_s033.json"
+fi
 sha256sum "$STACK" "$STAGE2" "$OUT"
-echo "s032_stage2 best: $OUT built"
+if [ "$ORIENT" = repro ]; then
+  sha256sum "${OUT%.csv}.json" "artifacts/test_${STEM}${RSUF}.npy" "$GUARDS"
+  echo "s032_stage2 best (ORIENT=repro): $OUT built (reranker fallback form, released rotation list)"
+else
+  echo "s032_stage2 best: $OUT built"
+fi

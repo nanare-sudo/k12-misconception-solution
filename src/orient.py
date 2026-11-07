@@ -1,6 +1,6 @@
 """Orientation network for uprighting rotated photos: images → ink maps → network → orientation → rotation lists.
 
-Reproducible version of the self-supervised network of the first orientation analysis (`eda/i5_06_orientation.py cnn`). The
+Reproducible version of the self-supervised network of the first orientation analysis (a development script, not included). The
 first version is not repeatable: its shift augmentation drew from the unseeded global `np.random`, and the weights were never
 saved — only its predictions (`artifacts/eda/private/i5_rot_cnn_pred.parquet`) and the lists derived from them
 (`data/derived/orient/*_c50*`, `*_c80*`) remain.
@@ -72,7 +72,7 @@ PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 
 @dataclass(frozen=True)
 class TrainConfig:
-    """Recipe of the first version (eda/i5_06_orientation.py cmd_cnn), plus seed, threads and prediction batch."""
+    """Recipe of the first version (development script, not included), plus seed, threads and prediction batch."""
 
     seed: int = 0
     epochs: int = 12

@@ -1,6 +1,6 @@
 # Results
 
-*Status: 2026-11-01 (version 0). Cross-validated (CV) values are out-of-fold MAP@3 on the 1,500 labelled rows; "±" is
+*Status: 2026-11-07 (version 0.2). Cross-validated (CV) values are out-of-fold MAP@3 on the 1,500 labelled rows; "±" is
 the standard error of a paired difference from a bootstrap over questions. The measurement forms (per fold, without the
 last step, as one set) are defined in [VALIDATION.md](VALIDATION.md#4-three-measurement-forms). Public leaderboard values
 come from 1,000 test rows and are reported as observations only; the private leaderboard (2,498 rows) decides the
@@ -19,17 +19,50 @@ competition. Final scores will be added after the competition closes.*
 
 ## 1. Headline results
 
-| Line | CV per fold | CV without last step | CV as one set | Public LB |
+| Line and form | CV per fold | CV without last step | CV as one set | Public LB |
 |---|---:|---:|---:|---:|
-| Primary line, reranker main form (candidate) | 0.83756 | 0.83011 | 0.83456 | not submitted |
-| Primary line, reranker fallback form (submitted 2026-10-31) | 0.83556 | 0.82989 | 0.83378 | 0.84033 |
+| **Primary line, final form: I1 form with the minor-code × mechanical-match column** (current primary candidate) | 0.84089 | 0.83433 | 0.83978 | 0.84100 |
+| Primary line, I1 form: guard form with row × candidate interactions | 0.84078 | 0.83322 | 0.83867 | 0.84150 |
+| Primary line, guard form: reranker main form with NONE guard and general-code identifiers | 0.83889 | 0.83522 | 0.83767 | 0.84200 |
+| Primary line, reranker main form | 0.83756 | 0.83011 | 0.83456 | 0.84166 |
+| Primary line, reranker fallback form ¹ | 0.83556 | 0.82989 | 0.83378 | 0.84033 |
 | Primary line before the reranker (same channels, β = 0.2) | 0.83267 | 0.81844 | 0.82533 | 0.83616 |
-| Strictly inductive line (submitted 2026-10-31) | 0.81844 | — | — | 0.82966 |
+| **Safety line, alignment over the test set, reranker with interactions (variant b)** (current safety candidate) ³ | 0.82778 | 0.82411 | 0.82167 | 0.83516 |
+| Safety line, alignment over the test set, reranker without interactions (variant a) ³ | 0.82556 | 0.82267 | 0.82122 | — |
+| Safety line, strictly inductive form with second stage and NONE guard (fallback) | 0.82333 | — | — | 0.83183 |
+| Safety line, strictly inductive form without second stage | 0.81844 | — | — | 0.82966 |
 | Best single model: M3, mean of three draws | 0.8020 | — | — | — |
 
-- The main form of the reranker gains +0.0020 ± 0.0014 per fold, +0.0002 ± 0.0019 without the last step and
-  +0.0008 ± 0.0016 as one set over the fallback form.
-- The primary line is about 0.017 ahead of the inductive line in CV; the row-level correlation of the two lines is 0.91.
+¹ With the reranker always applied, as deployed. With the nested abstention gate the fallback form scores 0.8341 per fold
+and 0.8317 as one set.
+
+—: the strictly inductive form is evaluated per fold, which matches its deployment with fixed weights per row; in the
+other forms only the gain of its second stage is reported ([VALIDATION.md](VALIDATION.md#54-validation-of-the-second-stage-components)).
+The single model has no last step.
+
+³ With the nested abstention gate and the NONE guard, as the pre-registered rule of the safety line is written; its
+deployment form is as one set. The deployment fit on all 1,500 rows does not abstain.
+
+- **Minor-code × mechanical-match column** over the I1 form: per fold +0.0001 ± 0.0005, as one set +0.0011 ± 0.0006,
+  ½(F+M) +0.0006 against a placebo mean of −0.0001; over 20 new meta-splits +0.0005 ± 0.0001, positive in 19 of 20.
+- **Row × candidate interactions** over the guard form: per fold +0.0019 ± 0.0011, as one set +0.0010 ± 0.0010, ½(F+M)
+  +0.0014 against a placebo mean of +0.0004; over 20 new meta-splits +0.0011 ± 0.0002, positive in 18 of 20.
+- **Safety line, alignment over the test set:** over 20 new meta-splits variant a lies +0.0007 ± 0.0002 above the
+  strictly inductive form with second stage (16 of 20 positive), and variant b +0.0007 ± 0.0001 above variant a. On the
+  original meta-split the CV part of the pre-registered condition was missed by one sixth in 9,000 and overridden by a
+  recorded decision ([METHOD.md](METHOD.md#99-second-stage-of-the-safety-line-with-alignment-over-the-test-set-final-safety-candidate)).
+  The test-side class masses after the alignment lie at L1 0.028 from the target, against 0.087 with the inductive
+  alignment.
+- **NONE guard and general-code identifiers** over the main form: +0.0013 ± 0.0014 per fold and +0.0031 ± 0.0015 as one
+  set (+0.0051 ± 0.0016 without the last step, reported only). Over 80 new meta-splits: +0.0016 per fold and +0.0014 as
+  one set. The robust part is the NONE guard (+0.0010, positive in 80 of 80 meta-splits); the identifiers add +0.0004.
+- **Main form** over the fallback form: +0.0020 ± 0.0014 per fold, +0.0002 ± 0.0019 without the last step,
+  +0.0008 ± 0.0016 as one set.
+- **Second stage with NONE guard in the inductive line:** +0.0049 ± 0.0022 per fold, positive in 40 of 40 new
+  meta-splits. The gain depends on the generated M3 texts; on the test side, whose M3 texts are independent draws,
+  +0.002 to +0.003 is expected
+  ([VALIDATION.md](VALIDATION.md#54-validation-of-the-second-stage-components)).
+- Per fold, the primary candidate is about 0.018 ahead of the strictly inductive form of the safety line.
 
 ## 2. How the solution was built
 
@@ -51,23 +84,35 @@ the recipe of the respective line, per fold unless noted.
 | 10-16 | Protocol channel with exact ranking behind its notes | 0.8096 (+0.0042 ± 0.0019) | 0.7952 (+0.0060 ± 0.0026) |
 | 10-18 | + M3, one draw | 0.8143 (+0.0048 ± 0.0039) | 0.8013 (+0.0061 ± 0.0043) |
 | 10-19 | M3 as the mean of two draws (600 rows) | 0.8169 → 0.8236 (+0.0067 ± 0.0039) | 0.7994 → 0.8075 (+0.0081 ± 0.0046) |
-| 10-24/25 | Arithmetic share β in the blend | +0.0019 ± 0.0016 (β = 0.2) | +0.0038 ± 0.0023 (β = 0.4) |
+| 10-24/25 | Arithmetic share β in the blend ² | +0.0019 ± 0.0016 (β = 0.2) | +0.0038 ± 0.0023 (β = 0.4) |
 | 10-26 | Blend weights fitted on all 1,500 rows | 0.81989 (+0.0007 ± 0.0018) | 0.81200 (+0.0003 ± 0.0023) |
 | 10-31 | M3 as the mean of three draws | 0.82522 (+0.0053 ± 0.0027) | 0.81844 (+0.0064 ± 0.0025) |
 | 10-31 | + 397B channel | 0.82922 (+0.0040 ± 0.0029) | not used |
 | 10-31 | 397B answers replaced by 397B notes named by M3 | 0.83267 (without last step −0.0033, as one set −0.0014) | — |
-| 10-31 | β = 0.6 and conditional-logit reranker (fallback form) | 0.83556; as one set 0.83378 | planned |
-| 11-01 | Reranker main form | 0.83756; as one set 0.83456 | — |
+| 10-31 | β = 0.6 and conditional-logit reranker (fallback form) | 0.83556; as one set 0.83378 | see 11-01 |
+| 11-01 | Reranker main form (widened note guard) | 0.83756; as one set 0.83456 | — |
+| 11-01 | Test side of `v1r` on the rotation list of the released orientation network | expected effect ±0.0005; training side unchanged | expected effect ±0.0005 |
+| 11-01 | NONE guard and general-code identifiers in the reranker | 0.83889; as one set 0.83767 (+0.0013 ± 0.0014 / +0.0031 ± 0.0015) | — |
+| 11-01 | Second stage with the features without notes, and NONE guard | — | 0.82333 (+0.0049 ± 0.0022) |
+| 11-06 | Row × candidate interactions in the reranker (expected-value rule) | 0.84078; as one set 0.83867 (½(F+M) +0.0014; 20 meta-splits +0.0011 ± 0.0002) | — |
+| 11-06 | Minor-code × mechanical-match column in the reranker | 0.84089; as one set 0.83978 (½(F+M) +0.0006; 20 meta-splits +0.0005 ± 0.0001) | — |
+| 11-06 | Alignment over the test set and second stage with interactions in the safety line | — | as one set 0.82167; over 20 meta-splits +0.0007 ± 0.0002 (a) and +0.0007 ± 0.0001 (b over a) |
+
+² Measured on 1,500 rows with one M3 draw. On the 600 rows that had two M3 draws at the time, the gains were +0.0017
+(β = 0.2) and +0.0056 (β = 0.4).
 
 Notes on the table:
 - The second M3 draw existed only for two folds at first, so its values use 600 rows (folds 1 and 2). From 2026-10-26
-  on, all values use all 1,500 rows. Values are comparable only within the same form; for example, 0.8236 (600 rows) and
-  0.81989 (1,500 rows) cannot be compared.
+  on, all values use all 1,500 rows. Values are comparable only within the same set of rows; for example, 0.8236
+  (600 rows) and 0.81989 (1,500 rows) cannot be compared.
 - The reasoning channel was the largest single gain. After it, the gains came from channels that add *different
-  knowledge*: the protocol channel without any labelled example, the fine-tuned reasoner M3 and the 397B model. The two
-  combination steps that were adopted, the arithmetic share and the reranker, were each worth a few thousandths.
+  knowledge*: the protocol channel without any labelled example, the fine-tuned reasoner M3 and the 397B model. The
+  combination steps that were adopted, the arithmetic share, the reranker and its NONE guard, were each worth a few
+  thousandths.
 - From 2026-10-24 the test side of the 9B scorer (and of `zs27t` in the inductive line) ran on Kaggle T4 GPUs without
   network access. The blend was unchanged; the top code changed on 1–2 % of test rows.
+- The switch to the released rotation list changes no CV value by construction: the training side of `v1r` and the blend
+  weights stay as they were ([METHOD.md](METHOD.md#61-released-rotation-list)).
 
 ## 3. Main submissions
 
@@ -99,14 +144,24 @@ Not every submission is listed. Dates are UTC.
 | 10-31 | primary | + 397B channel | 0.82922 (per fold) | 0.83383 |
 | 10-31 | primary | 397B answers → 397B notes named by M3 | 0.83267 (per fold); as one set −0.0014 against the previous file | 0.83616 |
 | 10-31 | primary | β = 0.6 and reranker (fallback form) | 0.83556 (per fold) / 0.83378 (as one set) | 0.84033 |
-| built | primary | Reranker main form | 0.83756 (per fold) / 0.83456 (as one set) | — |
+| 11-01 | primary | Reranker main form (widened note guard); released rotation list | 0.83756 (per fold) / 0.83456 (as one set) | 0.84166 |
+| 11-01 | primary | + NONE guard and general-code identifiers | 0.83889 (per fold) / 0.83767 (as one set) | 0.84200 |
+| 11-01 | inductive | Second stage with the features without notes, and NONE guard; released rotation list | 0.82333 (per fold) | 0.83183 |
+| 11-06 | primary | + row × candidate interactions in the reranker | 0.84078 (per fold) / 0.83867 (as one set) | 0.84150 |
+| 11-06 | primary | + minor-code × mechanical-match column | 0.84089 (per fold) / 0.83978 (as one set) | 0.84100 |
+| 11-07 | safety | Alignment over the test set, second stage with interactions and NONE guard | 0.82167 (as one set, with gate) | 0.83516 |
 
 Other calibration points: the 27B model fine-tuned code-first scored 0.71716 on the public leaderboard with the task block
 and 0.69916 without it. The channels of the inductive line combined with the transductive alignment scored 0.82750.
 
-Differences between consecutive submissions of about ±0.005 are within the paired noise of the public leaderboard.
-Several steps with a clear CV gain show a smaller or even negative public difference, and the reverse also happens. No
-variant was chosen by its public score.
+Differences between consecutive submissions of about ±0.003 to ±0.005 are within the paired noise of the public
+leaderboard. Several steps with a clear CV gain show a smaller or even negative public difference, and the reverse also
+happens. The three files of 2026-11-01 differed from their predecessors by +0.0013, +0.0003 and +0.0022 on the public
+leaderboard, against CV expectations of about +0.0010, +0.0013 to +0.0016 and +0.002 to +0.003. The three files of
+2026-11-06/07 differed by −0.0005 (interactions; 26 test rows with another top code), −0.0005 (mechanical-match column;
+6 rows) and +0.0033 (safety line with alignment over the test set; 70 rows), against CV expectations of about +0.001,
++0.0005 and +0.003 (the last from the better-calibrated test-side class masses). None of these differences is
+interpreted. No variant was chosen by its public score.
 
 ## 4. Single channels and their contribution
 
@@ -122,13 +177,14 @@ variant was chosen by its public score.
 | 27B fine-tuned code-first with task block (not used) | 0.7280 |
 | M3, draws d1 / d2 / d3 | 0.7621 / 0.767 / 0.7701 |
 | M3, mean of two / three draws | 0.7891 / 0.8020 |
-| 397B protocol answers / 397B notes named by M3 (`q397m3`) | ≈ 0.744 / 0.7442 |
+| 397B protocol answers / 397B notes named by M3 (`q397m3`) | 0.7432 / 0.7442 |
 | Teacher model on all 1,500 rows (measurement only, not a channel) | ≈ 0.77 |
 
 **Leave-one-out contribution.** This is the loss when one channel is removed and the blend is refitted. It was measured
 in an earlier version of the primary line, which had M3 with two draws plus the 397B answers and reached 0.82811. The
-current recipe differs slightly. A small leave-one-out value means that the channel's information overlaps with other
-channels, not that the channel is useless.
+values marked "inductive line" come from the inductive recipe of that time with the 397B answers added as a sixth
+channel (0.82067), a variant that was never deployed. The current recipes differ slightly. A small leave-one-out value
+means that the channel's information overlaps with other channels, not that the channel is useless.
 
 | Channel removed | Δ MAP@3 | Δ LogLoss |
 |---|---:|---:|
@@ -154,26 +210,32 @@ A null result holds only for the role and form in which it was measured. The tab
 | Longer M3 generation (5,200 instead of 3,200 tokens), single draw | Channel | −0.0044 ± 0.0131; averaging draws is what helps |
 | Fourth M3 draw | Blend member | No gain (K = 4: 0.8247 against K = 3: 0.8252) |
 | Alternative M3 targets (rationalisations of the gold code; "read first" targets) | M3 targets | No clean targets / −0.029 on one fold |
-| Test-time augmentation for M3 (higher photo resolution for small handwriting) | Extra draw | Pilot below its pre-registered threshold; behaves like an ordinary additional draw; not adopted |
+| Test-time augmentation for M3: photo upscaled to a long side of 1,536 px on the 459 training rows with the smallest handwriting | Extra draw | +0.0062 ± 0.0158 against an ordinary draw on the same rows, below the pre-registered threshold (+0.03 at z ≥ 1.5); it behaves like an ordinary additional draw |
 | Teacher task block for the reason-then-name channel | Prompt | With the block 0.684, without it 0.674 (difference −0.011 ± 0.015): almost no effect, so the inductive line loses little by omitting it |
 | Other model families as diagnosticians | Generator / extra channel | Gemma 4 31B −0.001 ± 0.006 as an extra channel; Inkling-Small (276B) −0.006 ± 0.005 |
 | 397B with longer thinking (+5,000 tokens) | Channel / blend | The correct candidate appears more often but is rarely chosen; blend about +0.001 to +0.003 (projection) |
 | Image statistics (brightness, sharpness, layout) as features | Extra features | −0.03; image-based gating or reranking no better than placebo |
 | Specialist OCR/HTR readers (PaddleOCR-VL, PP-FormulaNet, Uni-MuMER) | Reader | Number F1 0.70, below the 0.89 of the 27B's own transcription; no reader replacement |
 | Higher resolution or crops for reading | Reader input | No measurable gain for the tested reader |
+| Final-answer reader without the answer key (9B, no training) | Reranker feature next to the NONE guard | Passes its pre-registered first stage narrowly (missed errors 40 of 47, false alarms 22 of 35), but as a feature +0.0006 ± 0.0011 per fold and −0.0018 ± 0.0013 as one set, below the placebo 95 % quantile. Without the key the model reads the expected answer into wrong workings less often (3.7 % against 5.9 %), but on workings with a correct final answer it reads that answer correctly less often (−0.065 ± 0.016) |
 | Trained text verifier (cross-encoder) | Extra channel | −0.0019 to +0.0012; pre-registered gates missed |
+| Annotator-practice criteria (process versus object, stopped early, miscalculated, wrong operation, formula, no code fits), detected in the channel texts | Reranker features | Best set, selected among many tested feature sets, +0.0029 ± 0.0012 on the original meta-split (mean of the three forms), but +0.0008 over 40 new meta-splits and +0.0002 on top of the NONE guard and identifiers; half of the gain also appears with shuffled rows. The annotators' `NONE` and root rules are already followed by the channels |
+| Description at the annotators' level before naming (oracle setting: gold transcription, 376 error rows of two folds) | Text in front of the 27B namer | M3 notes 0.723–0.730; M3 answering targeted questions 0.722; a stronger closed API model answering the same questions on training rows 0.706; the annotators' own explanation 0.795. Differences against the M3 notes: −0.000 ± 0.009, −0.017 ± 0.017 and +0.064 ± 0.017. The remaining gap is knowledge of the code in the annotators' wording, which a description from the photo does not reach |
+| Psychology of error formation and labelling: error rules between the student's final answer and the key (sign, complement, reciprocal, powers of ten), repetition of the same error, strength of evidence and visible self-correction | Reranker features (oracles with gold transcriptions first) | Oracles +0.0002, +0.0004 and +0.0013, all below the pre-registered threshold of +0.004. Real error-rule signatures exist but are rare and fall on rows the line already solves; repeated errors carry general codes more often, not specific ones |
 | Pooling predictions over test rows of the same question | Extra channel (transductive) | +0.0013 ± 0.0014 / −0.0004; a planted control of +0.005 was detected, so the measurement could see a real effect |
 | Class transition matrix | Calibration | −0.011 to −0.014 |
 | Combination and calibration variants: temperature per channel, Dirichlet/vector calibration, kNN, gating, row-wise weights, separate `NONE` model, LambdaMART, tree rankers | Blend / second stage | At least 13 null results; temperature per channel down to −0.0041. Tree models could not detect even a planted +0.005 signal on 1,200 rows |
 | Residual head on hidden states | Channel | Worse than plain code scores in every form |
 | `OTH-00` as a hedge at rank 3 | Post-processing rule | −0.0022 ± 0.0013 |
+| A general code always at rank 2 | Post-processing rule | −0.0029 ± 0.0011 |
 | 397B notes named by M3, without the reranker | Channel replacement | Not robust across the measurement forms ([VALIDATION.md](VALIDATION.md#4-three-measurement-forms)) |
 | Rotation correction for the 27B channels | Input | No rotation penalty for these channels |
 
 ## 6. Error analysis
 
 Basis: the primary line with the reranker main form, measured as one set (MAP@3 0.83456, loss 1 − MAP@3 = 0.1654).
-Standard errors are bootstrapped over questions.
+Standard errors are bootstrapped over questions. The NONE guard and the identifiers of the current candidate change the
+top code of 1.3 % of the OOF rows and do not alter the picture.
 
 **By group**
 
@@ -198,41 +260,49 @@ Standard errors are bootstrapped over questions.
 
 **Findings**
 
-- **Rank of the gold class:** 1st in 76.3 % of rows, 2nd in 11.1 %, 3rd in 4.7 %, 4th–5th in 3.8 %, beyond 5th in
-  4.0 %.
-- **The final choice fails, not the candidate generation.**
-  - 86 % of the loss sits in rows where at least one channel has the gold code among its top 3.
-  - In only 19 rows (7.7 % of the loss) does no channel have it among its top 5.
-  - Where the gold code is at rank 2–3, the M3 notes mention it in 92.9 % of the misses.
-- **Naming practice.** In about half of the loss (53 %, 90 % range 44–61 %), the models locate the error correctly but
-  name it as the wording of the taxonomy suggests, not as the annotators' conventions would. This comes from a forensic
-  review of 71 cases; on 15 blindly re-judged cases the agreement was κ ≈ 0.88.
-- **Oracle bounds** with the channels held fixed. These are frames, not achievable gains:
-  - perfect order of the top 3: +0.087; of the top 5: +0.125;
-  - knowing whether the gold code is general or specific: +0.050;
-  - knowing the family (`NONE` / general / specific): +0.081;
-  - perfect `NONE` separation: +0.028.
-- **Hardest class.** `OTH-00`, the catch-all code: MAP@3 0.471, top 1 in 36 of 57 cases, 12.2 % of the loss.
-- **Calibration** of the blend probabilities before the second stage. Underconfident overall: expected 0.802 against
-  observed 0.829. Overconfident on never-seen codes: 0.695 against 0.648.
-- **Label limits.**
-  - The second sub-collection of the training data was labelled block by block by category, and the same error type
-    received different codes in different blocks; the largest such pair is `EXP-04` / `EXP-07`.
-  - Roughly 15–20 % of the loss looks irreducible with the available information. This is a rough estimate from
-    overlapping cells, not a bound.
-- **Open estimates.** The share of the loss caused by misreading the handwriting and by choosing the wrong root among
-  several findings is uncertain. Reviewers estimated reading at about 17 % (range 10–24 %); one analysis found no
-  evidence that reading is the missing information in the misses. The root choice was estimated at 4–12 %.
+- **The final choice fails, not the candidate generation.** The gold class is at rank 1 in 76.3 % of rows, at rank 2 in
+  11.1 %, at rank 3 in 4.7 % and further down in 7.9 %. 86 % of the loss sits in rows where at least one channel has the
+  gold code among its top 3; in only 19 rows (7.7 % of the loss) does no channel have it among its top 5. Where the gold
+  code is at rank 2–3, the M3 notes mention it in 92.9 % of the misses.
+- **Never seen for the question (65 % of the loss).** Without an example of the code for its question, channels with
+  question knowledge pull towards codes already seen for the question, and the blend is overconfident there: expected
+  0.695 against observed 0.648 (overall it is underconfident, 0.802 against 0.829).
+- **General versus specific (54 % of the loss, all directions).** In about half of the loss (53 %, 90 % range 44–61 %)
+  the models locate the error correctly but name it as the wording of the taxonomy suggests, not as the annotators'
+  conventions would; this comes from a forensic review of 71 cases, with κ ≈ 0.88 on 15 blindly re-judged cases. The
+  annotators justify the choice consistently (general codes describe the process, specific codes the mathematical
+  object), but assign general codes inconsistently: comparable workings receive the same code in 0.83 of pairs for
+  specific codes and in 0.53 for general codes.
+- **`NONE` versus error (22 % of the loss).** In practice `NONE` follows the correctness of the final answer, so these
+  errors are mostly misjudged final answers. The reranker has no feature for this (the minor-code × mechanical-match
+  column of the final primary form only concerns minor-severity candidates); the NONE guard therefore leaves `NONE`
+  decisions to the blend.
+- **Reading (about 17 % of the loss, range 10–24 %; the split into subtypes is uncertain).** Reading the expected
+  answer from the key into a wrong working (4–6 %), layout such as fractions, stacked columns or division ladders
+  (about 4 %), and misread characters (5–7 %). Neither upscaling the photo for small handwriting nor a final-answer
+  reader without the key turned this into a gain (§5).
+- **Hardest class.** `OTH-00`, the catch-all code: MAP@3 0.471, 12.2 % of the loss. The gold `OTH-00` is at rank 1 in
+  17 of its 57 rows; the line puts `OTH-00` first in 36 rows.
+- **Label limits.** The second sub-collection of the training data is ordered by category, one block per code.
+  Comparable workings receive the same code in 0.83 of pairs for specific codes but only in 0.53 for general codes, and
+  some specific pairs (for example `EXP-04` / `EXP-07`) are hard to separate; whether this depends on the labelling
+  block cannot be determined, because the block coincides with the label. How much of the loss is irreducible with the
+  available information is uncertain: an estimate from overlapping cells of this analysis gives roughly 15–20 %, an
+  estimate from the consistency of the code assignment about 45 % (range 19–75 %); neither is a bound. The choice of
+  the root among several findings accounts for an estimated 4–12 %.
+- **Oracle bounds** with the channels held fixed. These are frames, not achievable gains: perfect order of the top 3
+  +0.087, of the top 5 +0.125; knowing whether the gold code is general or specific +0.050; knowing the family (`NONE` /
+  general / specific) +0.081; perfect `NONE` separation +0.028.
 
 ## 7. Compute and cost
 
 | Resource | Use | Amount (order of magnitude) |
 |---|---|---|
-| Rented GPUs (RunPod Secure Cloud) | Training on A40 (48 GB) and RTX PRO 6000 (96 GB); 27B inference on RTX PRO 6000; 397B test side on 4×H200 | ≈ 400–450 USD; mostly RTX PRO 6000 (≈ 118 h) and A40 (≈ 95 h) |
-| Anthropic API | Teacher pool labels (≈ 31 USD), teacher measurements on training rows, one rationale experiment | ≈ 41 USD |
+| Rented GPUs (RunPod Secure Cloud) | Training on A40 (48 GB) and RTX PRO 6000 (96 GB); 27B inference on RTX PRO 6000; 397B test side on 4×H200 | ≈ 400–450 USD; mostly RTX PRO 6000 (≈ 120 h) and A40 (≈ 95 h) |
+| Anthropic API | Teacher pool labels (≈ 31 USD), teacher measurements on training rows, a rationale experiment and a description experiment on training rows | ≈ 43 USD |
 | Tinker API | Open-model measurements on training rows, including the training side of the 397B channel | ≈ 63 USD |
-| Kaggle (free GPU quota) | T4×2: offline inference of the 9B scorer and the 4-bit 27B, second-hardware checks | within the weekly free quota |
-| Local machine | 8-core CPU, 15 GB RAM, no GPU: blending, second stage, analysis, assembly | — |
+| Kaggle (free GPU quota) | T4×2: offline inference of the 9B scorer and the 4-bit 27B, second-hardware checks, the key-free reader probe on training rows | within the weekly free quota |
+| Local machine | 8-core CPU, 15 GB RAM, no GPU: blending, second stages, analysis, assembly | — |
 | **Total paid** | | **≈ 0.5 kUSD** |
 
 Per-component run times are listed in [TRAINING.md](TRAINING.md) and [INFERENCE.md](INFERENCE.md).

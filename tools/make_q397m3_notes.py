@@ -15,7 +15,7 @@ SOURCES
             quantiles and checksums.
 
 NOTES per row = the THINKING of the first pass, exactly as for the pr27 notes that M3 was trained on
-(tools/export_proto_notes.py -> vlm/proto.rank_notes): without the answer text (the JSON names the codes of the 397B — the
+(export of the protocol notes with vlm/proto.rank_notes): without the answer text (the JSON names the codes of the 397B — the
 ranking behind it would merely copy it), without thinking markers, without surrounding whitespace, at most the last
 16,000 characters. Tinker records that stopped at the token limit carry the raw text under `text` (thinking empty):
 tools/open_teacher.tinker_split splits at the end of the thinking block, an answer text started after it is dropped — just
@@ -27,7 +27,7 @@ FORMAT as in vlm/sft.generate and tools/freeze_m3_texts.py (<tag>_notes.jsonl, r
     {"table", "row", "state": "open" | "empty", "text": notes, "finding": null, "q397_state": <recorded label, see RECORDED_STATE>}
 finding = null: M3 writes its finding in the ranking ITSELF (runner._sft_finish, greedy up to "Root:", finish_tokens)
 and then scores all codes exactly behind "NOTES\\n</think>\\n\\nFinding: FINDING\\nRoot:" (vlm/sft.rank_prefix).
-q397_state (label-free, evaluation only; as in tools/export_proto_notes.note_state): complete = first pass ended regularly,
+q397_state (label-free, evaluation only; as in the protocol-notes export): complete = first pass ended regularly,
 draft = stopped, but the note already names "root_code", open = stopped before the verdict; missing = no record (only with
 --allow-missing; then empty text and state "empty": M3 decides there without a 397B note). The field stores the recorded label
 of the state (RECORDED_STATE).
@@ -61,8 +61,8 @@ sys.path[:0] = [str(COMP), str(COMP / "src")]
 
 from vlm import proto as PR  # noqa: E402
 
-MARKS = re.compile(r"</?think>|<\|[^|<>\n]{1,40}\|>")  # as in tools/export_proto_notes.py
-NOTE_CHARS = 16000  # as in export_proto_notes (--note-chars) and the finishing pass of the protocol
+MARKS = re.compile(r"</?think>|<\|[^|<>\n]{1,40}\|>")  # as in the export of the protocol notes
+NOTE_CHARS = 16000  # as in the export of the protocol notes and the finishing pass of the protocol
 TOKEN_CAP = 2500  # note limit of the M3 training (sft_notes_max_tokens) — statistic only, nothing is truncated
 TINKER_DIR = Path("derived") / "open_teacher" / "qwen35-397b"  # relative to the data root
 TINKER_LABELS_SHA256 = "6935614248a22da250054dd14b180fc5875832ddba7afc49c4b3da0337503280"  # = eda/c110_q397_deploy.TINKER_SHA256
@@ -76,7 +76,7 @@ M3_NOTES = {
            ("m3_f034_rp", "m3_gen_f4")],
     "d3": [("m3d3_oof_rp", f"m3d3_gen_f{k}") for k in range(5)],
 }
-PR27_NOTES = Path("derived") / "proto_notes" / "train_pr27.jsonl"  # notes of the M3 training targets (tools/make_sft_targets.py)
+PR27_NOTES = Path("derived") / "proto_notes" / "train_pr27.jsonl"  # notes of the M3 training targets (frozen input)
 QUANTS = (5, 25, 50, 75, 90, 95, 100)
 # State of a note (field q397_state) -> label recorded in the note files. The labels are the ones the note files were written
 # with (short German words); the note files are model inputs pinned by checksum, so the labels are kept as recorded.
@@ -147,7 +147,7 @@ def note_of(thinking: str, note_chars: int = NOTE_CHARS) -> tuple[str, bool]:
 
 
 def q397_state(rec: dict | None, note: str) -> str:
-    """Label-free state of the note as in tools/export_proto_notes.note_state (complete / draft / open; missing without a
+    """Label-free state of the note as in the protocol-notes export (complete / draft / open; missing without a
     record), returned as its recorded label (RECORDED_STATE)."""
     if rec is None:
         return RECORDED_STATE["missing"]

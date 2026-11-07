@@ -203,7 +203,7 @@ def only_rows(idx: np.ndarray, sel: dict, data_root=None) -> np.ndarray:
     """`only: <file.npy>`: restrict the row selection to the table positions of this file (path relative to the data folder).
 
     For cascades: an expensive job computes only the rows that a cheap channel has not already decided
-    (eda/c7_think_gate.py writes the file). It contains positions in the WHOLE table, no contents; it acts before
+    (a gate list as written by tools/replay/gates.py). It contains positions in the WHOLE table, no contents; it acts before
     `sample`, `limit` and `shard`.
     """
     if not sel.get("only"):
@@ -380,7 +380,7 @@ class ProbeRunner:
         return n_ex
 
     def check_sft_prompt_tokens(self, df, idx, split: str, served: dict[int, int]) -> tuple[int, int]:
-        """Examples variant, fidelity as in eda/c48_proto_fidelity.py: input tokens counted by the vLLM server during
+        """Examples variant, prompt fidelity: input tokens counted by the vLLM server during
         generation (`served`, sft.load_prompt_tokens) against the length of the SAME prompt on the in-house path
         (chat template and processor, without answer prefix). -> (equal, checked); rows without a server count
         (generated on the in-house path) do not count."""
@@ -906,7 +906,7 @@ def run_job(job: dict, cfg: dict, out_root: Path, device: str) -> dict:
     def use_analyses(runner) -> None:
         runner.analysis = analyses
 
-    # Notes of the protocol channel for the probe proto_rank (`proto_from: <file.jsonl>` from tools/export_proto_notes.py,
+    # Notes of the protocol channel for the probe proto_rank (`proto_from: <file.jsonl>`, the frozen notes export,
     # path relative to the data folder). Like proto_gen, the probe has no question knowledge.
     proto_notes = None
     if job.get("proto_from"):
@@ -1143,7 +1143,7 @@ def run_job(job: dict, cfg: dict, out_root: Path, device: str) -> dict:
 
     elif kind == "train" and "proto_sft" in tuple((job.get("train") or {}).get("tasks", ())):
         # M3 (vlm/sft.py): fine-tuning in the teacher protocol; training targets only from rows of the other folds
-        # (tools/make_sft_targets.py), no reference set, no examples, no probes in the job (measurement: merge ->
+        # (frozen target files), no reference set, no examples, no probes in the job (measurement: merge ->
         # sft_gen -> proto_rank with sft_from). Examples variant: with `sft_examples`, examples of the same question from gold rows (fold rule).
         from vlm import proto as _PR
         from vlm import sft as S

@@ -18,6 +18,23 @@ Form (fixed before the evaluation; it comes from the reranker family of the mode
     M3 notes d1–d3 (count 0–3, count of last mentions, length), row features (NONE mass, entropy, top probability,
     disagreement of the draws and of the channels, grade). No 397B note, no "q397 valid".
   * Feature set "fallback" (40): "main" without the three note features (used when the guard on the test notes fails).
+  * Feature set "main_guard" (48; named before its evaluation): "main" in unchanged order + identifiers of the five general
+    codes (id_<code> = 1 if the candidate is that code), appended at the end. It belongs to the NONE guard (protect_none): if the
+    base form has NONE at the top, the base order of the row stays. Not in FEATURE_SETS — the deployment files stage2_s032/s034 and
+    their build scripts iterate over FEATURE_SETS and stay bit-identical; a model of a deployment file names main_guard
+    explicitly (field feature_set).
+  * Feature set "main_guard_i1" (63; named before its evaluation): "main_guard" (48, unchanged, same order, bit-identical) + 15
+    interactions I1 at the end: for each row feature r in I1_ROW_FEATS (row_ent, row_max, row_d_ntop, row_ch_ntop, task_rows —
+    constant within a row and therefore without effect on their own in the conditional logit) and each candidate feature c in
+    I1_CAND_FEATS (f_logp, is_general, is_none) the product of the raw values X[r]·X[c] (r outer, c inner; standardised like all
+    features). Belongs to the NONE guard like main_guard. Not in FEATURE_SETS either. Knowledge features as in main_guard: test rows
+    from all 1,500 training rows, not rescaled (task_rows takes effect here for the first time).
+  * Feature set "fallback_i1" (55; variant b of the safety line with set alignment): "fallback" (40, unchanged, bit-identical) + the
+    same 15 interactions I1 at the end; reads no notes. Not in FEATURE_SETS.
+  * Feature set "main_guard_i1_mm" (64): "main_guard_i1" (63, bit-identical) + minor_x_mech27 at the end = 1[the candidate has the
+    default severity "minor" in the taxonomy] · mech27[row] (the final answer read by the pr27 channel matches the answer key
+    mechanically, src/answer_match.py). The caller attaches the row feature and the class mask to Static with attach_mech. Not in
+    FEATURE_SETS.
 
 KNOWLEDGE FEATURES: for training rows ONLY from reference rows of other folds — knowledge_other_folds; the row itself and
 its fold never count. For test rows from all training rows.
@@ -45,6 +62,16 @@ DRAWS = ("d1", "d2", "d3")
 KNOW_FEATS = ("task_count", "task_rows", "task_share", "novel_task", "topic_count", "topic_rows", "topic_share", "novel_topic", "glob")
 NOTE_FEATS = ("m3_men", "m3_last", "m3_len")
 FEATURE_SETS = ("main", "fallback")
+GUARD_SET = "main_guard"  # main + identifiers of the general codes; used together with the NONE guard (protect_none)
+GENERAL_ID_FEATS = tuple(f"id_{c}" for c in GENERAL_CODES)
+NONE_IDX = 0  # class order NONE + taxonomy (labels.load_classes): NONE is class 0
+I1_SET = "main_guard_i1"  # main_guard + 15 interactions row × candidate; used together with the NONE guard
+I1_ROW_FEATS = ("row_ent", "row_max", "row_d_ntop", "row_ch_ntop", "task_rows")  # constant within a row
+I1_CAND_FEATS = ("f_logp", "is_general", "is_none")
+I1_FEATS = tuple(f"{r}_x_{c}" for r in I1_ROW_FEATS for c in I1_CAND_FEATS)  # order: row feature outer, candidate feature inner
+FB_I1_SET = "fallback_i1"  # variant b of the safety line with set alignment: fallback + interactions I1, without notes
+MM_SET = "main_guard_i1_mm"  # main_guard_i1 + minor_x_mech27 (minor code × final answer matches the key mechanically)
+MM_FEATS = ("minor_x_mech27",)
 
 
 # ------------------------------------------------------------------------------------------------ building blocks
@@ -66,17 +93,56 @@ def candidates(FM: np.ndarray, seen: np.ndarray, Kc: int = K_CAND) -> np.ndarray
 
 def feature_names(chan_names: Sequence[str], feature_set: str = "main") -> list[str]:
     """Feature names in fixed order (= column order of pair_features)."""
-    if feature_set not in FEATURE_SETS:
+    if feature_set == I1_SET:  # main_guard unchanged + interactions I1 at the end
+        return feature_names(chan_names, GUARD_SET) + list(I1_FEATS)
+    if feature_set == FB_I1_SET:  # fallback unchanged + interactions I1 at the end
+        return feature_names(chan_names, "fallback") + list(I1_FEATS)
+    if feature_set == MM_SET:  # main_guard_i1 unchanged + minor_x_mech27 at the end
+        return feature_names(chan_names, I1_SET) + list(MM_FEATS)
+    if feature_set not in FEATURE_SETS and feature_set != GUARD_SET:
         raise ValueError(f"unknown feature set {feature_set!r}")
     out = ["f_logp", "f_rank", "f_gap", "f_p", "p_logp", "p_rank"]
     for nm in chan_names:
         if nm not in EXCLUDED_CHANNEL_FEATURES:
             out += [f"{nm}_logp", f"{nm}_rank"]
     out += ["n_ch_top1", "n_ch_top3", "d1_rank", "d2_rank", "d3_rank", "d_top1", "d_std", *KNOW_FEATS, "is_general", "is_none"]
-    if feature_set == "main":
+    if feature_set in ("main", GUARD_SET):
         out += list(NOTE_FEATS)
     out += ["row_none", "row_ent", "row_max", "row_d_ntop", "row_ch_ntop", "row_grade"]
+    if feature_set == GUARD_SET:
+        out += list(GENERAL_ID_FEATS)
     return out
+
+
+def uses_notes(feature_set: str) -> bool:
+    """Whether a feature set reads the M3 notes (main, main_guard, main_guard_i1, main_guard_i1_mm) — a fallback model must never do that."""
+    return feature_set in ("main", GUARD_SET, I1_SET, MM_SET)
+
+
+def attach_mech(st: "Static", mech27: np.ndarray, minor: np.ndarray) -> None:
+    """Row feature mech27 (per row of st, 0/1) and class mask minor (per class, 0/1) for the feature set main_guard_i1_mm."""
+    mech27, minor = np.asarray(mech27, dtype=np.float64), np.asarray(minor, dtype=np.float64)
+    if mech27.shape != (st.n,) or minor.shape != (st.K,):
+        raise ValueError(f"mech27 {mech27.shape} / minor {minor.shape} instead of ({st.n},) / ({st.K},)")
+    if not (np.isin(mech27, (0.0, 1.0)).all() and np.isin(minor, (0.0, 1.0)).all()):
+        raise ValueError("mech27 and minor must be 0/1")
+    st.mech27, st.minor = mech27, minor
+
+
+def i1_interactions(X: np.ndarray, names: Sequence[str], perm: np.ndarray | None = None) -> np.ndarray:
+    """The 15 interactions I1 from the raw values of a feature block with the columns `names` (main_guard or main_guard_i1): for each
+    row feature r (I1_ROW_FEATS, outer) and candidate feature c (I1_CAND_FEATS, inner) the product X[:, r] · X[:, c] in float64.
+    perm (placebo only): pair indices by which the row values r are permuted BEFORE the product (the candidate values stay). -> [len(X), 15]."""
+    X = np.asarray(X, dtype=np.float64)
+    names = list(names)
+    cols = []
+    for r in I1_ROW_FEATS:
+        rv = X[:, names.index(r)]
+        if perm is not None:
+            rv = rv[np.asarray(perm)]
+        for c in I1_CAND_FEATS:
+            cols.append(rv * X[:, names.index(c)])
+    return np.stack(cols, 1)
 
 
 # ------------------------------------------------------------------------------------------------ notes (counts only)
@@ -164,8 +230,9 @@ class Static:
         dt = np.stack([r.argmin(1) for r in dr], 1)
         self.d_ntop = np.array([len(set(t)) for t in dt], float)
         self.grade = np.asarray(grade, dtype=float)
+        self.general_idx = [list(classes).index(c) for c in GENERAL_CODES]
         self.is_general = np.zeros(self.K)
-        self.is_general[[list(classes).index(c) for c in GENERAL_CODES]] = 1.0
+        self.is_general[self.general_idx] = 1.0
         self.notes = None
         if notes is not None:
             self.notes = {"m3_men": np.asarray(notes["m3_men"]).astype(float), "m3_last": np.asarray(notes["m3_last"]).astype(float),
@@ -212,8 +279,30 @@ def pair_features(st: Static, rows: np.ndarray, FM: np.ndarray, PM: np.ndarray, 
     """Features per (row, candidate) -> X [len(rows)·Kc, f], candidates [len(rows), Kc], names.
     rows: positions of the rows in `st` (table); FM/PM: base form and blend before the last step of EXACTLY these rows;
     kn: knowledge(...) of EXACTLY these rows."""
+    if feature_set == MM_SET:  # main_guard_i1 bit-identical + minor_x_mech27 at the end (row feature and mask via attach_mech)
+        mech27, minor = getattr(st, "mech27", None), getattr(st, "minor", None)
+        if mech27 is None or minor is None:
+            raise ValueError(f"feature set {MM_SET} requires attach_mech (mech27 per row, minor per class)")
+        X, cand, names = pair_features(st, rows, FM, PM, kn, I1_SET, Kc)
+        rows = np.asarray(rows)
+        gi = rows[np.repeat(np.arange(len(rows)), Kc)]
+        col = mech27[gi] * minor[cand.reshape(-1)]
+        out_names = names + list(MM_FEATS)
+        want = feature_names(st.chan_names, MM_SET)
+        if out_names != want:
+            raise AssertionError(f"feature order {out_names} != {want}")
+        return np.concatenate([X, col[:, None]], 1), cand, out_names
+    if feature_set in (I1_SET, FB_I1_SET):  # base set bit-identical + interactions I1 at the end (the other sets unchanged)
+        X, cand, names = pair_features(st, rows, FM, PM, kn, GUARD_SET if feature_set == I1_SET else "fallback", Kc)
+        out_names = names + list(I1_FEATS)
+        want = feature_names(st.chan_names, feature_set)
+        if out_names != want:
+            raise AssertionError(f"feature order {out_names} != {want}")
+        return np.concatenate([X, i1_interactions(X, names)], 1), cand, out_names
     if feature_set == "main" and st.notes is None:
         raise ValueError("feature set main requires notes")
+    if feature_set == GUARD_SET and st.notes is None:
+        raise ValueError(f"feature set {GUARD_SET} requires notes")
     rows = np.asarray(rows)
     R = len(rows)
     cand = candidates(FM, st.seen, Kc)
@@ -258,7 +347,7 @@ def pair_features(st: Static, rows: np.ndarray, FM: np.ndarray, PM: np.ndarray, 
     add("glob", kn["glob"][cc])
     add("is_general", st.is_general[cc])
     add("is_none", (cc == 0).astype(float))
-    if feature_set == "main":
+    if feature_set in ("main", GUARD_SET):
         add("m3_men", st.notes["m3_men"][gi, cc])
         add("m3_last", st.notes["m3_last"][gi, cc])
         add("m3_len", st.notes["m3_len"][gi])
@@ -269,9 +358,12 @@ def pair_features(st: Static, rows: np.ndarray, FM: np.ndarray, PM: np.ndarray, 
     add("row_d_ntop", st.d_ntop[gi])
     add("row_ch_ntop", st.ch_ntop[gi])
     add("row_grade", st.grade[gi])
+    if feature_set == GUARD_SET:  # identifiers of the general codes (no row information), at the end
+        for nm, g in zip(GENERAL_ID_FEATS, st.general_idx):
+            add(nm, (cc == g).astype(float))
     want = feature_names(st.chan_names, feature_set)
     if names != want:
-        raise AssertionError(f"Merkmalsreihenfolge {names} != {want}")
+        raise AssertionError(f"feature order {names} != {want}")
     return np.stack(cols, 1), cand, names
 
 
@@ -327,6 +419,18 @@ def reorder(cand: np.ndarray, score: np.ndarray) -> np.ndarray:
     return np.take_along_axis(cand, order, 1)
 
 
+def protect_none(top: np.ndarray, cand: np.ndarray, none_idx: int = NONE_IDX) -> np.ndarray:
+    """NONE guard: if the base form has NONE at the top (cand[:, 0]) and the new order would change the top, the base order of the
+    whole row stays. Otherwise unchanged. -> new order [R, Kc]."""
+    top, cand = np.asarray(top), np.asarray(cand)
+    if top.shape != cand.shape:
+        raise ValueError(f"shape {top.shape} != {cand.shape}")
+    m = (cand[:, 0] == none_idx) & (top[:, 0] != none_idx)
+    out = top.copy()
+    out[m] = cand[m]
+    return out
+
+
 def map_rows(top: np.ndarray, y_rows: np.ndarray) -> np.ndarray:
     """MAP@3 per row from ordered candidates (the first three count) — the same gains as in metric."""
     return ((np.asarray(top)[:, :3] == np.asarray(y_rows)[:, None]) * GAINS[None, :]).sum(1)
@@ -342,15 +446,18 @@ def permute_labels(lab: np.ndarray, Kc: int, rng: np.random.Generator) -> np.nda
     return L.reshape(-1)
 
 
-def gate(blocks: Sequence[tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]], Kc: int = K_CAND, lam: float = LAMBDA) -> dict:
+def gate(blocks: Sequence[tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]], Kc: int = K_CAND, lam: float = LAMBDA,
+         protect: bool = False) -> dict:
     """Abstention gate: for every block a, fit on the other blocks and evaluate on a (true labels); pooled MAP@3 against the
-    base order of the same rows. blocks: [(X, target per pair, candidates, y of the rows)]. Abstain if not better."""
+    base order of the same rows. blocks: [(X, target per pair, candidates, y of the rows)]. Abstain if not better.
+    protect=True (main_guard only): the new order is evaluated AFTER the NONE guard (as applied); the default is unchanged."""
     got, base = [], []
     for a in range(len(blocks)):
         tr = [b for b in range(len(blocks)) if b != a]
         m = fit_clogit(np.concatenate([blocks[b][0] for b in tr]), np.concatenate([blocks[b][1] for b in tr]), Kc, lam)
         X, _, cand, yr = blocks[a]
-        got.append(map_rows(reorder(cand, scores(m, X, Kc)), yr))
+        top = reorder(cand, scores(m, X, Kc))
+        got.append(map_rows(protect_none(top, cand) if protect else top, yr))
         base.append(map_rows(cand, yr))
     inner, inner_base = float(np.concatenate(got).mean()), float(np.concatenate(base).mean())
     return {"inner": inner, "inner_base": inner_base, "abstain": bool(not (inner > inner_base + 1e-12))}
@@ -439,8 +546,8 @@ def guard_notes(ref: dict, test: dict, rel: float = 0.10, share_z_max: float | N
     pair against the pair's OWN training value; n = number of rows (also for the histogram levels). codes_per_row only uses the
     old band. Every check then additionally carries ok_band (old verdict), rule, ref, z, ok_z and passed_by ("band", "z" or None).
     Without share_z_max the return value is exactly that of the band rule."""
-    r_w2 = share_z_max is not None
-    if r_w2:
+    widened = share_z_max is not None
+    if widened:
         if n_ref is None or n_test is None or not (int(n_ref) > 0 and int(n_test) > 0 and float(share_z_max) > 0):
             raise ValueError("the widened rule requires share_z_max > 0, n_ref > 0 and n_test > 0")
         share_z_max, n_ref, n_test = float(share_z_max), int(n_ref), int(n_test)
@@ -451,7 +558,7 @@ def guard_notes(ref: dict, test: dict, rel: float = 0.10, share_z_max: float | N
     def add(stat: str, v: float, lo: float, hi: float, ref_value: float | None) -> None:
         ok = bool(lo <= v <= hi)
         c = {"stat": stat, "test": v, "lo": lo, "hi": hi, "ok": ok}
-        if r_w2:  # widen only: ok = old band OR binomial test (shares only)
+        if widened:  # widen only: ok = old band OR binomial test (shares only)
             z = None if ref_value is None else share_z(ref_value, n_ref, v, n_test)
             ok_z = None if z is None else bool(abs(z) <= share_z_max)
             c["ok"] = bool(ok or ok_z is True)
@@ -468,10 +575,10 @@ def guard_notes(ref: dict, test: dict, rel: float = 0.10, share_z_max: float | N
         add(f"mention_hist_top5[{b}]", v, lo, hi, r)
     lo, hi = band(list(ref["identical"].values()), rel)
     for pair, v in test["identical"].items():
-        if r_w2 and pair not in ref["identical"]:
+        if widened and pair not in ref["identical"]:
             raise ValueError(f"word-identical notes: pair {pair} missing from the reference")
-        add(f"identical[{pair}]", v, lo, hi, ref["identical"][pair] if r_w2 else None)
+        add(f"identical[{pair}]", v, lo, hi, ref["identical"][pair] if widened else None)
     out = {"checks": checks, "ok": bool(all(c["ok"] for c in checks)), "rel": rel}
-    if r_w2:
+    if widened:
         out.update({"rule": "widened", "share_z_max": share_z_max, "n_ref": n_ref, "n_test": n_test})
     return out

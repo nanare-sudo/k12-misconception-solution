@@ -5,22 +5,22 @@ channel outputs.
     python -I tools/replay/gates.py check [--table train test] [--line all|safe|best] [--sources a40|t4] [--json <file>]
     python -I tools/replay/gates.py write --out <folder> [--table …] [--line …] [--sources …] [--json <file>]
 
-Step S4 of the rerun. The frozen lists were originally produced partly with eda/c7_think_gate.py (wide gate only) and
-partly with ad-hoc scripts that no longer exist. This tool states the rules and recomputes them against the frozen lists:
+Step S4 of the rerun. The frozen lists were originally produced partly with a development gate script (wide gate only)
+and partly with ad-hoc scripts, both not included. This tool states the rules and recomputes them against the frozen lists:
 training side bit-identical (bytes of the .npy files), test side via SHA-256 and count (only counts, checksums and the
 NUMBER of differing rows are printed, never positions).
 
-RULES (q = fast channel zs27q of the best-CV line, t = zs27t of the strictly inductive line; P(NONE) and blends as below):
+RULES (q = fast channel zs27q of the primary line, t = zs27t of the strictly inductive line; P(NONE) and blends as below):
     wide_q        P_q(NONE) < 0.5                                    train.npy / test.npy           reasoning channel, draw g
     wide_t        P_t(NONE) < 0.5                                    train_t / test_t               inductive line
     union         wide_q ∪ wide_t                                    train_union / test_union       both lines
-    tight_q       wide_q ∩ top of the blend v1+zs27q < 0.6           train_tight_q / test_tight_q   narrow gate, best-CV line
+    tight_q       wide_q ∩ top of the blend v1+zs27q < 0.6           train_tight_q / test_tight_q   narrow gate, primary line
     tight_t       wide_t ∩ top of the blend v1+zs27t < 0.6           train_tight_t / test_tight_t   narrow gate, inductive line
     tight_union   tight_q ∪ tight_t                                  …_tight_union                  zs27v_n2_rp
     band_q        not wide_q and P_q(NONE) < 0.95                    train_band / test_band_q       extended gate (band)
     band_t        not wide_t and P_t(NONE) < 0.95                    train_band_t / test_band_t     extended gate (band)
     band_union    band_q ∪ band_t                                    …_band_union                   draw n
-    tb_q          tight_q ∪ band_q   (draw n in channel think18nb)   train_tb_q / test_tb_q         best-CV line
+    tb_q          tight_q ∪ band_q   (draw n in channel think18nb)   train_tb_q / test_tb_q         primary line
     tb_t          tight_t ∪ band_t   (channel think18sb)             train_tb_t / test_tb_t         inductive line
     n3            tight_union ∪ band_union (run zs27v_n3_rp)         test_n3                        draw n, test side
                   training: the same without D                       train_n3                       draw n, training side
@@ -28,7 +28,7 @@ RULES (q = fast channel zs27q of the best-CV line, t = zs27t of the strictly ind
     union_todo         union without D                               train_union_todo               zs27v_n2_rp
     rot_v50       wide_q ∩ derived/orient/train_v50_rows.npy         train_rot_v50                  control
 D = wide_q ∩ folds {1, 2}: the rows that already had a reasoning text without the question block (run zs27v_n_rp,
-configs/vlm/zs27v_n_rp.yaml). The blends are those of eda/a7_stack.py without prior: log p = log-softmax(θ_v1 · log P_v1
+configs/vlm/zs27v_n_rp.yaml). The blends are log-linear blends without prior: log p = log-softmax(θ_v1 · log P_v1
 + θ_x · log P_x), P clipped at 1e-9, θ fitted on LogLoss (eda/a2_probe_stack.fit_mix). Training: cross-fitted per fold
 (θ from the other folds), bit-identical to artifacts/oof_v1_zs27t.npy for v1+zs27t; test: θ from all 1,500 rows,
 bit-identical to artifacts/stack_v1_zs27t.json for v1+zs27t (for v1+zs27q no file existed; θ is computed the same way).
@@ -37,7 +37,7 @@ INPUTS. Training: artifacts/oof_{v1,zs27q,zs27t}.npy, configs/folds.parquet, tra
 derived/orient/train_v50_rows.npy. Test (`--sources a40`, the versions the frozen lists come from):
 v1 = runs v1_test_rp/v1_test/test, zs27q = zs27q_test0_rp/zs27q_test0/test + zs27q_test1_rp/zs27q_test1/test,
 zs27t = zs27t_all_rp/zs27t_test/test; probe diag, P = vlm.engine.probs_from_logp(lp, absent = classes without a training
-example), only rows with the done marker, as in eda/c7_think_gate.load_run. `--sources t4`: v1 and zs27t from the offline
+example), only rows with the done marker, as in the original gate script. `--sources t4`: v1 and zs27t from the offline
 T4 versions used by the submitted files (v1te_a/b_t4, px27_t4zt0/1; zs27q exists only from the A40), only to measure
 how many rows would move with different numerics; the frozen lists do NOT come from them.
 `--src channel=<run>/<job>/<tag>[+…]` replaces a source, `--runs-dir`/`--artifacts` point to the folders of a rerun.
@@ -72,7 +72,7 @@ for _p in (str(COMP), str(COMP / "src")):
 WIDE_T = 0.5     # P(NONE) of the fast channel below 0.5 -> generate a reasoning text
 BAND_HI = 0.95   # outside the wide gate, P(NONE) below 0.95
 TIGHT_T = 0.6    # top of the blend without reasoning channel below 0.6
-EPS = 1e-9       # clipping before the logarithm as in eda/a7_stack.py
+EPS = 1e-9       # clipping before the logarithm, as in the original blends
 DONE_FOLDS = (1, 2)  # wide_q on folds 1 and 2 already had a reasoning text without the block (zs27v_n_rp)
 N_FOLDS = 5
 
@@ -149,7 +149,7 @@ def gate_masks(p_none_q: np.ndarray | None = None, p_none_t: np.ndarray | None =
 
 
 def done_rows(wide_q: np.ndarray, folds: np.ndarray, done_folds: tuple[int, ...] = DONE_FOLDS) -> np.ndarray:
-    """D: wide gate of the best-CV line on the folds that already had reasoning texts without the block."""
+    """D: wide gate of the primary line on the folds that already had reasoning texts without the block."""
     return np.asarray(wide_q, dtype=bool) & np.isin(np.asarray(folds), list(done_folds))
 
 
@@ -192,7 +192,7 @@ def _logs(P: np.ndarray) -> np.ndarray:
 
 
 def crossfit_mixture(chans: list[np.ndarray], y: np.ndarray, folds: np.ndarray, a2=None) -> np.ndarray:
-    """OOF blend as in eda/a7_stack.py without prior: per fold θ from the other folds (a2.fit_mix), applied with a2.apply_mix."""
+    """OOF blend without prior, as in the original gate computation: per fold θ from the other folds (a2.fit_mix), applied with a2.apply_mix."""
     a2 = a2 or _a2()
     logs = [_logs(c) for c in chans]
     P = np.zeros_like(logs[0])
@@ -204,7 +204,7 @@ def crossfit_mixture(chans: list[np.ndarray], y: np.ndarray, folds: np.ndarray, 
 
 
 def full_theta(chans: list[np.ndarray], y: np.ndarray, a2=None) -> np.ndarray:
-    """θ from all training rows (for the test side), as in eda/a7_stack.py --save."""
+    """θ from all training rows (for the test side), as in the original gate computation."""
     a2 = a2 or _a2()
     return a2.fit_mix([_logs(c) for c in chans], None, y)
 
@@ -216,7 +216,7 @@ def apply_theta(theta: np.ndarray, chans: list[np.ndarray], a2=None) -> np.ndarr
 
 # ----------------------------------------------------------------------------------------------- inputs
 def load_test_channel(spec: str, n_test: int, absent: np.ndarray, runs_dir: Path) -> np.ndarray:
-    """Probabilities of a test channel from run outputs (probe diag) as in eda/c7_think_gate.load_run; every test row
+    """Probabilities of a test channel from run outputs (probe diag), as in the original gate script; every test row
     covered exactly once, otherwise abort."""
     from vlm.engine import probs_from_logp
 

@@ -13,7 +13,7 @@
 # maker, no JSON intermediate step, a different system text, floor 0.01 instead of 0.05. The job rank_k5 measures the
 # system-text factor directly.
 #
-# Before the run (local):  python tools/export_proto_notes.py --name train_pr27 --from pr27_rp/proto_a/proto --from pr27_rp/proto_b/proto
+# Before the run (local):  the frozen notes data/derived/proto_notes/train_pr27.jsonl (docs/CODEMAP.md §10)
 # Inputs:        data/derived/proto_notes (notes of training rows only; test notes are exported to proto_notes_test/)
 # Checks after the run, BEFORE the evaluation: log line of the prompt-header check "-> an" per job, pre-run 'rows': 8,
 #                'failed': 0, rank_tr 1,500 rows without 'oom_retries'.

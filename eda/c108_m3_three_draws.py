@@ -45,7 +45,7 @@ STEPS (training rows only, aggregates only):
     the last step); for information without the last step and (primary) alignment as one set.
  5. POSTERIOR (risk rule): leave-one-out family prior of class N (new draw; the candidate is not in the prior inventory),
     no selection correction (k 1, evaluation registered in advance), target = a new draw on the test side: τ_d 0.001 (MAIN);
-    sensitivity τ_d 0 and 0.002, spike-and-slab, all eras, both lines pooled. Requires internal evaluation helpers
+    sensitivity τ_d 0 and 0.002, spike-and-slab, all eras, both lines pooled. Requires development helpers
     (eda/c95_common.py) that are not part of this repository.
  6. VERDICT (fixed in advance): quality guard violated -> both NO. PRIMARY: Δ > 0 (expected-value rule) AND single
     channel m3x3 ≥ m3x2 − 0.002 — reading: Δ = the observed difference in the cross-fit; the sign of the posterior mean is
@@ -126,14 +126,14 @@ P_HARM = 0.05  # inductive: P(θ < −0.002) ≤ 0.05
 C_TXT = 0.0015  # threshold of the posterior mean of the class "new text channel" — report only, not part of the rule
 EXPECT = {"channel": (0.789, 0.797), "best": (0.0007, 0.0, 0.002), "safe": 0.0015}  # expectation registered in advance (1/K law)
 TAU_MAIN, TAUS_SENS = 0.001, (0.0, 0.002)
-TOL_BESTAND, TOL_MAX, MIN_ESS_FRAC, MIN_ESS_DECIDE = 0.0004, 0.0032, 0.000625, 200  # as in eda/c95_m3_full_eval.py
+TOL_STORED, TOL_MAX, MIN_ESS_FRAC, MIN_ESS_DECIDE = 0.0004, 0.0032, 0.000625, 200  # as in the earlier M3 evaluation
 PROBE_PLAUSIBLE = 0.005  # --dry: |Δ| of the recipes within this range counts as "close to two identical draws"
 # Run configurations outside configs/vlm/ (fallback). The second draw of folds 0/3/4 is configured in
 # configs/vlm/cv01_m3d2_f034.yaml, which is always found first.
 CONFIG_FALLBACK = {"cv01_m3d2_f034": "configs/vlm/cv01_m3d2_f034.yaml"}
 
 
-class Technik(RuntimeError):
+class TechnicalError(RuntimeError):
     """Technical finding: abort with exit 4, no verdict, nothing written."""
 
 
@@ -473,9 +473,9 @@ def verdict_lines(dec: dict, dry: bool) -> list[str]:
 # ------------------------------------------------------------------------------------------------ Posterior
 
 def prior_all_eras(C95) -> tuple[np.ndarray, dict]:
-    """NPMLE over all measurements of class N (all eras) — as in eda/c95_m3_full_eval.prior_all_eras (sensitivity)."""
+    """NPMLE over all measurements of class N (all eras) — as in the earlier M3 evaluation (sensitivity)."""
     xs, ss, ids = [], [], []
-    for (i, _nm, c, db, sb, ds, s2, _st, _pre, _note) in C95.EB.INVENTAR:
+    for (i, _nm, c, db, sb, ds, s2, _st, _pre, _note) in C95.EB.INVENTORY:
         if c != "N":
             continue
         xo, so = (db, sb) if db is not None else (ds, s2)
@@ -487,15 +487,15 @@ def prior_all_eras(C95) -> tuple[np.ndarray, dict]:
 
 
 def run_post(C95, o: float, s: float, w: np.ndarray, rng: np.random.Generator, tau: float, n_sim: int, chunks: int) -> dict:
-    """combined_posterior with k = 1 (no selection); the acceptance window only grows with too few accepted draws (as in c95_m3_full_eval)."""
+    """combined_posterior with k = 1 (no selection); the acceptance window only grows with too few accepted draws (as in earlier evaluations)."""
     min_ess = max(MIN_ESS_DECIDE, MIN_ESS_FRAC * n_sim * chunks)
-    tol = TOL_BESTAND
+    tol = TOL_STORED
     p = C95.combined_posterior(float(o), float(s), w, rng, k=1, rho=0.0, tau_d=tau, n_sim=n_sim, chunks=chunks, tol=tol)
     while (p.get("ess") or 0) < min_ess and tol < TOL_MAX:
         tol = min(2 * tol, TOL_MAX)
         p = C95.combined_posterior(float(o), float(s), w, rng, k=1, rho=0.0, tau_d=tau, n_sim=n_sim, chunks=chunks, tol=tol)
     p.pop("settings", None)
-    p.update(tol=tol, tol_widened=bool(tol != TOL_BESTAND), tau_d=tau, obs=float(o), se=float(s),
+    p.update(tol=tol, tol_widened=bool(tol != TOL_STORED), tau_d=tau, obs=float(o), se=float(s),
              decidable=bool(p.get("mean") is not None and (p.get("ess") or 0) >= MIN_ESS_DECIDE))
     return p
 
@@ -541,7 +541,7 @@ def load_base(art: Path | None = None) -> dict[str, np.ndarray]:
         f = art / f"oof_{nm}.npy"
         got = C99.sha256_file(f)[:16] if f.is_file() else "missing"
         if got != want:
-            raise Technik(f"artifacts/oof_{nm}.npy: checksum {got} instead of {want} (deployed state)")
+            raise TechnicalError(f"artifacts/oof_{nm}.npy: checksum {got} instead of {want} (deployed state)")
         mats[nm] = np.load(f)
     return mats
 
@@ -555,7 +555,7 @@ def load_draws(ctx: dict, d3_spec: str, dry: bool, art: Path | None = None) -> d
     meta = A9.read_json(art / f"meta_{REF_CHANNEL}.json") or {}
     specs = str((meta.get("rank") or {}).get("source") or "").split(",")
     if len(specs) != 2 or not all(specs):
-        raise Technik(f"meta_{REF_CHANNEL}.json: rank.source does not name exactly two draws")
+        raise TechnicalError(f"meta_{REF_CHANNEL}.json: rank.source does not name exactly two draws")
     try:
         loaded = [A9.load_draw(s, n, seen) for s in specs]
         if dry:
@@ -564,25 +564,25 @@ def load_draws(ctx: dict, d3_spec: str, dry: bool, art: Path | None = None) -> d
         else:
             loaded.append(A9.load_draw(d3_spec, n, seen))
     except SystemExit as e:
-        raise Technik(f"eda/a9_m3_draws_oof.load_draw: {e}") from None
+        raise TechnicalError(f"eda/a9_m3_draws_oof.load_draw: {e}") from None
     for j, (_, h, info) in enumerate(loaded, 1):
         if not h.all():
-            raise Technik(f"draw d{j} ({info['source']}) covers only {int(h.sum())} of {n} training rows")
+            raise TechnicalError(f"draw d{j} ({info['source']}) covers only {int(h.sum())} of {n} training rows")
     K = len(seen)
     m3x2, cnt2 = A9.mean_of_draws([(P, h) for P, h, _ in loaded[:2]], n, K)
     m3x3, cnt3 = A9.mean_of_draws([(P, h) for P, h, _ in loaded], n, K)
     ref = np.load(art / f"oof_{REF_CHANNEL}.npy")
     ref_sha = C99.sha256_file(art / f"oof_{REF_CHANNEL}.npy")
     if ref_sha != REF_SHA256 or not np.array_equal(m3x2, ref):
-        raise Technik(f"mean(d1, d2) does not match oof_{REF_CHANNEL}.npy bit-identically (file SHA {ref_sha[:16]}…, expected {REF_SHA256[:16]}…)")
+        raise TechnicalError(f"mean(d1, d2) does not match oof_{REF_CHANNEL}.npy bit-identically (file SHA {ref_sha[:16]}…, expected {REF_SHA256[:16]}…)")
     built = None
     if not dry:
         try:
             Pb, cntb, _, _ = A9.build(specs + [d3_spec], n, seen)
         except SystemExit as e:
-            raise Technik(f"eda/a9_m3_draws_oof.build: {e}") from None
+            raise TechnicalError(f"eda/a9_m3_draws_oof.build: {e}") from None
         if not np.array_equal(Pb, m3x3) or not (cntb == 3).all():
-            raise Technik("a9.build over three draws differs from the own mean")
+            raise TechnicalError("a9.build over three draws differs from the own mean")
         built = True
     return {"specs": specs + [d3_spec], "P": [P for P, _, _ in loaded], "info": [i for _, _, i in loaded], "m3x2": m3x2, "m3x3": m3x3,
             "rows_three": int((cnt3 == 3).sum()), "built_a9": built}
@@ -735,14 +735,14 @@ def evaluate(ctx: dict, base: dict, D: dict, dry: bool, lines: dict | None = Non
             ok = abs(a2v - L["anchor"]) < ANCHOR_TOL
             rec["anchor_ok"] = bool(ok)
             if not ok:
-                raise Technik(f"{L['label']}: anchor {L['anchor']} missed (recomputed {a2v:.9f}) — check the re-implementation")
+                raise TechnicalError(f"{L['label']}: anchor {L['anchor']} missed (recomputed {a2v:.9f}) — check the re-implementation")
             if key == "best":
                 st = json.loads((art / f"stack_{L['stack']}.json").read_text())
                 ft = (st.get("cross") or {}).get("fold_theta") or {}
                 dev = max(float(np.abs(np.array(c2["theta"][k]) - np.array(ft[str(k)])).max()) for k in c2["theta"]) if ft else None
                 rec["fold_theta_dev_vs_stack"] = dev
                 if dev is None or dev > 1e-12:
-                    raise Technik(f"{L['label']}: weights per fold differ from {L['stack']} (largest deviation {dev})")
+                    raise TechnicalError(f"{L['label']}: weights per fold differ from {L['stack']} (largest deviation {dev})")
         ll2, ll3 = rows_ll(y, c2["Q"]), rows_ll(y, c3["Q"])
         p = paired(ctx, r3, r2, ll3, ll2, B=B)
         rec["delta"] = p
@@ -766,7 +766,7 @@ def evaluate(ctx: dict, base: dict, D: dict, dry: bool, lines: dict | None = Non
         say(f"     (information) without last step: Δ {w['mean']:+.5f} ± {w['se_q']:.5f}; log loss before Δ {w['ll_delta']:+.4f} ± {w['ll_se_q']:.4f}"
             + (f"; alignment as one set: Δ {rec['info_one_set']['mean']:+.5f} ± {rec['info_one_set']['se_q']:.5f}" if "info_one_set" in rec else ""))
     if {"best", "safe"} - set(res["lines"]):
-        raise Technik("the evaluation requires both lines (best, safe)")
+        raise TechnicalError("the evaluation requires both lines (best, safe)")
     # ---------------------------------------------------------------- 4b. null point (duplicate control; report only)
     res["null_point"] = null_point(ctx, base, D, lines, rows, B=B)
     say(f"4b. {probe}NULL POINT (report only, not part of the rule): a third \"draw\" WITHOUT new information (copy of d2 or d1) "
@@ -871,9 +871,9 @@ def main(argv: list[str] | None = None) -> int:
         if tech["artifact"] is not None:
             say(f"   deployed artifact artifacts/oof_{ARTIFACT}.npy exists: bit-identical {tech['artifact']['bit_identical']}, sources match {tech['artifact']['source_ok']}")
         if tech["problems"]:
-            raise Technik("; ".join(tech["problems"]))
+            raise TechnicalError("; ".join(tech["problems"]))
         res, rows = evaluate(ctx, base, D, a.dry, n_sim=a.n_sim, chunks=a.chunks, say=say)
-    except Technik as e:
+    except TechnicalError as e:
         print(f"ABORT (technical, exit 4): {e} — nothing written", file=sys.stderr)
         return 4
     out_dir = Path(a.out_dir) if a.out_dir else OUT

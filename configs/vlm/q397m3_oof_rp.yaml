@@ -1,4 +1,4 @@
-# Channel q397m3 ("397B finds, M3 names") on all 1,500 training rows; best-CV line only, like q397.
+# Channel q397m3 ("397B finds, M3 names") on all 1,500 training rows; primary line only, like q397.
 # PURPOSE: M3 (Qwen3.8-27B + LoRA, gold targets only, task proto_sft; it has learned how the annotators assign codes) reads
 # the note of Qwen3.5-397B-A17B (first pass in the teacher protocol; strong at forming candidates, weaker at choosing among
 # them) as its OWN reasoning, writes its finding itself (finish_tokens 320, greedy up to "Root:") and scores all 74 codes
@@ -12,7 +12,7 @@
 # RANKING exactly as for the M3 draws (beams 74, finish_tokens 320, image 1,024/448, bf16, batch 6). The pre-run
 # q397m3_smoke (must_pass, 6 rows of fold 1, own folder) stops the worker before a form error costs five folds.
 # DECISION RULE (eda/c115_q397m3_eval.py): continue to the test side (configs/vlm/q397m3te_rp.yaml) only if, in the full
-# recipe of the best-CV line, q397m3 as an ADDED channel (floor 0.05) OR as a REPLACEMENT of q397 reaches Δ >= +0.002 with
+# recipe of the primary line, q397m3 as an ADDED channel (floor 0.05) OR as a REPLACEMENT of q397 reaches Δ >= +0.002 with
 # z >= 1.0 (σ over questions) and a LogLoss that is not worse, AND the top-code agreement q397m3/q397 is <= 0.90
 # (otherwise it is a mere copy); otherwise stop.
 # EARLY STOP (only to save cost, fixed in advance): after the first complete shard run

@@ -392,7 +392,10 @@ def test_real_notes_guard_with_real_notes():
     derived/sft/q397m3_test_notes.jsonl is accepted (meta file of the ranking faked)."""
     from vlm import common as C
 
-    root = C.find_data_root()
+    try:
+        root = C.find_data_root()
+    except FileNotFoundError:
+        pytest.skip("competition data missing")
     _need(STACK, ART / "meta_q397m3.json", root / TEST_REL, root / TRAIN_REL, ART / "runs" / "q397te_rp" / "q397te_rp" / "proto_te" / "proto_raw.jsonl",
           ART / "runs" / "m3d3te_rp" / "m3d3te_rp" / "m3d3_test_rank" / "test_meta.json")
     stack = json.loads(STACK.read_text())
@@ -446,6 +449,8 @@ def test_real_test_guard_on_the_fetched_run():
 def test_build_script_exit3_without_test_side():
     if _real_test_complete():
         pytest.skip("the q397m3 test side is complete")
+    if not (COMP / "data" / "derived" / "orient_repro" / "test_c80_rows.npy").is_file():
+        pytest.skip("rotation list of the default ORIENT mode missing (the build script checks it before the test side)")
     r = subprocess.run(["bash", str(BUILD), "best"], cwd=COMP, capture_output=True, text=True, timeout=600)
     assert r.returncode == 3 and "q397m3 test side" in r.stderr
     assert not (ART / "submissions" / "sub_s029_best_q397m3.csv").exists()
@@ -479,7 +484,7 @@ M3X3 = "m3x3_full=runs/m3_fullte_rp/m3_test_rank/test,runs/m3d2te_rp/m3d2_test_r
      BEST_COMMON + ["--proto", "q397=runs/q397te_rp/proto_te/proto", "--rank-only", M3X3, "--align", "0.75", "--align-min", "3",
                     "--blank-rows", "derived/blank/test_rows.npy"]),
 ])
-def test_existing_build_paths_bytegleich(tmp_path, label, name, ref, args):
+def test_existing_build_paths_byte_identical(tmp_path, label, name, ref, args):
     """The existing six-channel build path (channel from three draws, --proto q397) with the current make_submission: the same
     file as built before. Output to tmp_path; the test matrix is deleted."""
     stack = ART / f"stack_{name}.json"

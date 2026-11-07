@@ -2,8 +2,8 @@
 # Build path of the M3 channel as the MEAN OF THREE DRAWS (channel m3x3_full) instead of two (m3x2_full_cv01) — otherwise
 # exactly the earlier recipes of the primary line (best: v1r, zs27q, think18nb × 1.4, pr27xm, M3; floors 0.01/0.05/0.05;
 # β 0.2; margin alignment 0.75; REL-01) and of the inductive line (safe: v1r, zs27t, think18sb, pr27xm, M3; β 0.4; inductive
-# alignment 0.75; REL-01), test channels as before (offline Kaggle-T4 versions of v1 and zs27t). The safe line of this script
-# is the submitted inductive-line file. The third draw is SAMPLED (temperature 0.6, top_p 0.95, top_k 20, seed 3; 5,200 tokens):
+# alignment 0.75; REL-01), test channels as before (offline Kaggle-T4 versions of v1 and zs27t). With ORIENT=legacy the safe
+# line rebuilds the submitted inductive-line file. The third draw is SAMPLED (temperature 0.6, top_p 0.95, top_k 20, seed 3; 5,200 tokens):
 # OOF m3d3_oof_rp (per fold the adapter without that fold), test m3d3te_rp (adapter of the full fit). The first two draws as
 # before: d1 greedy 3,200 tokens (OOF m3_5f, test m3_fullte_rp), d2 greedy 5,200 tokens (OOF m3long + cv01_m3d2_f034, test
 # m3d2te_rp). Weights of ALL channels from the 1,500 rows with three draws (eda/c99_m3_deploy.py --save: a2.fit_mix on log
@@ -12,6 +12,7 @@
 #
 # ORDER after fetching both runs (m3d3_oof_rp, m3d3te_rp):
 #   1. python -I eda/c108_m3_three_draws.py        evaluation and verdict -> artifacts/eda/private/m3_draws_eval/c108_m3_three_draws.json
+#      (its posterior step needs a development helper that is not included; the verdict is a frozen input, docs/CODEMAP.md §10)
 #   2. bash tools/builds/s029_m3x3.sh best|safe     this build path (aborts if c108 did not give a deployment for the line)
 #
 # STEPS: 0 test draws complete (ranking exact; generation above the tipping threshold: d1 0.3, d2 0.5, d3 D3_MIN_COMPLETE,
@@ -25,6 +26,15 @@
 #   two-draw file of the line (aggregates).
 #
 #     bash tools/builds/s029_m3x3.sh best|safe
+#
+# ROTATION LIST (tools/builds/orient_list.sh): ORIENT=repro (default) reads for v1r the rotation list of the released
+#   orientation network, derived/orient_repro/test_c80_rows.npy (coverage by the rotation run rot_test: tools/orient_list.py
+#   check). It is only allowed for safe (entry point tools/builds/s030n_safe.sh) and writes artifacts/submissions/sub_s030n_safe.csv
+#   (test matrix test_<blend>_ia_t4_s030n.npy); steps 0–3 and all other inputs as with ORIENT=legacy, in addition: blend file =
+#   the one of the legacy-list build (checksum), source of v1r in the JSON file (tools/orient_list.py verify-sub), comparison
+#   with the legacy-list file as aggregates, fixed checksum of the output. ORIENT=legacy reads the frozen first-version rotation
+#   list (derived/orient/test_c80_rows.npy) and rebuilds the historical files of both lines byte-identically; the
+#   released-list build needs the legacy-list file of the line first.
 #
 # Only aggregates and checksums are printed. Nothing is submitted from here.
 set -euo pipefail
@@ -51,9 +61,22 @@ case "$LINE" in
         REF="artifacts/submissions/sub_v1r_zs27t_think18sb_pr27xm_m3x2_ar_ia_t4.csv"; REF_SHA="80ea14fe28449a4b7be66bb0eeb8622f4870a4629105ebe6dc7a3859c36d5557" ;;  # earlier inductive-line file (two draws)
   *) echo "usage: $0 best|safe" >&2; exit 2 ;;
 esac
+. tools/builds/orient_list.sh  # rotation list of the v1r test side: ORIENT=repro (default, released list) | legacy (first-version list)
+orient_select
 NAME="${BASE}_ar"
 OUT="artifacts/submissions/sub_${NAME}${SUFFIX}.csv"
-echo "s029 $LINE: channel $CH (three draws) -> artifacts/stack_${NAME}.json -> $OUT"
+OUTARGS=(--suffix "$SUFFIX")
+if [ "$ORIENT" = repro ]; then  # inductive line with the released rotation list: own file and test matrix; the legacy-list file stays untouched
+  [ "$LINE" = safe ] || { echo "ABORT: ORIENT=repro (the default) is only for safe; the primary line with the released rotation list is built by tools/builds/s033n_stage2.sh, s034n_stage2_main.sh and s035_stage2_guard.sh; the historical five-channel primary file needs ORIENT=legacy" >&2; exit 2; }
+  LEGACY_OUT="$OUT"; LEGACY_OUT_SHA="edd9fb0070efb3e3734437df59d00505c03cc4d99aa7247d8b969c2160034546"   # inductive-line file with the first-version rotation list
+  LEGACY_STACK_SHA="7fb543ae5b7cb460a869411c1a97759d5594af66140d6922485b1b1ff421490c"           # stack_<blend>_ar.json of the legacy-list build
+  REPRO_OUT_SHA="8cca7bbfe9b8c9dce47d6153d59712575bb7b8ad6dea8a286f7ef530df448b67"  # sub_s030n_safe.csv (pinned after the first build)
+  OUT="artifacts/submissions/sub_s030n_safe.csv"
+  OUTARGS=(--suffix "${SUFFIX}_s030n" --out "$OUT")
+  PRIVF="artifacts/eda/private/orient_check"
+  mkdir -p "$PRIVF"
+fi
+echo "s029 $LINE: channel $CH (three draws) -> artifacts/stack_${NAME}.json -> $OUT$([ "$ORIENT" = repro ] && echo " (ORIENT=repro, rotation list $ORIENT_ROWS)")"
 # 0. test draws complete and gold-only (aggregates only)
 for R in "$RANK1" "$RANK2" "$RANK3" "$RANK_XM"; do
   python -I eda/c95_rank_mean.py --status "$R" --table test || {
@@ -75,7 +98,7 @@ from pathlib import Path
 
 path, line, src, ignore_verdict = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4] == "1"
 if not Path(path).is_file():
-    raise SystemExit(f"ABORT: {path} missing — run python -I eda/c108_m3_three_draws.py first")
+    raise SystemExit(f"ABORT: {path} missing — stored verdict of the M3 evaluation (frozen input, see docs/CODEMAP.md §10)")
 ev = json.loads(Path(path).read_text())
 if ev.get("mode") != "real":
     raise SystemExit(f"ABORT: {path} comes from a check run (mode {ev.get('mode')!r})")
@@ -195,23 +218,47 @@ if "inductive_check" in s:  # class weights from the blend WITH β (as for the e
 dst.write_text(json.dumps(out, ensure_ascii=False, indent=1) + "\n")
 print(f"  {dst.name}: θ " + " · ".join(f"{n} {v:.3f}" for n, v in zip(out["channels"], out["theta"])) + f"; arith_beta {beta:g}, cv {out['cv']:.5f}")
 PY
+BAK=""
+if [ "$ORIENT" = repro ]; then  # θ, β and inductive class weights as in the legacy-list build; rotation list checked; an existing output is only replaced byte-identically
+  echo "${LEGACY_STACK_SHA}  artifacts/stack_${NAME}.json" | sha256sum -c --quiet \
+    || { echo "ABORT: artifacts/stack_${NAME}.json is not the blend file of the legacy-list build (${LEGACY_STACK_SHA:0:16}…)" >&2; exit 4; }
+  echo "  blend file = the one of the legacy-list build (${LEGACY_STACK_SHA:0:16}…): θ, β and inductive class weights unchanged"
+  python -I tools/orient_list.py check --mode repro --spec "$V1R_TEST" --json "$PRIVF/check_orient_s030n.json" || exit $?
+  TESTMAT="artifacts/test_${NAME}${SUFFIX}_s030n.npy"
+  if [ -f "$OUT" ] || [ -f "$TESTMAT" ]; then
+    BAK="$(mktemp -d "${TMPDIR:-/tmp}/s030n_backup.XXXXXX")"
+    trap 'rm -rf -- "${BAK:?}"' EXIT  # the backup holds test identifiers: never leave it behind
+    for F in "$OUT" "${OUT%.csv}.json" "$TESTMAT"; do [ -f "$F" ] && cp -p "$F" "$BAK/"; done
+  fi
+fi
 # 4. test file: sources as for the earlier files of the line, M3 as the mean of three test draws (order = OOF draws)
 if [ "$LINE" = best ]; then
-  python tools/make_submission.py --name "$NAME" \
-    --test "v1r=v1rot_t4/rot_test/test@derived/orient/test_c80_rows.npy" --fill v1r=v1 --test "$V1_T4" \
+  python -I tools/make_submission.py --name "$NAME" \
+    --test "$V1R_TEST" --fill v1r=v1 --test "$V1_T4" \
     --test zs27q=zs27q_test0_rp/zs27q_test0/test+zs27q_test1_rp/zs27q_test1/test --fill "think18nb=zs27q" \
     --test "think18nb=zs27v_te_rp/think_te/test/think@derived/think_rows/test.npy,zs27v_n3_rp/think_nte/test/think@derived/think_rows/test_tb_q.npy" \
     --proto pr27xm=runs/pr27te_rp/proto_te/proto --rank "pr27xm=$RANK_XM" \
     --rank-only "$CH=$RANK1,$RANK2,$RANK3" \
-    --align 0.75 --align-min 3 --blank-rows derived/blank/test_rows.npy --suffix "$SUFFIX" 2>&1 | cut -c1-300
+    --align 0.75 --align-min 3 --blank-rows derived/blank/test_rows.npy "${OUTARGS[@]}" 2>&1 | cut -c1-300
 else
-  python tools/make_submission.py --name "$NAME" \
-    --test "v1r=v1rot_t4/rot_test/test@derived/orient/test_c80_rows.npy" --fill v1r=v1 --test "$V1_T4" \
+  python -I tools/make_submission.py --name "$NAME" \
+    --test "$V1R_TEST" --fill v1r=v1 --test "$V1_T4" \
     --test zs27t=px27_t4zt0/zs27t_test_t4/test+px27_t4zt1/zs27t_test_t4/test --fill "think18sb=zs27t" \
     --test "think18sb=zs27v_n3_rp/think_nte/test/think@derived/think_rows/test_tb_t.npy" \
     --proto pr27xm=runs/pr27te_rp/proto_te/proto --rank "pr27xm=$RANK_XM" \
     --rank-only "$CH=$RANK1,$RANK2,$RANK3" \
-    --align-inductive 0.75 --align-min 3 --blank-rows derived/blank/test_rows.npy --suffix "$SUFFIX" 2>&1 | cut -c1-300
+    --align-inductive 0.75 --align-min 3 --blank-rows derived/blank/test_rows.npy "${OUTARGS[@]}" 2>&1 | cut -c1-300
+fi
+if [ "$ORIENT" = repro ]; then  # file written, an existing one only replaced byte-identically, source of v1r = the released list
+  [ -f "$OUT" ] || { echo "ABORT: $OUT was not written" >&2; exit 4; }
+  if [ -n "$BAK" ] && [ -f "$BAK/$(basename "$OUT")" ]; then
+    if ! cmp -s "$OUT" "$BAK/$(basename "$OUT")"; then
+      for F in "$OUT" "${OUT%.csv}.json" "$TESTMAT"; do [ -f "$BAK/$(basename "$F")" ] && cp -p "$BAK/$(basename "$F")" "$F"; done
+      echo "ABORT: rebuild differs from the existing $OUT — backup restored, investigate the cause" >&2; exit 4
+    fi
+    echo "  existing $OUT rebuilt byte-identically"
+  fi
+  python -I tools/orient_list.py verify-sub --mode repro "${OUT%.csv}.json" || exit $?
 fi
 # 5. reference file unchanged; deviation only as an aggregate
 echo "${REF_SHA}  ${REF}" | sha256sum -c --quiet || { echo "ERROR: reference file changed ($REF)" >&2; exit 4; }
@@ -226,4 +273,13 @@ top_a, top_b = a.str.split().str[0], b.str.split().str[0]
 print(f"  against the reference file (two draws): different top code in {(top_a != top_b).mean():.4f} of the rows, "
       f"different first three (with order) in {(a != b).mean():.4f}")
 PY
+if [ "$ORIENT" = repro ]; then  # legacy-list file unchanged; difference from it only as aggregates (split by the rows whose list membership differs)
+  echo "${LEGACY_OUT_SHA}  ${LEGACY_OUT}" | sha256sum -c --quiet || { echo "ERROR: the legacy-list file changed ($LEGACY_OUT)" >&2; exit 4; }
+  python -I tools/orient_list.py compare "$LEGACY_OUT" "$OUT" --label "inductive line, first-version rotation list" --json "$PRIVF/compare_s030n_vs_s030.json"
+  echo "${REPRO_OUT_SHA}  ${OUT}" | sha256sum -c --quiet || { echo "ABORT: $OUT differs from the pinned checksum (${REPRO_OUT_SHA:0:16}…)" >&2; exit 4; }
+fi
 sha256sum "artifacts/stack_${NAME}.json" "$OUT"
+if [ "$ORIENT" = repro ]; then
+  sha256sum "${OUT%.csv}.json" "$TESTMAT"
+  echo "s029 safe (ORIENT=repro): $OUT built (inductive line, released rotation list)"
+fi

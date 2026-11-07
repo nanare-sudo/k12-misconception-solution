@@ -355,17 +355,17 @@ def test_assemble_shards_fold_exact(tmp_path, monkeypatch):
     st = E.check_shard_settings(E.SHARDS, E.REF_SHARDS)  # without local d3 metas in the tmp folder: only equality of the shards
     assert st["sft_from"] == E.NOTES_REL and st["same_as_d3"] is False
     _shard(tmp_path, 4, np.array([4]), K)  # shard does not cover all rows of its fold
-    with pytest.raises(E.Technik, match="fold"):
+    with pytest.raises(E.TechnicalError, match="fold"):
         E.assemble(E.SHARDS, n, seen, folds)
     _shard(tmp_path, 4, np.array([3, 4]), K)  # wrong fold (row 3 belongs to fold 3)
-    with pytest.raises(E.Technik):
+    with pytest.raises(E.TechnicalError):
         E.assemble(E.SHARDS, n, seen, folds)
     _shard(tmp_path, 4, np.flatnonzero(folds == 4), K, beams=18)
     E.assemble(E.SHARDS, n, seen, folds)
-    with pytest.raises(E.Technik, match="computed differently"):
+    with pytest.raises(E.TechnicalError, match="computed differently"):
         E.check_shard_settings(E.SHARDS, E.REF_SHARDS)
     _shard(tmp_path, 4, np.flatnonzero(folds == 4), K, sft_from="m3_gen_f4/gen")
-    with pytest.raises(E.Technik, match="sft_from"):
+    with pytest.raises(E.TechnicalError, match="sft_from"):
         E.check_shard_settings(E.SHARDS, E.REF_SHARDS)
     import shutil
 

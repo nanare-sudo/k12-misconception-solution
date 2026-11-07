@@ -5,7 +5,7 @@ pr27 (instruction with the verdict rules, taxonomy, question, diagram, key, phot
 block, no teacher labels) to think first, then write one finding line and then name the code. The ranking of all codes
 is afterwards scored exactly behind the own text (probe proto_rank in sft mode; mechanics as for the reasoning channel).
 
-Training target per training row (only rows of the OTHER folds; tools/make_sft_targets.py):
+Training target per training row (only rows of the OTHER folds; frozen target files, see docs/CODEMAP.md §10):
     <think>\\n NOTES \\n</think>\\n\\nFinding: EXPLANATION\\nRoot: CODE<|im_end|>
   * NOTES = the reasoning of the first pr27 pass for this row (data/derived/proto_notes/train_pr27.jsonl). With loss
     (marker notes) only where the pr27 channel ranks the gold code first (flag pr27_ok of the target builder);
@@ -380,7 +380,7 @@ def train_sample(row, student_image, question_image, system: str, rec: dict, not
 
 
 def load_targets(path, fold, folds: np.ndarray, n_train: int) -> tuple[list[dict], dict]:
-    """Load and check the training targets of one fold (tools/make_sft_targets.py): training rows only, no row of the fold
+    """Load and check the training targets of one fold (frozen target files): training rows only, no row of the fold
     `fold` (fold None = full fit on all rows), checksum as in the meta file, no row twice."""
     path = Path(path)
     meta_path = path.with_suffix(".meta.json")
@@ -874,7 +874,7 @@ def compare_channel(run: str, job: str, tag: str = "bench", ref: str = "pr27", c
     """Single channel of the diagnostician against an existing channel (default pr27, artifacts/oof_<ref>.npy) on the SAME
     rows: the two harm limits of the pilot at channel level (channel < ref - 0.03, NONE < ref - 0.05) and the reported
     quantities per group. Paired row bootstrap; training rows only, aggregates only. The additional contribution in the
-    full recipe of both lines is NOT computed here (eda/a8 + recipe evaluation)."""
+    full recipe of both lines is NOT computed here (eda/a8_proto_oof.py + recipe evaluation)."""
     import labels
     import metric
 
@@ -929,7 +929,7 @@ def compare_channel(run: str, job: str, tag: str = "bench", ref: str = "pr27", c
 # Experimental variant, not part of the final lines: the reasoning 27B (proto_sft) learns, in addition to the gold
 # targets, on pool rows with frozen teacher outputs. The prompt stays free of question knowledge (no labelled row, no
 # block); the knowledge about (question, code) pairs ends up in the weights. Such a model is TEACHER-DERIVED and is only
-# allowed in the best-CV line: the job must set `sft_pool.slot: best` explicitly, and the job statistics carry
+# allowed in the primary line: the job must set `sft_pool.slot: best` explicitly, and the job statistics carry
 # `teacher_derived: true`.
 #
 # Interface of the teacher output per pool row (data/derived/teacher/<plan>/labels.jsonl, tools/teacher_api.py
@@ -940,7 +940,7 @@ def compare_channel(run: str, job: str, tag: str = "bench", ref: str = "pr27", c
 POOL_TABLE = "unlabelled"
 NEVER_ROOT = ("NOT-02", "PRO-03")  # never a root
 GENERIC = ("ANS-01", "CAL-01", "WOP-01", "FRM-01", "OTH-00")  # catch-all codes (gold: 57 of 994 error rows each)
-# markers of the chat template in a training target would become real control tokens when tokenised (as in tools/export_proto_notes.py)
+# markers of the chat template in a training target would become real control tokens when tokenised (as in the export of the protocol notes)
 TEMPLATE_MARKS = re.compile(r"</?think>|<\|[^|<>\n]{1,40}\|>")
 # Share of correct teacher top codes per confidence level (lower bound -> precision), measured on all training rows
 # (teacher model Claude Haiku 5.5 at effort xhigh without notes, user message without labelled rows; 1,499 answers),
@@ -1038,7 +1038,7 @@ def choose_pool_notes(mode: str, reasoning: str, own_text: str | None, own_code:
              otherwise as a closed thinking block in the prompt without loss (like the gold rows without notes_loss);
              without own notes the row is dropped. No teacher text as a long target (only finding line and code).
     mixed    own notes with loss where the own answer agrees; otherwise the teacher's reasoning with loss.
-    Without teacher reasoning (rows from earlier teacher labels, `--unlock-*` in tools/make_sft_targets.py) a row stays
+    Without teacher reasoning (rows from earlier teacher labels, an option of the target builder) a row stays
     only if own notes exist (own) or the own answer agrees (mixed)."""
     own_ok = bool(own_text and str(own_text).strip())
     agree = own_ok and own_code == code
@@ -1231,14 +1231,14 @@ def mix_schedule(n_gold: int, pool_question, pool_code, gold_epochs: int = 2, po
 
 
 def load_pool_targets(path, fold, n_pool: int, style_ok: bool = False) -> tuple[list[dict], dict]:
-    """Load and check the pool training targets of one fold (tools/make_sft_targets.py --pool): only rows of the table
+    """Load and check the pool training targets of one fold (frozen pool target files): only rows of the table
     unlabelled, checksum as in the meta file, fold as requested, no row twice; NO label of the evaluated fold in status
     and caps (`label_folds`) and no teacher style examples from this fold (`teacher.style_folds`; style_ok only if
     the evaluation hides the style rows)."""
     path = Path(path)
     meta_path = path.with_suffix(".meta.json")
     if not meta_path.is_file():
-        raise ValueError(f"{path.name}: meta file missing; pool training targets only from tools/make_sft_targets.py --pool")
+        raise ValueError(f"{path.name}: meta file missing; pool training targets are only accepted together with their meta file")
     meta = json.loads(meta_path.read_text())
     if meta.get("table") != POOL_TABLE:
         raise ValueError(f"{path.name}: no pool training targets (table {meta.get('table')})")
@@ -1362,7 +1362,7 @@ class PoolMix:
         if unknown:
             raise ValueError(f"sft_pool: unknown keys {sorted(unknown)}")
         if spec.get("slot") != "best":
-            raise ValueError("sft_pool: teacher targets in training are allowed only in the best-CV line; set `slot: best` explicitly")
+            raise ValueError("sft_pool: teacher targets in training are allowed only in the primary line; set `slot: best` explicitly")
         pool_df = C.load_table(data_root, POOL_TABLE)
         recs, tinfo = load_pool_targets(pool_file, fold, len(pool_df), style_ok=bool(spec.get("style_fold_ok", False)))
         chunks, start = int(spec.get("chunks", 4)), int(spec.get("start_chunk", 0))
@@ -1485,8 +1485,8 @@ def rationale_hint(code: str, name: str, misconceptions: str) -> str:
 
 
 def rationale_notes(thinking: str, note_chars: int = 16000) -> str:
-    """Notes from the reasoning of a rationalisation record, treated like the pr27 notes (proto.rank_notes,
-    tools/export_proto_notes.py): thinking-block markers removed, at most note_chars characters from the end."""
+    """Notes from the reasoning of a rationalisation record, treated like the pr27 notes (proto.rank_notes and the
+    export of the protocol notes): thinking-block markers removed, at most note_chars characters from the end."""
     return str(thinking or "").replace("<think>", "").replace("</think>", "").strip()[-int(note_chars):]
 
 

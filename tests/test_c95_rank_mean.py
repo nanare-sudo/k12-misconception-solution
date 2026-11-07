@@ -107,7 +107,7 @@ def test_rank_mean_definition():
         c95.rank_mean(named, rank, has[:5])
 
 
-def test_oof_and_test_path_bitgleich(tmp_path, monkeypatch):
+def test_oof_and_test_path_bit_identical(tmp_path, monkeypatch):
     """Same answers and same ranking on a training and a test table: channel(train) (OOF path) and make_submission.proto_channel
     (test path) give bit-identically the same matrix = 0.5 · (named + ranking) by hand; rows without a valid answer carry
     0.5 · (uniform + ranking), like the 8 training rows of pr27."""

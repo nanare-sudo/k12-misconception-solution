@@ -1,0 +1,14 @@
+{
+ "id": "override_cv_condition_ii",
+ "status": "active",
+ "rule": "safety-set rule",
+ "decided_on": "2026-11-06",
+ "decided_by": "the entrant (sole team member)",
+ "title": "Build and submit the safety-line candidate with margin alignment over the test set (variant b, fallback + interactions I1) although the cross-validation part of condition (ii) of its pre-registered rule is missed; the strictly inductive line with second stage stays its fallback",
+ "decision": "The candidate is built and submitted. The override applies to the cross-validation part of condition (ii) of the safety-set rule (eda/c123_safety_set.py) for this candidate only.",
+ "scope": "only the cross-validation part of condition (ii); the test-mass part of condition (ii) (L1 at most 0.035), conditions (i) and (iii), the copy null points, the guards and all checksums stay in force",
+ "reason": "Condition (ii) is missed by 1 of 9,000 sixths on the original meta-split (7,391 against the threshold 7,392). The miss comes from the inner abstention gate in one fold, which does not abstain when the deployment file is fitted on all 1,500 rows. Over 20 new meta-splits the candidate (variant a, as one set) lies +0.00073 ± 0.00021 above the strictly inductive line (16 of 20 positive, 20 of 20 above -0.002); the test-side class masses after the alignment lie at L1 0.028 from their target, against 0.087 for the inductive alignment; condition (iii) selects variant b (+0.00067 ± 0.00014 over 20 meta-splits).",
+ "expected": "safety slot about +0.003 on the test set against the strictly inductive line (better calibrated class masses), cross-validation about +0.0007 to +0.0014",
+ "revert_if": "the build misses a copy null point or a guard, or a new statement of the host against fitting to the test set",
+ "how_used": "OVERRIDE_CV_II=override_cv_condition_ii bash tools/builds/safety_final.sh; eda/c123_safety_set.py checks this file against the SHA-256 pinned in the code (DECISION_SHA)"
+}

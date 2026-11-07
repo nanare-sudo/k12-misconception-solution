@@ -26,7 +26,7 @@ ROW = {"trace_id": "t1", "question_id": "q1", "grade": "7", "topic_name": "Fract
        "image_file": "a.jpeg", "transcription_steps": "L1 | 1/2 + 1/3\nL2 | = 2/5",
        "misconceptions": json.dumps([{"step": "L1", "category": "CAL-01", "severity": "minor", "root": False, "text": "by the way"},
                                      {"step": "L2", "category": "FRA-01", "severity": "major", "root": True, "text": "Added  tops\nand bottoms."}])}
-TAX = pd.DataFrame({"id": ["FRA-01", "CAL-01"], "name": ["Adding tops and bottoms", "Calculation slip"], "description": ["d1", "d2"]})
+TAX = pd.DataFrame({"id": ["FRA-01", "CAL-01"], "name": ["Example fraction error", "Calculation slip"], "description": ["d1", "d2"]})
 
 
 @pytest.fixture(scope="module")
@@ -41,7 +41,7 @@ def tok():
 def test_system_text_is_protocol_without_json_and_without_labels():
     system = S.system_text(TAX)
     assert system.startswith(PR.INSTRUCTIONS.split(PR.JSON_PART)[0]) and "JSON" not in system
-    assert "`Finding:" in system and system.endswith(P.NONE_LINE) and "FRA-01 | Adding tops and bottoms | d1" in system
+    assert "`Finding:" in system and system.endswith(P.NONE_LINE) and "FRA-01 | Example fraction error | d1" in system
     assert S.system_text(TAX, "name") != system  # the taxonomy style enters the checksum of the recipe
     with pytest.raises(ValueError, match="no question knowledge"):
         S.refuse_task_knowledge({"topic_codes": 10})
