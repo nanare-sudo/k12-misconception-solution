@@ -35,6 +35,14 @@ Form (fixed before the evaluation; it comes from the reranker family of the mode
     default severity "minor" in the taxonomy] · mech27[row] (the final answer read by the pr27 channel matches the answer key
     mechanically, src/answer_match.py). The caller attaches the row feature and the class mask to Static with attach_mech. Not in
     FEATURE_SETS.
+  * Feature set "fallback_i1_nd" (58; safety line with set alignment): "fallback_i1" (55, bit-identical) + m3_men, m3_last (mentions
+    in the M3 notes d1–d3 as in "main"; requires notes in Static) + demo_sim (example similarity, src/note_sim.py: per candidate
+    the mean of the three largest similarities of the row's own notes to the notes of real assignments of this code from OTHER
+    questions; the caller puts the matrix [rows, classes] as kn["demo_sim"] next to the knowledge features — like them, it depends
+    on the reference rows). Not in FEATURE_SETS.
+  * Feature set "fallback_i1_ndr" (64; safety line with set alignment): "fallback_i1_nd" (58, bit-identical) + the six regex-exact
+    note columns R_FEATS at the end (src/note_regex.py: mentions in the M3 notes d1–d3 and in the pr27 note; row-local and
+    label-free, therefore in Static: the caller attaches the matrix [rows, classes, 6] with attach_r). Not in FEATURE_SETS.
 
 KNOWLEDGE FEATURES: for training rows ONLY from reference rows of other folds — knowledge_other_folds; the row itself and
 its fold never count. For test rows from all training rows.
@@ -72,6 +80,10 @@ I1_FEATS = tuple(f"{r}_x_{c}" for r in I1_ROW_FEATS for c in I1_CAND_FEATS)  # o
 FB_I1_SET = "fallback_i1"  # variant b of the safety line with set alignment: fallback + interactions I1, without notes
 MM_SET = "main_guard_i1_mm"  # main_guard_i1 + minor_x_mech27 (minor code × final answer matches the key mechanically)
 MM_FEATS = ("minor_x_mech27",)
+ND_SET = "fallback_i1_nd"  # fallback_i1 + note mentions + example similarity (safety line)
+ND_FEATS = ("m3_men", "m3_last", "demo_sim")
+NDR_SET = "fallback_i1_ndr"  # fallback_i1_nd + six regex-exact note columns R (safety line)
+R_FEATS = ("t_m3_logcnt", "t_m3_first", "t_m3_lastpos", "t_pr_men", "t_pr_last", "t_pr_logcnt")  # definition: src/note_regex.py
 
 
 # ------------------------------------------------------------------------------------------------ building blocks
@@ -99,6 +111,10 @@ def feature_names(chan_names: Sequence[str], feature_set: str = "main") -> list[
         return feature_names(chan_names, "fallback") + list(I1_FEATS)
     if feature_set == MM_SET:  # main_guard_i1 unchanged + minor_x_mech27 at the end
         return feature_names(chan_names, I1_SET) + list(MM_FEATS)
+    if feature_set == ND_SET:  # fallback_i1 unchanged + mentions and example similarity at the end
+        return feature_names(chan_names, FB_I1_SET) + list(ND_FEATS)
+    if feature_set == NDR_SET:  # fallback_i1_nd unchanged + the six columns R at the end
+        return feature_names(chan_names, ND_SET) + list(R_FEATS)
     if feature_set not in FEATURE_SETS and feature_set != GUARD_SET:
         raise ValueError(f"unknown feature set {feature_set!r}")
     out = ["f_logp", "f_rank", "f_gap", "f_p", "p_logp", "p_rank"]
@@ -115,8 +131,9 @@ def feature_names(chan_names: Sequence[str], feature_set: str = "main") -> list[
 
 
 def uses_notes(feature_set: str) -> bool:
-    """Whether a feature set reads the M3 notes (main, main_guard, main_guard_i1, main_guard_i1_mm) — a fallback model must never do that."""
-    return feature_set in ("main", GUARD_SET, I1_SET, MM_SET)
+    """Whether a feature set reads the M3 notes (main, main_guard, main_guard_i1, main_guard_i1_mm, fallback_i1_nd, fallback_i1_ndr) — a
+    fallback model of the primary line must never do that."""
+    return feature_set in ("main", GUARD_SET, I1_SET, MM_SET, ND_SET, NDR_SET)
 
 
 def attach_mech(st: "Static", mech27: np.ndarray, minor: np.ndarray) -> None:
@@ -127,6 +144,16 @@ def attach_mech(st: "Static", mech27: np.ndarray, minor: np.ndarray) -> None:
     if not (np.isin(mech27, (0.0, 1.0)).all() and np.isin(minor, (0.0, 1.0)).all()):
         raise ValueError("mech27 and minor must be 0/1")
     st.mech27, st.minor = mech27, minor
+
+
+def attach_r(st: "Static", R: np.ndarray) -> None:
+    """The six columns R per (row of st, class) for the feature set fallback_i1_ndr (src/note_regex.r_features), float64, finite."""
+    R = np.asarray(R, dtype=np.float64)
+    if R.shape != (st.n, st.K, len(R_FEATS)):
+        raise ValueError(f"R {R.shape} instead of {(st.n, st.K, len(R_FEATS))}")
+    if not np.isfinite(R).all():
+        raise ValueError("R contains non-finite values")
+    st.r_feats = R
 
 
 def i1_interactions(X: np.ndarray, names: Sequence[str], perm: np.ndarray | None = None) -> np.ndarray:
@@ -279,6 +306,18 @@ def pair_features(st: Static, rows: np.ndarray, FM: np.ndarray, PM: np.ndarray, 
     """Features per (row, candidate) -> X [len(rows)·Kc, f], candidates [len(rows), Kc], names.
     rows: positions of the rows in `st` (table); FM/PM: base form and blend before the last step of EXACTLY these rows;
     kn: knowledge(...) of EXACTLY these rows."""
+    if feature_set == NDR_SET:  # fallback_i1_nd bit-identical + the six columns R at the end (matrix via attach_r)
+        R = getattr(st, "r_feats", None)
+        if R is None:
+            raise ValueError(f"feature set {NDR_SET} requires attach_r (R per row and class)")
+        X, cand, names = pair_features(st, rows, FM, PM, kn, ND_SET, Kc)
+        rows = np.asarray(rows)
+        gi, cc = rows[np.repeat(np.arange(len(rows)), Kc)], cand.reshape(-1)
+        out_names = names + list(R_FEATS)
+        want = feature_names(st.chan_names, NDR_SET)
+        if out_names != want:
+            raise AssertionError(f"feature order {out_names} != {want}")
+        return np.concatenate([X, R[gi, cc, :]], 1), cand, out_names
     if feature_set == MM_SET:  # main_guard_i1 bit-identical + minor_x_mech27 at the end (row feature and mask via attach_mech)
         mech27, minor = getattr(st, "mech27", None), getattr(st, "minor", None)
         if mech27 is None or minor is None:
@@ -292,6 +331,22 @@ def pair_features(st: Static, rows: np.ndarray, FM: np.ndarray, PM: np.ndarray, 
         if out_names != want:
             raise AssertionError(f"feature order {out_names} != {want}")
         return np.concatenate([X, col[:, None]], 1), cand, out_names
+    if feature_set == ND_SET:  # fallback_i1 bit-identical + m3_men, m3_last, demo_sim at the end
+        if st.notes is None or kn.get("demo_sim") is None:
+            raise ValueError(f"feature set {ND_SET} requires notes in Static and kn['demo_sim']")
+        X, cand, names = pair_features(st, rows, FM, PM, kn, FB_I1_SET, Kc)
+        rows = np.asarray(rows)
+        ds = np.asarray(kn["demo_sim"], dtype=np.float64)
+        if ds.shape != (len(rows), st.K):
+            raise ValueError(f"kn['demo_sim'] {ds.shape} instead of {(len(rows), st.K)}")
+        ii = np.repeat(np.arange(len(rows)), Kc)
+        gi, cc = rows[ii], cand.reshape(-1)
+        cols = np.stack([st.notes["m3_men"][gi, cc], st.notes["m3_last"][gi, cc], ds[ii, cc]], 1)
+        out_names = names + list(ND_FEATS)
+        want = feature_names(st.chan_names, ND_SET)
+        if out_names != want:
+            raise AssertionError(f"feature order {out_names} != {want}")
+        return np.concatenate([X, cols], 1), cand, out_names
     if feature_set in (I1_SET, FB_I1_SET):  # base set bit-identical + interactions I1 at the end (the other sets unchanged)
         X, cand, names = pair_features(st, rows, FM, PM, kn, GUARD_SET if feature_set == I1_SET else "fallback", Kc)
         out_names = names + list(I1_FEATS)

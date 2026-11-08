@@ -513,12 +513,14 @@ def guard_reference(ctx: dict, cand: np.ndarray) -> dict:
     return st
 
 
-def build_stage2(ctx: dict, oof: dict) -> tuple[dict, dict]:
-    """Deployment file (without timestamps) and log."""
+def build_stage2(ctx: dict, oof: dict, forms: dict | None = None, cv_units_want: int | None = None) -> tuple[dict, dict]:
+    """Deployment file (without timestamps) and log. Optional (eda/c133_primary_m3px27.py): `forms` = a given deployment form of the
+    training rows and `cv_units_want` = the sixths of its form "fold"; without both arguments unchanged (deploy_forms, field cv of the
+    blend file)."""
     y, Kc = ctx["y"], S2.K_CAND
-    forms = deploy_forms(ctx)
+    forms = deploy_forms(ctx) if forms is None else forms
     cv_units = int(C107.units(C107.rows_map(y, forms["fold"], ctx["seen"])).sum())
-    want_cv = int(round(float(ctx["stack"]["cv"]) * 6 * ctx["n"]))
+    want_cv = int(round(float(ctx["stack"]["cv"]) * 6 * ctx["n"])) if cv_units_want is None else int(cv_units_want)
     if cv_units != want_cv:
         abort(f"cross value of the deployment form {cv_units}/9000 does not match the field cv of the blend file ({want_cv})")
     models, rep = {}, {"sets": {}}

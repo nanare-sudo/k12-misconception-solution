@@ -1,6 +1,6 @@
 # Method
 
-*Status: 2026-11-07 (version 0.2). Numbers are out-of-fold (OOF) MAP@3 on the 1,500 labelled training rows unless stated
+*Status: 2026-11-08 (version 0.3). Numbers are out-of-fold (OOF) MAP@3 on the 1,500 labelled training rows unless stated
 otherwise. "±" is the standard error from a bootstrap over questions; see [VALIDATION.md](VALIDATION.md).*
 
 **Contents:**
@@ -92,6 +92,7 @@ photo (long side 1,024 px) + question text / diagram (448 px) + answer key + gra
         ├── zs27q/t   Qwen3.8-27B, no training, code-first scoring (topic block; zs27q adds the teacher task block)
         ├── think     Qwen3.8-27B, no training, reasons ≤ 1,800 tokens, then scores all codes behind its own text
         ├── pr27xm    Qwen3.8-27B, no training, marking protocol without labelled rows: notes → 3 codes + exact ranking
+        │   m3px27xm  the same 3 codes + the exact ranking of M3 behind the same notes        [primary line, final candidate]
         ├── M3        Qwen3.8-27B + LoRA, reasons then names; mean of 3 draws
         └── q397m3    Qwen3.5-397B-A17B writes notes; M3 scores all codes behind them        [primary line only]
         │
@@ -103,7 +104,8 @@ photo (long side 1,024 px) + question text / diagram (448 px) + answer key + gra
         ▼
    second stage: conditional-logit reranker over the top-5 candidates, then the NONE guard
    (primary: features incl. M3-note mentions, general-code identifiers, row × candidate interactions and the
-    minor-code × mechanical-match column · safety line: features without notes, plus the interactions)
+    minor-code × mechanical-match column · safety line: the interactions, M3-note mentions, the similarity of the notes
+    to notes of real assignments in other questions, and regex-exact columns of the M3 and protocol notes)
         ▼
    rule: black/empty photo → REL-01 at rank 1      →  top-3 codes per row
 ```
@@ -303,6 +305,45 @@ then name the code.
   set.
 - **Cost.** About 3.4 s per row for the M3 naming step; about 5.4 USD for the OOF side and about 10 USD for the test side.
 
+### 4.7 M3 behind the protocol notes (`m3px27`, mean channel `m3px27xm`; final primary candidate)
+
+- **Idea.** The mean channel `pr27xm` averages the codes named by the protocol channel with the exact ranking of the
+  untrained 27B behind the frozen first-pass notes of the same answers. `m3px27` takes this ranking from M3 instead: the
+  fine-tuned model reads the notes of the protocol channel as its own reasoning, writes the finding itself and names the
+  code, as `q397m3` does behind the 397B notes (§4.6).
+- **Notes.** `tools/make_m3px27_notes.py` converts the frozen first-pass notes (`data/derived/proto_notes/train_pr27.jsonl`,
+  `data/derived/proto_notes_test/test_pr27.jsonl`) into the format of the frozen M3 notes (`data/derived/sft_m3px27/`,
+  `sft_m3px27te/`): no finding is given, and the notes are character-identical with the input of the untrained ranking.
+- **Runs.** Training side `m3px27_oof_rp`: per fold k the M3 adapter that has not seen fold k ranks all 74 classes behind the
+  note of the row (five shards). Test side `m3px27te_rp`: the adapter of the full fit. The ranking settings are those of the
+  M3 draws.
+- **Channel.** `m3px27xm` = ½ (named codes of `pr27` + ranking of `m3px27`), floor 0.05, in place of `pr27xm`. The blend
+  weights are refitted on LogLoss (β 0.6 as before; file `stack_primary_m3px27.json`), and the whole second-stage chain of
+  the final primary form is refitted with the swapped channel (`eda/c133_primary_m3px27.py`).
+- **Values.** `m3px27` alone 0.7453, against 0.7318 for the untrained ranking (+0.0136 ± 0.0063); `m3px27xm` 0.7551 against
+  0.7459 for `pr27xm` (+0.0092 ± 0.0042). The two rankings agree on the top code in 85.3 % of the training rows.
+- **Rule** (pre-registered, expected-value rule with controls of the same role): deploy only if ½(F+M) on the original
+  meta-split lies above max(0, controls) and the mean over 20 new meta-splits is above 0 and above the mean of the
+  controls. Controls: a copy of the untrained ranking (0 by construction), the mean of the untrained ranking and a fourth
+  M3 draw, the fourth M3 draw, and a copy of the M3 channel `m3x3_full`; on the original meta-split they must meet their
+  values fixed in advance to four decimals (positive control of the measurement). Result: ½(F+M) +0.00006 (per fold
+  +0.0017, as one set −0.0016); over 20 new meta-splits +0.00013 ± 0.00018, against a control mean of −0.00045: deploy.
+  Without the 397B channel (reported only) ½(F+M) +0.0019 and +0.0010 ± 0.0002 over 20 new meta-splits: most of the value
+  of the change lies in the case that the 397B path cannot be repeated (§11).
+- **Deployment form of the training rows.** In the nested evaluation the arithmetic share β is selected per fold; with
+  `m3px27xm` fold 1 selects 0.7 instead of 0.6. The deployment features of the training rows therefore use the same cross
+  with β per fold (`build_stage2` with a given deployment form); with 0.6 in every fold this form equals the earlier one bit
+  for bit, which the copy null point checks. A fixed β of 0.6 would give another top code in 6 test rows.
+- **CV** of the final primary form with `m3px27xm`: per fold 0.84256, without the last step 0.83456, as one set 0.83822 (with
+  `pr27xm` 0.84089 / 0.83433 / 0.83978).
+- **Copy null point.** With `m3px27` replaced by the untrained ranking, the blend file, the 15 row vectors of the chain, the
+  five deployment files (up to provenance and channel names) and the test side (CSV and test matrix of the final form with
+  `pr27xm`) are reproduced exactly.
+- **Test side.** 3,498 of 3,498 rows ranked exactly; `NONE` at the top 0.346 (training rows 0.344; fault band 0.30–0.38);
+  the same top code as the untrained test ranking in 82.3 % of the rows. Against the final form with `pr27xm` the top code
+  changes in 52 test rows (1.5 %).
+- **Cost.** About 4.7 USD for the training side and about 12 USD for the test side on an RTX PRO 6000.
+
 ## 5. Teacher pseudo-labels for the unlabelled pool
 
 A closed commercial model labelled all 50,000 pool photos during development. The host explicitly allows this for
@@ -429,9 +470,10 @@ skew as the last step.
 ## 9. Second stage: conditional-logit reranker
 
 After the alignment, a small linear model reorders the top five candidates of each row (`src/stage2.py`). It is fitted
-by `eda/c118_stage2.py` in the primary line (extended by `eda/c121_stage2_i1.py` and `eda/c124_stage2_mm.py`), by
-`eda/c120_s036_safe_stage2.py` in the strictly inductive line and by `eda/c123_safety_set.py` in the safety line with
-alignment over the test set. The
+by `eda/c118_stage2.py` in the primary line (extended by `eda/c121_stage2_i1.py` and `eda/c124_stage2_mm.py`, and refitted
+with the channel `m3px27xm` by `eda/c133_primary_m3px27.py`), by `eda/c120_s036_safe_stage2.py` in the strictly inductive line
+and by `eda/c123_safety_set.py`, `eda/c129_safety_nd.py` and `eda/c130_safety_ndr.py` in the safety line with alignment over
+the test set. The
 blend has one weight per channel; the reranker can weigh the same information per candidate, for example how many
 channels and M3 draws agree on a code and whether the code was seen for the question.
 
@@ -449,7 +491,9 @@ channels and M3 draws agree on a code and whether the code was seen for the ques
   | `main_guard` | 48 | `main` plus identifiers of the five general codes (§9.4) | primary line, guard form |
   | `main_guard_i1` | 63 | `main_guard` plus 15 row × candidate interactions (§9.7) | primary line, I1 form |
   | `main_guard_i1_mm` | 64 | `main_guard_i1` plus the minor-code × mechanical-match column (§9.8) | primary line, final candidate |
-  | `fallback_i1` | 55 | `fallback` plus the same 15 interactions | safety line with alignment over the test set, final candidate (§9.9) |
+  | `fallback_i1` | 55 | `fallback` plus the same 15 interactions | safety line with alignment over the test set (§9.9) |
+  | `fallback_i1_nd` | 58 | `fallback_i1` plus two M3-note mentions and the example similarity (§9.10) | safety line, fallback of the final candidate |
+  | `fallback_i1_ndr` | 64 | `fallback_i1_nd` plus six regex-exact columns of the M3 and protocol notes (§9.11) | safety line, final candidate |
 
   Row-constant features (9 in `main` and the sets built on it, 8 in `fallback` and `fallback_i1`) get exactly zero weight in
   a conditional logit, so 34, 39, 54, 55, 32 and 47 features are effective.
@@ -458,7 +502,7 @@ channels and M3 draws agree on a code and whether the code was seen for the ques
 - **Abstention gate.** An inner cross-validation over blocks checks that the reranker beats the base order; otherwise it
   abstains. It did not abstain in any deployed form: inner 0.8351 (main form) and 0.8347 (fallback form) against base
   0.8286, 0.8381 against 0.8286 for the main form with the NONE guard, and 0.8247 against 0.8184 in the inductive line;
-  the values of the forms added in version 0.2 are in [TRAINING.md](TRAINING.md#13-second-stages).
+  the values of the forms added in versions 0.2 and 0.3 are in [TRAINING.md](TRAINING.md#13-second-stages).
 - **Order on the test set.** Blend → alignment → reranker → NONE guard (§9.3) → `REL-01` rule (§10). The reranker only
   reorders the first five candidates; the probability mass outside them is unchanged.
 
@@ -519,7 +563,8 @@ Only aggregates are used; see [VALIDATION.md](VALIDATION.md#6-checks-before-a-su
 | Main form | `main` (43) | widened rule; fallback form if it fails | no | 0.8376 / 0.8346 |
 | Guard form: main form with NONE guard and general-code identifiers | `main_guard` (48) | widened rule; fallback form if it fails | yes | 0.8389 / 0.8377 |
 | I1 form: guard form with row × candidate interactions (§9.7) | `main_guard_i1` (63) | widened rule; fallback form if it fails | yes | 0.8408 / 0.8387 |
-| **Final form**: I1 form with the minor-code × mechanical-match column (§9.8) | `main_guard_i1_mm` (64) | widened rule; fallback form if it fails | yes | 0.8409 / 0.8398 |
+| Final form: I1 form with the minor-code × mechanical-match column (§9.8) | `main_guard_i1_mm` (64) | widened rule; fallback form if it fails | yes | 0.8409 / 0.8398 |
+| **Final form with `m3px27xm`**: the same chain refitted with the M3 ranking behind the protocol notes in the mean channel (§4.7) | `main_guard_i1_mm` (64) | widened rule; fallback form if it fails | yes | 0.8426 / 0.8382 |
 
 - **History of the note guard.** The file submitted on 2026-10-31 used the fallback form: under the band rule one of the
   13 statistics, the share of word-identical notes between d1 and d2, was 0.046 on the test rows against a band ending
@@ -601,7 +646,7 @@ Only aggregates are used; see [VALIDATION.md](VALIDATION.md#6-checks-before-a-su
 - **Copy null point.** With the column weight set to zero and the 63 weights of the I1 form, the I1-form file and its test
   matrix are rebuilt byte for byte.
 
-### 9.9 Second stage of the safety line with alignment over the test set (final safety candidate)
+### 9.9 Second stage of the safety line with alignment over the test set
 
 - **Why.** The inductive alignment of §8 brings the class masses of the training rows to their targets, but on the test
   side it misses them: the mean test mass per class lies at L1 0.087 from the target (0.112 before any alignment),
@@ -629,7 +674,62 @@ Only aggregates are used; see [VALIDATION.md](VALIDATION.md#6-checks-before-a-su
   script ends with exit code 5 after the rule; with any other value it refuses to run.
 - **Test side.** Variant b changes the top code of 70 of the 3,498 test rows against the strictly inductive line with
   second stage; 10 test rows are kept in their base order by the NONE guard; guard (c) 0.029 against the OOF share 0.026.
-  The strictly inductive line with second stage stays the fallback of the safety slot.
+  The strictly inductive line with second stage stays the fallback of the safety slot under the strictest reading of the
+  rules (§11).
+
+### 9.10 Note mentions and example similarity in the safety line (`fallback_i1_nd`)
+
+- **Features.** Three columns appended to `fallback_i1` (55, bit for bit): `m3_men` and `m3_last`, the mentions of the
+  candidate in the frozen M3 notes d1–d3 as in the primary line, and `demo_sim`, the example similarity
+  (`src/note_sim.py`): per candidate the mean of the three largest cosine similarities of the row's own M3 notes to the notes
+  of training rows whose gold code is the candidate, never from the same question. Similarity: TF-IDF of word 1- and
+  2-grams (sublinear, min_df 2), the last 4,000 characters of each note, averaged over d1–d3; vectoriser and IDF are fitted
+  on the training notes only. The reference is nested: for a training row the training rows of the other folds, for a test
+  row all 1,500 training rows. The training notes are delivered frozen (`data/derived/sft/m3_d{1,2,3}_train_frozen_notes.jsonl`;
+  `eda/c129_safety_nd.py export-notes --verify` rebuilds them from the ranking runs).
+- **Guards, abort only.** The widened note guard of the primary line (13 statistics of the M3 test notes), a similarity guard
+  (mean top similarity of the test rows to the training rows against that of the training rows among each other; band ±10 %
+  or |z| ≤ 3), guard (c) and a limit of L1 0.035 on the test-side class masses. A failing guard stops the build without a
+  file; none switches to another form. Positive controls (notes copied from one draw, rows permuted, notes cut to 300
+  characters) must trigger a guard.
+- **Rule** (pre-registered): exact copy null points (the three columns at 0 reproduce `safety_final` bit for bit on the OOF
+  rows; the weights of `safety_final` with 0 for the new columns reproduce its file byte for byte); ½(F+M) on the original
+  meta-split > 0 and above the mean of 15 placebos (the three columns taken from another row of the same block); the mean
+  over 20 new meta-splits > 0; the risk rule P(θ < −0.002) ≤ 0.05 with τ_d = 0
+  ([VALIDATION.md](VALIDATION.md#55-risk-rule-of-the-strictly-inductive-line)).
+- **Result.** ½(F+M) +0.0032 ± 0.0015 against `safety_final` (per fold +0.0033, positive in 4 of 5 folds; as one set
+  +0.0031), placebo mean +0.0005 (maximum +0.0020); over 20 new meta-splits +0.0028 ± 0.0002, positive in 20 of 20 (placebo
+  −0.0001); risk rule P = 0.0001 (posterior mean +0.0018; with τ_d 0.001: 0.0053). CV per fold 0.8311, as one set 0.8274;
+  the gate does not abstain.
+- **Test side.** Note guard 13 of 13; similarity guard 0.2176 against 0.2095, passed through the band (+3.9 %; z = +4.51 lies
+  above 3: the test notes of the full-fit model are slightly more similar to the training notes than these are among each
+  other); guard (c) 0.0374 (OOF 0.0367); class masses L1 0.0282. Another top code than `safety_final` in 70 test rows
+  (2.0 %); the share of `NONE` at the top is unchanged (0.3548).
+
+### 9.11 Regex-exact note columns (`fallback_i1_ndr`, final safety candidate)
+
+- **Features.** Six columns appended to `fallback_i1_nd` (58, bit for bit), from the versioned extractor `src/note_regex.py`:
+  from the M3 notes d1–d3 the mean log(1 + number of mentions), the number of draws in which the candidate is mentioned
+  first, and the mean relative position of its last mention; from the frozen first-pass notes of the protocol channel (the
+  same run as the channel `pr27xm`) whether the candidate is mentioned, whether it is the last code mentioned, and
+  log(1 + number of mentions). Row-local and label-free. The protocol notes are delivered frozen and rebuilt from the raw
+  answers by `eda/c130_safety_ndr.py export-notes --verify` (with `tools/export_proto_notes.py`).
+- **Guards, abort only**: those of §9.10 plus a guard of the columns R: number of codes the protocol note mentions per row,
+  share of rows in which it mentions the top of the base form, and the mean last position of the M3 mentions per draw (band
+  ±10 % or |z| ≤ 3). Two further positive controls change only the protocol notes (shifted by one row; replaced by the M3
+  notes d1); only the guard of the columns R detects them, as required.
+- **Rule** (pre-registered): (1) in a full draw swap over the four sets of three draws from d1–d4 (d4: a fourth M3 draw on
+  the training rows only) the gain over `safety_nd` is > 0 in the mean and in at least 3 of 4 sets; (2) ½(F+M) on the
+  original meta-split > 0 and above the placebo mean (15 placebos); (3) the mean over 20 new meta-splits > 0; (4) the risk
+  rule against `safety_nd` with τ_d = the spread of the four sets, P(θ < −0.002) ≤ 0.05 for the original observation and
+  for the mean of the four sets.
+- **Result.** (1) +0.00099 / +0.00026 / +0.00083 / +0.00015, mean +0.00056, 4 of 4 positive; (2) +0.00072 ± 0.00108 (per
+  fold +0.00044, as one set +0.00100) against a placebo mean of −0.00012; (3) +0.00087 ± 0.00022 (85 % positive; placebo
+  +0.00011); (4) P = 0.0007 and 0.0010 at τ_d = 0.00041. With a second draw of the protocol notes (sensitivity) the
+  meta-splits give +0.00085 and P = 0.0006. CV per fold 0.8316, as one set 0.8284; the gate does not abstain.
+- **Test side.** All guards held: note guard 13 of 13, similarity guard as in §9.10, guard of the columns R 5 of 5 within the
+  band, guard (c) 0.0400 (OOF 0.0407), class masses L1 0.0282. Another top code than `safety_nd` in 38 test rows (1.1 %);
+  the share of `NONE` at the top is unchanged.
 
 ## 10. Blank photos
 
@@ -653,24 +753,26 @@ under the strictest reading of the rules
 
 | Property | Primary line | Safety line |
 |---|---|---|
-| Channels | 9B scorer, `zs27q`, `think18nb`, protocol channel, M3 (3 draws), `q397m3` | 9B scorer, `zs27t`, `think18sb`, protocol channel, M3 (3 draws) |
+| Channels | 9B scorer, `zs27q`, `think18nb`, protocol channel with the M3 ranking behind its notes (`m3px27xm`), M3 (3 draws), `q397m3` | 9B scorer, `zs27t`, `think18sb`, protocol channel (`pr27xm`), M3 (3 draws) |
 | Teacher-derived input | Task block in `zs27q` and in reasoning draw g | none |
 | API-derived training-side outputs | 397B outputs on training rows (Tinker API); the test side runs locally | none |
 | 397B | yes (`q397m3`) | no |
 | Arithmetic share β | 0.6 | 0.4 |
 | Last step of the final candidate | Alignment over the full test set (as one set) | Alignment over the full test set (as one set) |
-| Second stage of the final candidate | Reranker with M3-note features, general-code identifiers, row × candidate interactions and the minor-code × mechanical-match column, NONE guard; fallback features if the note guard fails | Reranker with the features without notes plus the row × candidate interactions, NONE guard |
-| Fallback | I1 form (without the mechanical-match column); then the guard form | Strictly inductive form: inductive alignment with fixed weights, second stage with the features without notes |
+| Second stage of the final candidate | Reranker with M3-note features, general-code identifiers, row × candidate interactions and the minor-code × mechanical-match column, NONE guard; fallback features if the note guard fails | Reranker with the row × candidate interactions, M3-note mentions, example similarity and regex-exact columns of the M3 and protocol notes, NONE guard; a failing guard stops the build |
+| Fallback | The same final form with `pr27xm` (version 0.2); then the I1 form | The form without the regex columns; then the form with interactions only; under the strictest reading the strictly inductive form: inductive alignment with fixed weights, second stage with the features without notes |
 | Rotation list of `v1r` (test side) | Released orientation network | Released orientation network |
 | Test-side hardware | 9B on Kaggle T4 (offline); 27B steps on RTX PRO 6000; `zs27q` on A40 (4-bit); 397B notes on 4×H200 | 9B and `zs27t` on Kaggle T4 (offline); 27B steps on RTX PRO 6000 |
-| CV MAP@3 of the final candidate | Per fold 0.8409 / as one set 0.8398 | As one set 0.8217 (variant b, with gate); per fold of its fallback 0.8233 |
-| CV MAP@3 of the fallback | I1 form 0.8408 / 0.8387; guard form 0.8389 / 0.8377 | Strictly inductive with second stage 0.8233 (per fold); without second stage 0.8184 |
+| CV MAP@3 of the final candidate | Per fold 0.8426 / as one set 0.8382 | Per fold 0.8316 / as one set 0.8284 |
+| CV MAP@3 of the fallback | Final form with `pr27xm` 0.8409 / 0.8398; I1 form 0.8408 / 0.8387 | Without the regex columns 0.8311 / 0.8274; interactions only 0.8217 (as one set, with gate); strictly inductive with second stage 0.8233 (per fold) |
 
-The two forms of the safety line are deployed, and therefore evaluated, differently: the final candidate as one set
-(variant b 0.8217 on the original meta-split; per fold, with the alignment inside each 300-row fold, 0.8278), the strictly
-inductive form per fold (0.8233). Paired over 20 new meta-splits, variant a as one set lies +0.0007 ± 0.0002 above the
-strictly inductive form, and variant b +0.0007 ± 0.0001 above variant a (§9.9). In cross-validation per fold the primary
-candidate is about 0.018 ahead of the strictly inductive form.
+The forms of the safety line are deployed, and therefore evaluated, differently: the forms with the alignment over the test
+set as one set (variant b 0.8217 on the original meta-split; per fold, with the alignment inside each 300-row fold, 0.8278;
+the note-feature forms were decided by the mean of both forms, §9.10 and §9.11), the strictly inductive form per fold
+(0.8233). Paired over 20 new meta-splits, variant a as one set lies +0.0007 ± 0.0002 above the strictly inductive form,
+variant b +0.0007 ± 0.0001 above variant a (§9.9), the note mentions and example similarity +0.0028 ± 0.0002 above variant b
+and the regex columns +0.0009 ± 0.0002 above that. In cross-validation per fold the primary candidate is about 0.011 ahead of
+the safety candidate and about 0.019 ahead of the strictly inductive form.
 The row-level correlation of the two lines, measured between the reranker fallback form and the strictly inductive line
 without second stage, is 0.91.
 

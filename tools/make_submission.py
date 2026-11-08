@@ -45,6 +45,12 @@ field rank_mean) requires --rank and --rank requires it; the floor of the blend 
 Technical limits: ranking on at least 98 % of the test rows (`--rank-max-missing`), median candidate mass ≥ 0.9
 (`--rank-min-mass`), share of NONE at the top of the ranking within the malfunction band 0.30–0.38 fixed in advance
 (`--rank-none-band`; never used to choose between variants). Only counts and shares are printed.
+MEAN CHANNEL WITH THE RANKING OF A FINE-TUNED MODEL (channel m3px27xm = ½(pr27 + m3px27); field rank_mean.rank_compare = "sft" in
+meta_<channel>.json, eda/c133_primary_m3px27.py): the ranking of the training rows consists of fold shards (joined with +, per fold the
+adapter without that fold), the ranking of the test rows comes from the final fit. It is then compared as for --rank-only
+(rank_only_source_differences against EVERY shard: only model, fold and note source may differ) instead of with
+eda/c95_rank_mean.recipe_differences, and the NOTE GUARD rank_mean.notes (rank_mean_notes_guard) requires the frozen training and test
+notes behind which the rankings were computed. Without the field (all earlier mean channels, e.g. pr27xm) everything stays bit-identical.
 
 RANK-ONLY CHANNEL (`--rank-only <channel>=runs/<run>/<job>/<tag>`, M3): a channel that consists ONLY of the exact ranking of
 all codes (probe proto_rank, e.g. the trained 27B in sft mode) — no mean with named codes as with --rank. On the test rows
@@ -153,6 +159,21 @@ fallback model with this set is rejected). Only if the main model names the feat
 artifacts/stage2_primary_final.json): in addition the column minor_x_mech27 — row feature mech27 from the frozen pr27 test answers
 (field mech27.test of the deployment file: file and SHA-256, the check is required), final answer = answer key compared by
 src/answer_match.py (without eval); statistics as shares only (field mech27 of the report).
+NOTE FEATURES OF THE SAFETY LINE (only if a deployment file with align_mode "set" names the feature set fallback_i1_nd, e.g.
+artifacts/stage2_safety_nd.json from eda/c129_safety_nd.py fit): apply_stage2_safe also reads the frozen M3 test notes (test_notes, as the
+primary line) and the frozen training notes (train_notes, file + SHA-256), counts the mentions (m3_men, m3_last) and computes the
+example similarity (src/note_sim.py; reference: all training rows of other questions). The widened note guard and the similarity guard
+(band ±10 % OR |z| ≤ 3) act ONLY as an abort without a file, never as a switch; a null model only computes them. --stage2-control
+copy|permute|truncate (positive control of the build script, only with this feature set): changes the test notes in memory, NEVER writes
+a file and ends with exit code 5 if a guard fires (control passed), otherwise with exit code 6.
+REGEX-EXACT NOTE COLUMNS OF THE SAFETY LINE (only if a deployment file with align_mode "set" names the feature set fallback_i1_ndr, e.g.
+artifacts/stage2_safety_ndr.json from eda/c130_safety_ndr.py fit): as fallback_i1_nd and in addition the six regex-exact note columns R
+(src/note_regex.py) from the M3 test notes d1–d3 and the frozen pr27 test notes (field r_notes.pr27_test of the deployment file: file =
+SHA-256 = checksum of the meta file, table test, all rows, source as in the file). The guard of the columns R against r_reference (pr27
+mention rate per row, share of rows in which pr27 mentions the top of the base form, mean last position of the M3 mentions per draw; band
+±10 % OR |z| ≤ 3) acts ONLY as an abort without a file, like the other guards. Additional positive controls: pr27_shift (pr27 notes
+shifted by one row), pr27_m3d1 (pr27 replaced by the M3 notes d1); truncate also shortens the pr27 notes; exit codes 5/6 as above. All
+other deployment files compute and report unchanged.
 
 Written are artifacts/test_<blend>.npy, artifacts/submissions/sub_<blend>.csv and artifacts/submissions/sub_<blend>.json
 (sources, SHA-256, statistics). Only aggregates over the test rows are printed, plus the same statistics on the OOF rows
@@ -177,6 +198,8 @@ sys.path[:0] = [str(COMP), str(COMP / "src")]
 import labels  # noqa: E402
 import metric  # noqa: E402
 import stage2 as S2  # noqa: E402
+import note_sim as NS  # noqa: E402  (example similarity of the M3 notes, feature set fallback_i1_nd only)
+import note_regex as NR  # noqa: E402  (regex-exact note columns R, feature set fallback_i1_ndr only)
 import answer_match as AM  # noqa: E402  (mechanical comparison final answer = answer key, without eval)
 import submission_io  # noqa: E402
 from vlm import common as C  # noqa: E402
@@ -274,11 +297,15 @@ def rank_mean_guard(name: str, stack: dict, rank_spec: str | None, n_draws: int,
 
 def proto_channel(name: str, draws: list[str], rank_spec: str | None, n_test: int, classes: list[str], seen_cls: np.ndarray,
                   neutral=None, rank_partial: bool = False, max_missing: float = 0.02, min_mass: float = 0.9,
-                  none_band: tuple[float, float] = (0.30, 0.38), ref_rank: str | None = None) -> tuple[np.ndarray, np.ndarray, dict]:
+                  none_band: tuple[float, float] = (0.30, 0.38), ref_rank: str | None = None,
+                  ref_compare: str = "c95") -> tuple[np.ndarray, np.ndarray, dict]:
     """Task-agnostic channel on the test rows: named codes (a8.mean_of_draws) or, with `rank_spec`, the mean channel of named
     codes and exact ranking (eda/c95_rank_mean.channel — the same function as for the OOF artifact). ref_rank: ranking of the
-    training rows of the OOF artifact — both runs must have the same settings (except for the notes).
-    -> (P, number of valid answers per row, ranking statistics; aggregates only)."""
+    training rows of the OOF artifact — both runs must have the same settings (except for the notes). ref_compare: "c95" (default, as
+    before: eda/c95_rank_mean.recipe_differences) or "sft" (fold shards of a fine-tuned model against its final fit,
+    rank_only_source_differences against every shard). -> (P, number of valid answers per row, ranking statistics; aggregates only)."""
+    if ref_compare not in ("c95", "sft"):
+        raise SystemExit(f"channel {name}: unknown comparison form of the ranking {ref_compare!r} (c95 | sft)")
     if rank_spec is None:
         P, cnt = a8.mean_of_draws(draws, n_test, classes, seen_cls, table="test", neutral=neutral)
         return P, cnt, {}
@@ -286,7 +313,7 @@ def proto_channel(name: str, draws: list[str], rank_spec: str | None, n_test: in
     if missing:
         raise SystemExit(f"channel {name}: ranking {rank_spec} — missing {', '.join(missing)} (run not finished or not fetched)")
     if ref_rank is not None:
-        diff = c95.recipe_differences(rank_spec, ref_rank)
+        diff = rank_only_source_differences(rank_spec, ref_rank) if ref_compare == "sft" else c95.recipe_differences(rank_spec, ref_rank)
         if diff:
             raise SystemExit(f"channel {name}: ranking of the test rows computed differently from that of the training rows ({ref_rank}): {diff}")
     P, cnt, hr, rs = c95.channel(draws, rank_spec, n_test, classes, seen_cls, table="test", neutral=neutral, rank_partial=rank_partial)
@@ -492,6 +519,62 @@ def rank_only_notes_guard(name: str, spec: str, root: Path, n_test: int, n_train
         out.update(notes_test=te["sft_from"], notes_test_sha256=info_te.get("sha256"), notes_test_source=src, notes_test_model=tm.get("model"))
     if problems:
         raise SystemExit(f"--rank-only {name}: note guard violated — " + "; ".join(problems))
+    return out
+
+
+def rank_mean_notes_guard(name: str, spec: str, root: Path, n_test: int, n_train: int, rm_def: dict | None) -> dict | None:
+    """NOTE GUARD of a mean channel whose ranking a fine-tuned model computed behind frozen notes (field rank_mean.notes in
+    meta_<channel>.json, eda/c133_primary_m3px27.py; channel m3px27xm). Without the field -> None, nothing is checked (all earlier mean
+    channels). Checked: every OOF shard (rank_mean.rank_source) ranked behind the training note file; training and test notes = checksum
+    of their meta file = copy in the upload folder, training notes = checksum of the OOF artifact; the test ranking ranked behind the test
+    note file; test notes for every row, from the named model, from an allowed run (checksums of <tag>_raw.jsonl and <tag>_meta.json) and
+    character-identical with the input of the ranking of the untrained 27B (px27_notes, if required). Only meta files and checksums are
+    read, never the notes. Violated -> SystemExit. -> checksums and source (aggregates)."""
+    nt = (rm_def or {}).get("notes")
+    if not nt:
+        return None
+    tr, te = nt.get("train") or {}, nt.get("test") or {}
+    if not tr.get("sft_from") or not tr.get("sha256") or not te.get("sft_from") or not te.get("source_runs") or not te.get("model"):
+        raise SystemExit(f"--rank {name}: meta_{name}.json describes the note guard incompletely (rank_mean.notes.train/test)")
+    problems = []
+    for run, job, m in rank_only_constituents(str(rm_def.get("rank_source") or "")):
+        if (m.get("sft") or {}).get("sft_from") != tr["sft_from"]:
+            problems.append(f"OOF ranking {run}/{job} ranked behind {(m.get('sft') or {}).get('sft_from')!r} instead of {tr['sft_from']}")
+    info_tr, p = _notes_file_check(root, tr["sft_from"], tr.get("upload"), "train", n_train)
+    problems += p
+    if info_tr.get("sha256") != tr["sha256"]:
+        problems.append(f"{tr['sft_from']}: not the note file of the OOF artifact (checksum)")
+    t_meta = _rank_meta(spec)
+    if t_meta.get("table") != "test":
+        problems.append(f"test ranking {spec}: table {t_meta.get('table')!r}")
+    if (t_meta.get("sft") or {}).get("sft_from") != te["sft_from"]:
+        problems.append(f"test ranking ranked behind {(t_meta.get('sft') or {}).get('sft_from')!r} instead of {te['sft_from']}")
+    info_te, p = _notes_file_check(root, te["sft_from"], te.get("upload"), "test", n_test)
+    problems += p
+    tm = info_te.get("meta") or {}
+    if tm and tm.get("model") != te["model"]:
+        problems.append(f"test notes from model {tm.get('model')!r} instead of {te['model']}")
+    if tm and (int(tm.get("with_record", -1)) != int(n_test) or (tm.get("states") or {}).get("open") != int(n_test)):
+        problems.append(f"test notes not available for every row (with record {tm.get('with_record')}, states {tm.get('states')}) — the OOF side had every row")
+    src = tm.get("source")
+    if tm and src not in te["source_runs"]:
+        problems.append(f"test notes from {src!r}, allowed {te['source_runs']}")
+    elif tm:
+        _, run, job, tag = str(src).split("/")
+        d = COMP / "artifacts" / "runs" / run / run / job
+        for fname, key in ((f"{tag}_raw.jsonl", "source_sha256"), (f"{tag}_meta.json", "meta_sha256")):
+            if not (d / fname).is_file() or _file_sha256(d / fname) != tm.get(key):
+                problems.append(f"test notes do not match run {src} ({fname}: checksum)")
+    px = tm.get("px27_notes") or {}
+    if te.get("px27_sha256") and (px.get("sha256") != te["px27_sha256"] or int(px.get("identical_notes", -1)) != int(n_test)):
+        problems.append(f"test notes not character-identical with the input {te.get('px27_file')} (px27_notes {px.get('identical_notes')}/{n_test})")
+    if problems:
+        raise SystemExit(f"--rank {name}: note guard violated — " + "; ".join(problems))
+    out = {"notes_train": tr["sft_from"], "notes_train_sha256": info_tr.get("sha256"), "notes_test": te["sft_from"],
+           "notes_test_sha256": info_te.get("sha256"), "notes_test_source": src, "notes_test_model": tm.get("model"),
+           "notes_test_px27_identical": px.get("identical_notes")}
+    print(f"  channel {name}: note guard of the ranking (rank_mean.notes): training notes {str(out['notes_train_sha256'])[:16]}…, test notes "
+          f"{str(out['notes_test_sha256'])[:16]}… from {src} ({tm.get('model')}), character-identical with px27 {px.get('identical_notes')}/{n_test} — held")
     return out
 
 
@@ -1043,6 +1126,101 @@ def class_mass_stats(Q: np.ndarray, P_pre: np.ndarray, y_train: np.ndarray, min_
             "general_after": float(mq[gen].sum()), "general_target": float(target[gen].sum()), "mass_without_target_after": float(mq[~used].sum())}
 
 
+def _train_notes_texts(root: Path, rel_file: str, want_sha: str, n_train: int) -> tuple[list[str], dict]:
+    """Frozen M3 notes of the training rows of one draw (eda/c129_safety_nd.py export-notes): file = SHA-256 of the deployment file =
+    checksum of its meta file, table train, every row exactly once. Only the field text, only for the machine similarity."""
+    f = Path(root) / rel_file
+    mf = f.with_suffix(".meta.json")
+    if not f.is_file() or not mf.is_file():
+        raise SystemExit(f"--stage2: {rel_file} or {mf.name} missing")
+    sha = _file_sha256(f)
+    meta = json.loads(mf.read_text())
+    if sha != want_sha or meta.get("sha256") != sha or meta.get("table") != "train" or int(meta.get("rows", -1)) != n_train:
+        raise SystemExit(f"--stage2: training notes {rel_file}: checksum {sha[:16]}… / meta file do not match the deployment file")
+    texts: dict[int, str] = {}
+    for line in f.read_text(encoding="utf-8").splitlines():
+        if line.strip():
+            r = json.loads(line)
+            i = int(r["row"])
+            if r.get("table") != "train" or i in texts or not 0 <= i < n_train:
+                raise SystemExit(f"--stage2: training notes {rel_file}: rows not unique or not table train")
+            texts[i] = str(r.get("text") or "")
+    if len(texts) != n_train:
+        raise SystemExit(f"--stage2: training notes {rel_file}: {len(texts)} of {n_train} rows")
+    return [texts[i] for i in range(n_train)], {"file": rel_file, "sha256": sha}
+
+
+STAGE2_CONTROLS = ("copy", "permute", "truncate", "pr27_shift", "pr27_m3d1")
+M3_CONTROLS = ("copy", "permute", "truncate")  # change the M3 test notes
+R_CONTROLS = ("pr27_shift", "pr27_m3d1")  # change only the pr27 test notes (feature set fallback_i1_ndr only)
+
+
+def _control_texts(texts: list[list[str]], control: str) -> list[list[str]]:
+    """Positive control (in memory only): copy = draw d1 for all three; permute = rows of every draw permuted by a fixed permutation
+    (default_rng(0)); truncate = every note cut to its first 300 characters."""
+    if control == "copy":
+        return [list(texts[0]) for _ in texts]
+    if control == "permute":
+        perm = np.random.default_rng(0).permutation(len(texts[0]))
+        return [[t[int(i)] for i in perm] for t in texts]
+    if control == "truncate":
+        return [[(x or "")[:300] for x in t] for t in texts]
+    raise SystemExit(f"--stage2-control {control!r}")
+
+
+def _control_pr27(pr_texts: list[str], m3_texts: list[list[str]], control: str) -> list[str]:
+    """Positive control of the pr27 notes (in memory only): pr27_shift = shifted by one row (row i gets the note of row i + 1);
+    pr27_m3d1 = replaced by the (unchanged) M3 notes d1; truncate = cut to the first 300 characters (as the M3 notes); copy and permute
+    change only the M3 notes."""
+    if control == "pr27_shift":
+        return list(pr_texts[1:]) + list(pr_texts[:1])
+    if control == "pr27_m3d1":
+        return list(m3_texts[0])
+    if control == "truncate":
+        return [(x or "")[:300] for x in pr_texts]
+    if control in ("copy", "permute"):
+        return list(pr_texts)
+    raise SystemExit(f"--stage2-control {control!r}")
+
+
+def _pr27_notes_texts(root: Path, cfg: dict, n_test: int) -> tuple[list[str], dict]:
+    """Frozen pr27 test notes (tools/export_proto_notes.py --allow-test: reasoning of the first pass) for the columns R. Field
+    r_notes.pr27_test of the deployment file: file = SHA-256 of the deployment file = checksum of the meta file, table test with every row
+    exactly once, source of the meta file = source of the deployment file. Rows are split at "\\n" (never splitlines(): U+2028 and similar
+    characters stand raw in the texts). Only the field text is read, for machine counting; none of it is printed. -> (texts in table
+    order, checksums)."""
+    ts = (cfg or {}).get("pr27_test") or {}
+    rel = str(ts.get("file") or "")
+    f = Path(root) / rel
+    mf = f.with_suffix(".meta.json")
+    if not rel or not f.is_file() or not mf.is_file():
+        raise SystemExit(f"--stage2: pr27 test notes {rel or '(r_notes.pr27_test missing)'} or their meta file missing")
+    sha = _file_sha256(f)
+    meta = json.loads(mf.read_text())
+    problems = []
+    if sha != ts.get("sha256") or meta.get("sha256") != sha:
+        problems.append(f"checksum {sha[:16]}… does not match the deployment file or the meta file")
+    if meta.get("table") != "test" or int(meta.get("rows", -1)) != n_test:
+        problems.append(f"table {meta.get('table')!r} with {meta.get('rows')} rows")
+    if [s.get("source") for s in meta.get("sources") or []] != [ts.get("source")]:
+        problems.append(f"source of the meta file is not {ts.get('source')!r}")
+    texts: dict[int, str] = {}
+    for line in f.read_text(encoding="utf-8").split("\n"):
+        if not line.strip():
+            continue
+        r = json.loads(line)
+        i = int(r["row"])
+        if r.get("table") != "test" or i in texts or not 0 <= i < n_test:
+            problems.append("rows not unique or not table test")
+            break
+        texts[i] = str(r.get("text") or "")
+    if len(texts) != n_test:
+        problems.append(f"{len(texts)} of {n_test} rows")
+    if problems:
+        raise SystemExit(f"--stage2: pr27 test notes {rel}: " + "; ".join(problems))
+    return [texts[i] for i in range(n_test)], {"file": rel, "sha256": sha, "source": ts.get("source")}
+
+
 def stage2_safe_order(model: dict, X: np.ndarray, cand: np.ndarray, protect: bool) -> tuple[np.ndarray, int]:
     """New order of the first K candidates (stage2.reorder) and then — with protect — the NONE guard: if the base order has NONE (class 0)
     at the top and the model wants another top code, the base order of the whole row stays.
@@ -1058,7 +1236,7 @@ def stage2_safe_order(model: dict, X: np.ndarray, cand: np.ndarray, protect: boo
 
 def apply_stage2_safe(path: Path, stack_file: Path, stack: dict, Q: np.ndarray, P_pre: np.ndarray, raw_chans: dict, draw_keep: dict, rank_only: dict,
                       train: pd.DataFrame, test: pd.DataFrame, classes: list[str], seen_cls: np.ndarray, root: Path,
-                      report_path: Path | None = None) -> tuple[np.ndarray, dict]:
+                      report_path: Path | None = None, control: str | None = None) -> tuple[np.ndarray, dict]:
     """SECOND STAGE of the SAFETY line (deployment file with align_mode "inductive" or "set"; see the module docstring). Q = test blend
     after the alignment (inductive, or as one set over the test rows), P_pre = the blend before it. Feature set "fallback" or
     "fallback_i1" without notes (no note guard), NONE guard as in the file, guard (c) on the share of new top codes after the guard;
@@ -1081,8 +1259,16 @@ def apply_stage2_safe(path: Path, stack_file: Path, stack: dict, Q: np.ndarray, 
         problems.append("channels or β of the deployment file do not match the blend file")
     if int(s2.get("K", -1)) != S2.K_CAND or float(s2.get("lambda", -1)) != S2.LAMBDA:
         problems.append(f"K {s2.get('K')} / λ {s2.get('lambda')} instead of {S2.K_CAND} / {S2.LAMBDA}")
-    if fs not in ("fallback", S2.FB_I1_SET):  # fallback_i1 = fallback + interactions I1 (without notes)
-        problems.append(f"feature set {fs!r}: the safety line only knows \"fallback\" and \"fallback_i1\" (without notes)")
+    if fs not in ("fallback", S2.FB_I1_SET, S2.ND_SET, S2.NDR_SET):  # fallback_i1 = fallback + interactions I1 (without notes); + ND; + R
+        problems.append(f"feature set {fs!r}: the safety line only knows \"fallback\", \"fallback_i1\", \"fallback_i1_nd\" and \"fallback_i1_ndr\"")
+    nd = fs in (S2.ND_SET, S2.NDR_SET)  # fallback_i1_ndr computes the path of fallback_i1_nd and in addition the columns R
+    ndr = fs == S2.NDR_SET
+    if nd and mode != "set":
+        problems.append(f"feature set {fs} only with align_mode \"set\"")
+    if control is not None and not nd:
+        problems.append(f"--stage2-control only with the feature set {S2.ND_SET}")
+    elif control in R_CONTROLS and not ndr:
+        problems.append(f"--stage2-control {control} only with the feature set {S2.NDR_SET}")
     if not isinstance(protect, bool) or (protect and classes[0] != "NONE"):
         problems.append(f"protect_none {protect!r} (boolean; the guard requires NONE as class 0)")
     dch = s2.get("draws_channel")
@@ -1095,13 +1281,100 @@ def apply_stage2_safe(path: Path, stack_file: Path, stack: dict, Q: np.ndarray, 
         problems.append(f"channels without a test matrix {missing}")
     if problems:
         raise SystemExit(f"--stage2 ({lab}): " + "; ".join(problems))
-    st = S2.Static(stack["channels"], raw_chans, draws, test["grade"].to_numpy().astype(float), seen_cls, classes, None)
     y_tr = labels.encode(train["root_code"], classes)
-    kn = S2.knowledge(S2.task_keys(train["question_id"].to_numpy(), train["topic_name"].to_numpy()),
-                      np.asarray(train["topic_name"].to_numpy()).astype(str), y_tr,
-                      S2.task_keys(test["question_id"].to_numpy(), test["topic_name"].to_numpy()),
-                      np.asarray(test["topic_name"].to_numpy()).astype(str), K)
+    train_keys = S2.task_keys(train["question_id"].to_numpy(), train["topic_name"].to_numpy())
+    test_keys = S2.task_keys(test["question_id"].to_numpy(), test["topic_name"].to_numpy())
+    kn = S2.knowledge(train_keys, np.asarray(train["topic_name"].to_numpy()).astype(str), y_tr,
+                      test_keys, np.asarray(test["topic_name"].to_numpy()).astype(str), K)
     cand0 = S2.candidates(Q, seen_cls)
+    nd_info = None
+    notes = None
+    if nd:  # notes of the test rows, reference of the training notes, guards (abort only)
+        notes_cfg = s2.get("test_notes") or []
+        tr_cfg = s2.get("train_notes") or []
+        if [c.get("rank") for c in notes_cfg] != specs or len(tr_cfg) != len(S2.DRAWS):
+            raise SystemExit(f"--stage2 ({lab}): test notes {[c.get('rank') for c in notes_cfg]} do not match the test draws {specs} "
+                             f"or {len(tr_cfg)} training note files instead of {len(S2.DRAWS)}")
+        rule = s2.get("guard_rule") or {}
+        if (float(rule.get("share_z_max", -1)) != 3.0 or float(rule.get("notes_rel_tolerance", -1)) != 0.10 or int(rule.get("n_ref", -1)) != len(train)
+                or float(rule.get("sim_rel", -1)) != NS.SIM_REL or float(rule.get("sim_z_max", -1)) != NS.SIM_Z_MAX or rule.get("abort_only") is not True):
+            raise SystemExit(f"--stage2 ({lab}): guard_rule differs from the rule of the feature set (widened 3 / 0.10 / n_ref {len(train)}, "
+                             "similarity 0.10 / 3, abort only)")
+        rcfg = s2.get("r_notes") or {}
+        if ndr and (rule.get("r_rule") != "safety-ndr rule (6)" or float(rule.get("r_rel", -1)) != NR.REL or float(rule.get("r_z_max", -1)) != NR.Z_MAX
+                    or not s2.get("r_reference") or rcfg.get("extractor") != NR.VERSION or tuple(rcfg.get("features") or ()) != S2.R_FEATS):
+            raise SystemExit(f"--stage2 ({lab}): guard_rule, r_reference or r_notes differ from the rule of the feature set (guard of the columns R "
+                             f"{NR.REL:g} / {NR.Z_MAX:g}, extractor {NR.VERSION}, columns {', '.join(S2.R_FEATS)})")
+        texts, notes_src = [], []
+        for c in notes_cfg:
+            tx, src = _test_notes_texts(root, c["file"], c["rank"], n_test)
+            texts.append(tx)
+            notes_src.append(src)
+        tr_texts, tr_src = [], []
+        for c in tr_cfg:
+            tx, src = _train_notes_texts(root, c["file"], c["sha256"], len(train))
+            tr_texts.append(tx)
+            tr_src.append(src)
+        pr_texts, pr_src = _pr27_notes_texts(root, rcfg, n_test) if ndr else (None, None)  # pr27 test notes of the columns R
+        if control is not None:
+            m3_plain = texts
+            if control in M3_CONTROLS:
+                texts = _control_texts(texts, control)
+            if ndr:
+                pr_texts = _control_pr27(pr_texts, m3_plain, control)
+        notes = S2.notes_features(texts, classes)
+        tstats = S2.note_stats(notes["men_per_draw"], notes["m3_men"], cand0, cand0[:, 0])
+        tstats["identical"] = {"d1-d2": S2.identical_share(texts[0], texts[1]), "d1-d3": S2.identical_share(texts[0], texts[2]),
+                               "d2-d3": S2.identical_share(texts[1], texts[2])}
+        ga = S2.guard_notes(s2["guard_reference"], tstats, 0.10, share_z_max=3.0, n_ref=len(train), n_test=n_test)
+        Ssim = NS.mask_same_task(NS.similarity(texts, tr_texts), test_keys, train_keys)
+        sg = NS.sim_guard(s2["sim_reference"], NS.sim_stats(NS.top_sim(Ssim)), NS.SIM_REL, NS.SIM_Z_MAX)
+        kn["demo_sim"] = NS.demo_sim(Ssim, y_tr, K)
+        rg, R_test = None, None
+        if ndr:  # columns R of the test rows and their guard (aggregates only, abort only)
+            m3_st = [NR.mention_stats(t, classes) for t in texts]
+            pr_st = NR.mention_stats(pr_texts, classes)
+            R_test = NR.r_features(m3_st, pr_st)
+            rstats = NR.guard_stats(m3_st, pr_st, cand0)
+            rg = {**NR.guard(s2["r_reference"], rstats, NR.REL, NR.Z_MAX), "test": rstats, "reference": s2["r_reference"], "enforced": not null}
+        nd_info = {"guard_notes": {"ok": ga["ok"], "rule": "widened", "test": tstats, "reference": s2["guard_reference"], "checks": ga["checks"],
+                                   "enforced": not null},
+                   "guard_sim": {**sg, "enforced": not null}, "test_notes": notes_src, "train_notes": tr_src, "control": control}
+        if ndr:
+            nd_info.update({"guard_r": rg, "r_notes": pr_src})
+        bad = [c for c in ga["checks"] if not c["ok"]]
+        print(f"  SECOND STAGE, SAFETY LINE (note features{', CONTROL ' + control if control else ''}): note guard (widened rule) {'held' if ga['ok'] else 'FAILED'}"
+              f" ({len(ga['checks']) - len(bad)}/{len(ga['checks'])}); similarity guard top similarity test {sg['test']['mean']:.4f} against training "
+              f"{sg['reference']['mean']:.4f} (band {sg['band'][0]:.4f}…{sg['band'][1]:.4f}, z {sg['z']:+.2f}) {'held' if sg['ok'] else 'FAILED'} (aggregates only)")
+        for c in bad:
+            print(f"    note guard failed: {c['stat']} test {c['test']:.4f} outside [{c['lo']:.4f}, {c['hi']:.4f}]"
+                  + (f", |z| {abs(c['z']):.2f} > 3 (training value {c['ref']:.4f})" if c.get("z") is not None else ""))
+        if ndr:
+            rbad = [c for c in rg["checks"] if not c["ok"]]
+            print(f"  SECOND STAGE, SAFETY LINE (columns R{', CONTROL ' + control if control else ''}): guard R {'held' if rg['ok'] else 'FAILED'}"
+                  f" ({len(rg['checks']) - len(rbad)}/{len(rg['checks'])}); " + "; ".join(
+                      f"{c['stat']} test {c['test']:.4f} against {c['ref']:.4f} (z {c['z']:+.2f}, {c['passed_by'] or 'FAILED'})" for c in rg["checks"])
+                  + " (aggregates only)")
+            for c in rbad:
+                print(f"    guard R failed: {c['stat']} test {c['test']:.4f} outside [{c['lo']:.4f}, {c['hi']:.4f}], |z| {abs(c['z']):.2f} > {NR.Z_MAX:g} "
+                      f"(training value {c['ref']:.4f})")
+        fired = not (ga["ok"] and sg["ok"] and (rg is None or rg["ok"]))
+        if control is not None:  # positive control: never a file; exit code 5 = a guard fires (passed), 6 = none fires
+            if report_path is not None:
+                report_path.parent.mkdir(parents=True, exist_ok=True)
+                report_path.write_text(json.dumps(nd_info, indent=1, ensure_ascii=False, default=float) + "\n")
+            print(f"  CONTROL {control}: {'a guard fires — control passed' if fired else 'NO guard fires — control FAILED'}; no file")
+            raise SystemExit(5 if fired else 6)
+        if fired and not null:
+            if report_path is not None:
+                report_path.parent.mkdir(parents=True, exist_ok=True)
+                report_path.write_text(json.dumps(nd_info, indent=1, ensure_ascii=False, default=float) + "\n")
+            if ndr:
+                raise SystemExit(f"--stage2 ({lab}): note, similarity or R guard failed (abort only) — no file written")
+            raise SystemExit(f"--stage2 ({lab}): note or similarity guard failed (abort only) — no file written")
+    st = S2.Static(stack["channels"], raw_chans, draws, test["grade"].to_numpy().astype(float), seen_cls, classes, notes)
+    if ndr:  # columns R per (test row, class)
+        S2.attach_r(st, R_test)
     X, cand, names = S2.pair_features(st, np.arange(n_test), Q, P_pre, kn, fs)
     if names != model.get("features") or not np.array_equal(cand, cand0):
         raise SystemExit(f"--stage2 ({lab}): features of the test side ({len(names)}) do not match the deployment file ({len(model.get('features') or [])})")
@@ -1123,7 +1396,13 @@ def apply_stage2_safe(path: Path, stack_file: Path, stack: dict, Q: np.ndarray, 
                       else "blend -> inductive alignment -> second stage -> NONE guard -> REL-01")}
     if trans:  # class masses after the alignment against their target (aggregates only; only in this mode, otherwise the report stays byte-identical)
         info["class_mass"] = class_mass_stats(Q, P_pre, y_tr, int(s2.get("align_min", 3)), classes)
-    print(f"  SECOND STAGE, SAFETY LINE ({Path(path).name}{', NULL MODEL' if null else ''}): feature set {fs} ({len(names)}), no notes; "
+    if nd_info is not None:  # only with fallback_i1_nd / _ndr (otherwise the report stays byte-identical)
+        info.update({"guard_notes": nd_info["guard_notes"], "guard_sim": nd_info["guard_sim"], "test_notes": nd_info["test_notes"],
+                     "train_notes": nd_info["train_notes"], "fallback": False})
+    if ndr:  # only with fallback_i1_ndr (otherwise the report stays byte-identical)
+        info.update({"guard_r": nd_info["guard_r"], "r_notes": nd_info["r_notes"]})
+    print(f"  SECOND STAGE, SAFETY LINE ({Path(path).name}{', NULL MODEL' if null else ''}): feature set {fs} ({len(names)}), "
+          f"{('notes d1–d3 + example similarity' + (' + columns R (M3 d1–d3, pr27)' if ndr else '')) if nd else 'no notes'}; "
           f"NONE guard {'on' if protect else 'off'} ({n_protected} test rows keep the base order); new top code in {changed:.4f} of the test rows "
           f"(OOF {oof_share:.4f}, band ×{lo_f:g}…×{hi_f:g} -> {'ok' if gc_ok else 'VIOLATED'}); first three changed {info['share_top3_changed']:.4f} "
           f"(OOF {float(info['share_top3_changed_oof'] or 0.0):.4f}); \"novel for the task\" among the first 5: test {novel:.4f}, OOF {info['guard_novel_task_top5']['oof']:.4f}")
@@ -1177,6 +1456,9 @@ def main() -> int:
     ap.add_argument("--blank-code", default="REL-01", help="code for blank images (meta code of the taxonomy: upload does not match the task)")
     ap.add_argument("--stage2", help="deployment file of the second stage (eda/c118_stage2.py fit): conditional logit over the first K candidates "
                                      "after the margin alignment; requires --align as in the file; guards on the test notes and the change rate")
+    ap.add_argument("--stage2-control", choices=STAGE2_CONTROLS, help="positive control (feature sets fallback_i1_nd/_ndr only; pr27_shift and "
+                    "pr27_m3d1 only fallback_i1_ndr): change the test notes in memory; never writes a file, exit code 5 = a guard fires "
+                    "(passed), 6 = none fires")
     ap.add_argument("--stage2-report", help="file for the guard statistics of the second stage (aggregates only; e.g. artifacts/eda/private/stage2/guards.json)")
     a = ap.parse_args()
     if a.align < 0 or a.align_inductive < 0:
@@ -1185,6 +1467,8 @@ def main() -> int:
         raise SystemExit("--align-inductive and --align are mutually exclusive (the inductive alignment is meant for the inductive line).")
     if a.stage2_report and not a.stage2:
         raise SystemExit("--stage2-report only with --stage2")
+    if a.stage2_control and not a.stage2:
+        raise SystemExit("--stage2-control only with --stage2")
     if a.stage2:  # the second stage was fitted on the alignment over the whole set: the same strength and class limit are required
         s2j = json.loads(Path(a.stage2).read_text())
         if s2j.get("align_mode") == "inductive":  # inductive line: inductive alignment as in the fit (per fold)
@@ -1215,12 +1499,21 @@ def main() -> int:
         if k not in proto:
             raise SystemExit(f"--rank {k}: the channel must also be listed under --proto (named codes of the same notes)")
     rank_ref = {}
+    rank_cmp: dict[str, str] = {}  # comparison form of the ranking (rank_mean.rank_compare); without the field empty = as before
+    rank_notes: dict[str, dict] = {}  # note guard of the mean channel (rank_mean.notes); without the field empty = as before
     for k in proto:
         rm_def = rank_mean_guard(k, stack, rank.get(k), len(proto[k].split(",")))
         if rm_def:
             if not rm_def.get("rank_source"):
                 raise SystemExit(f"channel {k}: meta_{k}.json names no ranking of the training rows (rank_mean.rank_source)")
             rank_ref[k] = rm_def["rank_source"]
+            if "rank_compare" in rm_def:  # fold shards of a fine-tuned model (without the field as before)
+                rank_cmp[k] = str(rm_def["rank_compare"])
+                if rank_cmp[k] not in ("c95", "sft"):
+                    raise SystemExit(f"channel {k}: rank_mean.rank_compare {rank_cmp[k]!r} unknown (c95 | sft)")
+            ninfo = rank_mean_notes_guard(k, rank[k], root, n_test, len(train), rm_def)
+            if ninfo is not None:
+                rank_notes[k] = ninfo
     for k, v in fill.items():
         if k not in stack["channels"] or (v not in given and v != "prior"):
             raise SystemExit(f"--fill {k}={v}: {k} must be a channel of the blend, {v} needs its own entry under --test")
@@ -1268,7 +1561,7 @@ def main() -> int:
             neutral = np.load(root / neutral_file) if neutral_file else None
             P, cnt, rinfo = proto_channel(name, draws, rank.get(name), n_test, classes, seen_cls, neutral=neutral, rank_partial=a.rank_partial,
                                           max_missing=a.rank_max_missing, min_mass=a.rank_min_mass, none_band=tuple(a.rank_none_band),
-                                          ref_rank=rank_ref.get(name))
+                                          ref_rank=rank_ref.get(name), ref_compare=rank_cmp.get(name, "c95"))
             miss, n_due = cnt == 0, int((cnt >= 0).sum())
             print(f"  channel {name}: protocol answers, rows by number of valid draws {dict(sorted((int(k), int((cnt == k).sum())) for k in set(cnt.tolist())))}"
                   f" ({int(miss.sum())} without an answer get the uniform distribution" + (f"; −1 = {int((cnt < 0).sum())} rows of the gate {neutral_file}" if neutral_file else "") + ")")
@@ -1277,6 +1570,8 @@ def main() -> int:
             sources[name] = [{"proto": d} for d in draws] + [{"rows_without_answer": int(miss.sum()), "neutral_rows": neutral_file, "rows_neutral": int((cnt < 0).sum())}]
             if rinfo:  # mean channel with ranking: source and statistics of the ranking
                 sources[name].append({"rank": rank[name], "definition": c95.DEFINITION, **rinfo})
+            if name in rank_notes:  # only with rank_mean.notes; without the field the record of the sources stays unchanged
+                sources[name].append({"rank_compare": rank_cmp.get(name, "c95"), "notes": rank_notes[name]})
             meta_file = COMP / "artifacts" / f"meta_{name}.json"
             ch_meta = json.loads(meta_file.read_text()) if meta_file.is_file() else {}
             if ch_meta.get("class_weights") is not None:  # inductive debiasing: the same weights as for the channel's OOF artifact
@@ -1415,8 +1710,11 @@ def main() -> int:
     stage2_info = None
     if a.stage2:  # second stage: reranker over the first K candidates AFTER the alignment, BEFORE REL-01
         apply_fn = apply_stage2_safe if s2j.get("align_mode") in ("inductive", "set") else apply_stage2  # safety line: inductive / as one set
+        if a.stage2_control and apply_fn is not apply_stage2_safe:
+            raise SystemExit("--stage2-control only with a deployment file of the safety line")
+        extra = {"control": a.stage2_control} if a.stage2_control else {}
         P, stage2_info = apply_fn(Path(a.stage2), COMP / "artifacts" / f"stack_{a.name}.json", stack, P, P_pre_align, raw_chans, draw_keep,
-                                      rank_only, train, test, classes, seen_cls, root, Path(a.stage2_report) if a.stage2_report else None)
+                                      rank_only, train, test, classes, seen_cls, root, Path(a.stage2_report) if a.stage2_report else None, **extra)
     blank_info = None
     if a.blank_rows:  # blank images (black photo): the meta code at rank 1, the rest of the order stays (inductive, per row)
         rows = np.load(root / a.blank_rows).astype(np.int64)

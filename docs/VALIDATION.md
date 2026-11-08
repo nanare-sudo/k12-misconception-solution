@@ -1,6 +1,6 @@
 # Validation
 
-*Status: 2026-11-07 (version 0.2).*
+*Status: 2026-11-08 (version 0.3).*
 
 Every model decision in this project was made on cross-validation with the 1,500 labelled rows; the public leaderboard
 was never used to choose between variants. This document describes the protocol: folds, leakage controls, the three
@@ -120,6 +120,18 @@ threshold for adoption and the result that would stop the line of work.
   L1 0.035 from the target; (iii) variant b (with the interactions) instead of a only by the expected-value rule.
   The CV part of (ii) was missed by one sixth in 9,000 and overridden by a recorded decision (§5.4,
   [`decisions/override_cv_condition_ii.json`](../decisions/override_cv_condition_ii.json)).
+- **Rules of the note-feature forms of the safety line** (2026-11-07; [METHOD.md](METHOD.md#910-note-mentions-and-example-similarity-in-the-safety-line-fallback_i1_nd)):
+  exact copy null points; ½(F+M) on the original meta-split > 0 and above the mean of 15 placebos; the mean over 20 new
+  meta-splits > 0; the risk rule of §5.5 with P(θ < −0.002) ≤ 0.05. The regex note columns must in addition be positive in
+  the mean of a full draw swap over four M3 draw sets and in at least 3 of the 4 sets, and the risk rule uses the spread of
+  the sets as τ_d and must hold for the original observation and for the mean of the sets. The test-side guards of both
+  forms only abort a build; no size threshold applies.
+- **Rule of the channel `m3px27`** (2026-11-07, for the primary slot): the expected-value rule with controls of the same
+  role. Deploy only if ½(F+M) on the original meta-split lies above the maximum of 0 and four controls (a copy of the
+  untrained ranking, the mean of the untrained ranking and a fourth M3 draw, the fourth M3 draw, a copy of the M3 channel)
+  and the mean over 20 new meta-splits is above 0 and above the mean of the controls over the same splits; the controls must
+  meet their values fixed in advance on the original meta-split to four decimals. Secondary roles of the channel would have
+  needed a nested choice of role and were excluded; the recipe without the 397B channel is reported only.
 - **Generated texts are draws.** Two single runs of a text-generating channel are never compared against each other.
   Variants are compared over several draws, or with the text held fixed and only the step behind it changed.
 
@@ -201,7 +213,7 @@ the guard form, by the expected-value rule:
 | Parser | The mechanical comparison is a re-implementation without `eval` of an independent reference parser used during development; both agree on all values read from the training and test answers and on all 4,998 answer keys |
 | Test side (aggregates) | Other top code than the I1-form file in 6 test rows |
 
-**Safety line with alignment over the test set** ([METHOD.md](METHOD.md#99-second-stage-of-the-safety-line-with-alignment-over-the-test-set-final-safety-candidate)),
+**Safety line with alignment over the test set** ([METHOD.md](METHOD.md#99-second-stage-of-the-safety-line-with-alignment-over-the-test-set)),
 by the safety-set rule:
 
 | Check | Result |
@@ -213,6 +225,45 @@ by the safety-set rule:
 | Additional: variant a against the strictly inductive form over the same 20 new meta-splits | +0.0007 ± 0.0002; positive in 16 of 20, above −0.002 in 20 of 20 |
 | Override | Only the CV part of (ii), by the decision recorded in `decisions/override_cv_condition_ii.json` (SHA-256 pinned in the code); without it the build ends with exit code 5 |
 | Test side (aggregates) | Other top code than the strictly inductive form with second stage in 70 test rows (2.0 %); 10 rows kept by the NONE guard; guard (c) 0.029 against the OOF share 0.026; NONE mass after the alignment 0.3375 against the target 0.3373 |
+
+**Safety line: note mentions and example similarity** ([METHOD.md](METHOD.md#910-note-mentions-and-example-similarity-in-the-safety-line-fallback_i1_nd)),
+Δ against `safety_final` (variant b):
+
+| Check | Result |
+|---|---|
+| Copy null points | The three columns at 0 reproduce variant b bit for bit on the OOF rows (row values, orders, NONE guard); on the test side the null model reproduces the file without second stage, and the weights of variant b with 0 for the new columns reproduce its file and test matrix byte for byte |
+| Original meta-split | ½(F+M) +0.0032 ± 0.0015 (per fold +0.0033, 4 of 5 folds positive; as one set +0.0031) |
+| 15 placebos (the three columns from another row of the same block) | Mean +0.0005, maximum +0.0020 |
+| 20 new meta-splits | +0.0028 ± 0.0002, positive in 20 of 20; placebo −0.0001 |
+| Risk rule (§5.5) | P(θ < −0.002) = 0.0001 at τ_d = 0 (posterior mean +0.0018); 0.0053 at τ_d = 0.001 (reported only) |
+| Check before the rule (full draw swap) | Draws d1–d3 +0.0028, mean of the four sets of three +0.0018, all four positive |
+| Positive controls on the test side | Copied, permuted and truncated test notes: a guard fires and no file is written; the similarity guard alone would not have detected the copy (it passes through the band) |
+| Test side (aggregates) | Note guard 13 of 13; similarity 0.2176 against 0.2095 (band; z +4.51); guard (c) 0.0374 (OOF 0.0367); class masses L1 0.0282; another top code than variant b in 70 test rows |
+
+**Safety line: regex-exact note columns** ([METHOD.md](METHOD.md#911-regex-exact-note-columns-fallback_i1_ndr-final-safety-candidate)),
+Δ against the form with note mentions and example similarity:
+
+| Check | Result |
+|---|---|
+| Copy null points | R columns 0 reproduce the predecessor bit for bit on the OOF rows; on the test side the null model reproduces the file without second stage, and the predecessor's weights with 0 for the R columns reproduce its file and test matrix byte for byte |
+| (1) Full draw swap, four sets of three from d1–d4 | +0.00099 / +0.00026 / +0.00083 / +0.00015, mean +0.00056, 4 of 4 positive |
+| (2) Original meta-split | ½(F+M) +0.00072 ± 0.00108 (per fold +0.00044, as one set +0.00100); placebo mean −0.00012 (maximum +0.00083) |
+| (3) 20 new meta-splits | +0.00087 ± 0.00022, 85 % positive; placebo +0.00011 |
+| (4) Risk rule, τ_d = spread of the four sets (0.00041) | P(θ < −0.002) = 0.0007 (original) and 0.0010 (mean of the sets); second draw of the protocol notes: 0.0006 |
+| Positive controls on the test side | Copied, permuted, truncated notes, protocol notes shifted by one row or replaced by the M3 notes d1: a guard fires and no file is written; the last two are detected only by the guard of the columns R |
+| Test side (aggregates) | All guards held (guard R 5 of 5 within the band); guard (c) 0.0400 (OOF 0.0407); another top code than the predecessor in 38 test rows |
+
+**Primary line: M3 ranking behind the protocol notes** ([METHOD.md](METHOD.md#47-m3-behind-the-protocol-notes-m3px27-mean-channel-m3px27xm-final-primary-candidate)),
+Δ against the final form with `pr27xm`, by the rule of §5.2:
+
+| Check | Result |
+|---|---|
+| Original meta-split | ½(F+M) +0.00006 (per fold +15 sixths, as one set −14) |
+| Controls of the same role (original / mean of 20 new meta-splits) | Copy of the untrained ranking 0 / 0 (bit-identical); mean of the untrained ranking and the fourth M3 draw −0.00094 / −0.00036; fourth M3 draw −0.00167 / −0.00045; copy of the M3 channel 0 / −0.00097; control mean −0.00045 |
+| 20 new meta-splits | +0.00013 ± 0.00018, positive in 55 % |
+| Recipe without the 397B channel (reported only) | Original +0.00194; 20 new meta-splits +0.00098 ± 0.00018, positive in 95 % |
+| Copy null points | The untrained ranking in place of `m3px27` reproduces the blend file, the 15 row vectors of the chain, the five deployment files (up to provenance and channel names) and the test side (CSV and test matrix) exactly |
+| Test side (aggregates) | 3,498 of 3,498 rows ranked exactly; NONE at the top 0.346 (training rows 0.344); same top code as the untrained test ranking in 82.3 % of rows (training rows 85.3 %); another top code than the final form with `pr27xm` in 52 test rows |
 
 ### 5.5 Risk rule of the strictly inductive line
 
@@ -243,6 +294,11 @@ is at most 5 %: P(θ < −0.002) ≤ 0.05.
 - **Consequence.** Under the rule as written, the second stage with NONE guard is the current candidate of the inductive
   line, and the line without second stage is its fallback. The final choice of the inductive slot weighs this
   sensitivity against the expected gain of +0.002 to +0.003. A further M3 draw on the training rows would narrow τ_d.
+- **Use in the note-feature forms of the safety line.** The rules of §9.10 and §9.11 of [METHOD.md](METHOD.md) use the same
+  posterior with the same prior (12 measurements of this class, `eda/risk_rule.py`; selection correction with 6 variants,
+  correlation 0.5, spread 0.0015). For the note mentions and the example similarity τ_d = 0 decides (P = 0.0001; τ_d 0.001 is
+  reported: 0.0053). For the regex note columns a fourth M3 draw was available: τ_d is the spread of the four draw sets
+  (0.00041), and P is 0.0007 for the original observation and 0.0010 for the mean of the sets.
 
 ## 6. Checks before a submission
 
@@ -309,6 +365,17 @@ counts, shares and checksums. No per-row test output is displayed or inspected.
 - Inductive line: the deployment file names `align_mode: inductive`. The assembly then requires the inductive alignment
   with the strength and class threshold of the file, accepts only the feature set without notes, and checks that the M3
   test draws are those named in the file, in the same order. There is no note guard.
+- Note-feature forms of the safety line (`fallback_i1_nd`, `fallback_i1_ndr`; only with `align_mode: set`): the frozen M3 test
+  and training notes and, for the regex columns, the frozen protocol test notes are read with their checksums (deployment file
+  = meta file = file); the widened note guard, the similarity guard, the guard of the columns R and guard (c) act **only as an
+  abort**: a failing guard writes no file, and nothing switches to another form. The rule fields of the deployment file must
+  equal the fixed values (band 10 %, |z| ≤ 3). `--stage2-control` runs the positive controls in memory (exit code 5 if a guard
+  fires, 6 if none fires; never a file).
+- Mean channel with an M3 ranking (`m3px27xm`, field `rank_mean.rank_compare: sft`): the test ranking is compared with every
+  fold shard of the training side (only model, fold and note source may differ), and the note guard of the channel requires
+  that every shard and the test ranking were computed behind the frozen note files named in the channel metadata, that the
+  test notes come from the recorded protocol test run, and that they are character-identical with the input of the untrained
+  ranking.
 - A second stage with weight zero reproduces the file without it byte for byte.
 
 **Output**

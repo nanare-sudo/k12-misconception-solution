@@ -1,6 +1,6 @@
 # Misconception Detection in K-12 Student Math Workings: Solution
 
-> **Status:** 2026-11-07 · version 0.2, pre-final. This is a living document. The final private-leaderboard result will
+> **Status:** 2026-11-08 · version 0.3, pre-final. This is a living document. The final private-leaderboard result will
 > be added after the competition closes (2026-11-17 00:00 UTC). Open work is listed in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 This repository contains the code and documentation of our solution to the Kaggle competition
@@ -26,8 +26,11 @@ error. Up to three codes per row are submitted in order of confidence, and the s
   steps are a class-marginal alignment and a small conditional-logit reranker over the top five candidates. If the
   blend puts `NONE` first, the reranker may not replace it (NONE guard), because none of its features measures whether
   the final answer is correct. Row × candidate interactions let row properties such as the blend's uncertainty act
-  through the candidates, and in the primary line one column marks minor codes in rows whose final answer matches the
-  key mechanically.
+  through the candidates. In the primary line one column marks minor codes in rows whose final answer matches the key
+  mechanically; in the safety line the reranker also reads the frozen M3 and protocol-channel notes: how a candidate is
+  mentioned there, and how similar the notes are to notes of real assignments of that code in other questions.
+- **M3 also names behind the protocol notes.** In the primary candidate the protocol channel's mean channel takes its
+  ranking from M3 behind the frozen notes of the protocol answers instead of from the untrained 27B.
 - **Two lines.** The **primary line** maximises cross-validated MAP@3. The **safety line** uses no input derived from the
   development-time teacher model, no output of an external API and no 397B channel; its final candidate uses the
   alignment over the test set, and its strictly inductive form stays the fallback. The two final submissions are drawn
@@ -47,12 +50,12 @@ flowchart TD
     C2["27B zero-shot scorer, topic block plus task block in the primary line"]
     C3["27B reason-then-name"]
     C4["27B protocol channel"]
-    C5["M3: fine-tuned 27B reasoner, mean of 3 draws"]
+    C5["M3: fine-tuned 27B reasoner, mean of 3 draws; in the primary line also behind the protocol notes"]
     C6["397B notes named by M3, primary line only"]
     FL["Probability floors"]
     BL["Log-linear blend with arithmetic share, weights fitted on LogLoss"]
     AL["Class-marginal alignment over the test set; inductive in the strictly inductive fallback"]
-    RR["Conditional-logit reranker over the top 5 candidates, with row x candidate interactions; M3 note features in the primary line"]
+    RR["Conditional-logit reranker over the top 5 candidates, with row x candidate interactions and note features"]
     NG["NONE guard: a NONE top from the blend stays first"]
     BK["Blank photo: REL-01 at rank 1"]
     OUT["Top-3 codes per row"]
@@ -83,7 +86,8 @@ flowchart TD
 | 27B zero-shot scorer with topic block | `zs27t` | Qwen3.8-27B (4-bit) | no | 0.6730 | safety |
 | 27B reason-then-name | `think18nb` | Qwen3.8-27B | no | 0.7672 | primary |
 | 27B reason-then-name, teacher-free | `think18sb` | Qwen3.8-27B | no | 0.7516 | safety |
-| 27B protocol channel | `pr27xm` | Qwen3.8-27B | no | 0.7459 | both |
+| 27B protocol channel | `pr27xm` | Qwen3.8-27B | no | 0.7459 | safety; primary fallbacks |
+| Protocol channel with the M3 ranking behind its notes | `m3px27xm` | Qwen3.8-27B; Qwen3.8-27B + LoRA (M3) | M3 only | 0.7551 | primary |
 | M3: fine-tuned 27B reasoner, mean of 3 draws | `m3x3_full` | Qwen3.8-27B + LoRA | yes | 0.8020 | both |
 | 397B notes, named by M3 | `q397m3` | Qwen3.5-397B-A17B + M3 | M3 only | 0.7442 | primary |
 
@@ -100,21 +104,34 @@ the test set is processed by the final candidates of both lines. Definitions and
 
 | Line and form | Channels | Last steps | CV per fold | CV as one set | Public LB |
 |---|---|---|---:|---:|---:|
-| **Primary line, final form: interactions and minor-code × mechanical-match column** (current primary candidate; submitted 2026-11-06) | 6 | alignment over the test set, reranker (64 features), NONE guard | 0.8409 | 0.8398 | 0.84100 |
+| **Primary line, final form with the M3 ranking behind the protocol notes** (current primary candidate; submitted 2026-11-08) | 6 | alignment over the test set, reranker (64 features), NONE guard | 0.8426 | 0.8382 | 0.84116 |
+| Primary line, final form: interactions and minor-code × mechanical-match column (fallback; submitted 2026-11-06) | 6 | alignment over the test set, reranker (64 features), NONE guard | 0.8409 | 0.8398 | 0.84100 |
 | Primary line, I1 form: guard form with row × candidate interactions (submitted 2026-11-06) | 6 | alignment over the test set, reranker (63 features), NONE guard | 0.8408 | 0.8387 | 0.84150 |
 | Primary line, guard form: reranker main form with NONE guard and general-code identifiers (submitted 2026-11-01) | 6 | alignment over the test set, reranker (48 features), NONE guard | 0.8389 | 0.8377 | 0.84200 |
 | Primary line, reranker *main form* (submitted 2026-11-01) | 6 | alignment over the test set, reranker (43 features) | 0.8376 | 0.8346 | 0.84166 |
-| **Safety line, alignment over the test set, reranker with interactions** (current safety candidate; submitted 2026-11-07) | 5 | alignment over the test set, reranker (55 features), NONE guard | — | 0.8217 | 0.83516 |
+| **Safety line, reranker with note mentions, example similarity and regex note columns** (current safety candidate; submitted 2026-11-07) | 5 | alignment over the test set, reranker (64 features), NONE guard | 0.8316 | 0.8284 | 0.83716 |
+| Safety line, reranker with note mentions and example similarity (fallback; submitted 2026-11-07) | 5 | alignment over the test set, reranker (58 features), NONE guard | 0.8311 | 0.8274 | 0.83750 |
+| Safety line, alignment over the test set, reranker with interactions (submitted 2026-11-07) | 5 | alignment over the test set, reranker (55 features), NONE guard | — | 0.8217 | 0.83516 |
 | Safety line, strictly inductive form with second stage (fallback; submitted 2026-11-01) | 5 | inductive alignment, reranker (40 features), NONE guard | 0.8233 | — | 0.83183 |
 | Safety line, strictly inductive form without second stage (submitted 2026-10-31) | 5 | inductive alignment | 0.8184 | — | 0.82966 |
 | Best single model: M3, mean of three draws (OOF) | 1 | none | 0.8020 | — | not submitted |
 
 —: each form of the safety line is evaluated in its own deployment form: the strictly inductive form per fold (fixed
-weights per row), the final candidate as one set (its value with the gate; per fold it reaches 0.8278). The single
-model has no last step.
+weights per row), the forms with the alignment over the test set as one set (with the gate; the form with interactions
+reaches 0.8278 per fold). The two note-feature forms were decided by the mean of both forms and are shown in both; their
+gate does not abstain. The single model has no last step.
 
 - **Paired differences** (standard error from a bootstrap over questions; ½(F+M) is the mean of the per-fold and the
   as-one-set difference):
+  - M3 ranking behind the protocol notes in the mean channel, over the final form with `pr27xm`: ½(F+M) +0.0001 on the
+    original meta-split (per fold +0.0017, as one set −0.0016); over 20 new meta-splits +0.0001 ± 0.0002, above the mean of
+    four controls of the same role (−0.0005); without the 397B channel +0.0019, over 20 new meta-splits +0.0010 ± 0.0002;
+  - regex note columns in the safety line, over the form with note mentions and example similarity: ½(F+M) +0.0007 ± 0.0011
+    against a placebo mean of −0.0001; full draw swap over four M3 draw sets +0.0006, positive in 4 of 4; over 20 new
+    meta-splits +0.0009 ± 0.0002;
+  - note mentions and example similarity in the safety line, over the form with interactions: ½(F+M) +0.0032 ± 0.0015
+    against a placebo mean of +0.0005; over 20 new meta-splits +0.0028 ± 0.0002, positive in 20 of 20; risk rule
+    P(θ < −0.002) = 0.0001;
   - minor-code × mechanical-match column over the I1 form: ½(F+M) +0.0006; over 20 new meta-splits +0.0005 ± 0.0001,
     positive in 19 of 20;
   - row × candidate interactions over the guard form: ½(F+M) +0.0014; over 20 new meta-splits +0.0011 ± 0.0002,
@@ -146,7 +163,7 @@ k12-solution/
 │   ├── folds.parquet      the fixed 5-fold split (row position → fold; hash-checked)
 │   └── vlm/               one YAML file per model run (training, OOF and test-side jobs)
 ├── src/                   metric, label space, submission checks, transcription cleaning, second stage, answer matching,
-│                          orientation net
+│                          note similarity and regex note features, orientation net
 │   └── vlm/               model runner: prompts, exact code scoring, LoRA training, vLLM text generation
 ├── decisions/             recorded decisions that a build script checks by their pinned checksum
 ├── kaggle_core/           small shared library: artifacts, folds, metrics, submission validation
@@ -166,8 +183,8 @@ kept privately and referenced by path and, where pinned, by SHA-256
 (see [docs/DATA_AND_COMPLIANCE.md](docs/DATA_AND_COMPLIANCE.md)).
 [docs/CODEMAP.md](docs/CODEMAP.md) maps every script to its role. Some file and script names carry historical build
 labels such as `s029`, `s030n`, `s034` or `s035`; they are kept because the frozen artifacts and their checksums refer to
-them. The build scripts added in version 0.2, their deployment files and output files are named by role:
-`primary_i1`, `primary_final` and `safety_final`.
+them. The build scripts added in versions 0.2 and 0.3, their deployment files and output files are named by role:
+`primary_i1`, `primary_final`, `safety_final` (version 0.2) and `safety_nd`, `safety_ndr`, `primary_m3px27` (version 0.3).
 
 ## Quick start
 
@@ -191,27 +208,30 @@ of this version ([docs/ROADMAP.md](docs/ROADMAP.md), step 5). Then:
 export OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=2
 python -I tools/make_folds.py                              # artifacts/folds.npy from configs/folds.parquet
 ORIENT=legacy bash tools/builds/s029_m3x3.sh safe          # earlier files with the first-version rotation list,
-ORIENT=legacy bash tools/builds/s034_stage2_main.sh best   #   used as references by the two builds below
-bash tools/builds/primary_final.sh                         # primary line, final candidate (runs primary_i1.sh, s035_… first)
-OVERRIDE_CV_II=override_cv_condition_ii bash tools/builds/safety_final.sh   # safety line, final candidate (runs s036_… first)
-sha256sum artifacts/submissions/sub_primary_final.csv artifacts/submissions/sub_safety_final.csv
+ORIENT=legacy bash tools/builds/s034_stage2_main.sh best   #   used as references by the builds below
+bash tools/builds/safety_ndr.sh       # safety line, final candidate (runs safety_nd.sh, which runs safety_final.sh and primary_final.sh first)
+bash tools/builds/primary_m3px27.sh   # primary line, final candidate (runs primary_final.sh first)
+sha256sum artifacts/submissions/sub_primary_m3px27.csv artifacts/submissions/sub_safety_ndr.csv
 ```
 
 The expected checksums of these files and of their fallbacks are in [docs/INFERENCE.md](docs/INFERENCE.md#2-lines-and-expected-checksums).
 The build scripts use the rotation list of the released orientation network by default (`ORIENT=repro`); `ORIENT=legacy`
-only rebuilds the earlier files. `OVERRIDE_CV_II=override_cv_condition_ii` applies the recorded decision
-[decisions/override_cv_condition_ii.json](decisions/override_cv_condition_ii.json) (checked by its pinned checksum): it
-overrides only the cross-validation part of one condition of the safety candidate's pre-registered rule; without it the
-safety build stops after that rule with exit code 5. A single entry point per line that does not need the chain of earlier builds is planned
-([docs/ROADMAP.md](docs/ROADMAP.md)). `rescore` and `full` run the model steps listed in [docs/INFERENCE.md](docs/INFERENCE.md).
+only rebuilds the earlier files. The safety chain contains `safety_final.sh`, which `safety_nd.sh` runs with
+`OVERRIDE_CV_II=override_cv_condition_ii`: this applies the recorded decision
+[decisions/override_cv_condition_ii.json](decisions/override_cv_condition_ii.json) (checked by its pinned checksum), which
+overrides only the cross-validation part of one condition of that form's pre-registered rule; run on its own without the
+switch, `safety_final.sh` stops after that rule with exit code 5. `primary_m3px27.sh` checks the files of `safety_nd.sh`
+and `safety_ndr.sh` by their checksums, so the safety build runs first. A single entry point per line that does not need
+the chain of earlier builds is planned ([docs/ROADMAP.md](docs/ROADMAP.md)). `rescore` and `full` run the model steps listed in [docs/INFERENCE.md](docs/INFERENCE.md).
 Training of every component is described in [docs/TRAINING.md](docs/TRAINING.md). The unit and regression tests run with
 `python -m pytest tests -q`; tests that need private files skip themselves.
 
 ## Status and next steps
 
 - Both final candidates, their fallbacks and the historical files are rebuilt byte for byte from the frozen inputs in
-  fresh copies of the repository. With the development version of the code, the assembly of both final candidates was
-  also repeated on a Kaggle CPU without network access, byte for byte; the same check with this repository is planned.
+  fresh copies of the repository. With the development version of the code, the assembly of the safety candidate and of
+  its fallbacks was also repeated on a Kaggle CPU without network access, byte for byte; for the primary candidate this
+  check is running, and the same check with this repository is planned.
 - Open before the final selection (by 2026-11-15): smoke tests without network access for the model steps, including
   the 397B path, which decides whether the 397B channel stays in the primary file; the remaining second-hardware checks
   of the M3 draws; an estimate of the rerun variance of the generated texts; the private copies of the frozen inputs in
@@ -225,8 +245,8 @@ Training of every component is described in [docs/TRAINING.md](docs/TRAINING.md)
 | [docs/METHOD.md](docs/METHOD.md) | Data, channels, prompts and protocols, training, teacher pseudo-labels, orientation network and rotation list, blend, alignment, second stages with NONE guard, the two lines |
 | [docs/VALIDATION.md](docs/VALIDATION.md) | Folds, measurement forms, paired uncertainty, decision rules, controls, checks of the second-stage components, risk rule of the inductive line, checks before a submission |
 | [docs/RESULTS.md](docs/RESULTS.md) | Progression, submissions, single-channel values, ablations and null results, error analysis, compute |
-| [docs/TRAINING.md](docs/TRAINING.md) | Every trained or fitted component: inputs, command, hardware, duration, expected checks |
-| [docs/INFERENCE.md](docs/INFERENCE.md) | The modes `assemble`, `rescore` and `full`: commands, hardware, run times, expected checksums |
+| [docs/TRAINING.md](docs/TRAINING.md) | Every trained or fitted component: inputs and their provenance, command, hardware, duration, expected checks; what a retraining gives |
+| [docs/INFERENCE.md](docs/INFERENCE.md) | The modes `assemble`, `rescore` and `full`: commands, hardware, run times, expected checksums; running on a new test set |
 | [docs/DATA_AND_COMPLIANCE.md](docs/DATA_AND_COMPLIANCE.md) | What data lives where, API use, offline inference, test-data policy, licences |
 | [docs/CODEMAP.md](docs/CODEMAP.md) | Index of scripts and modules, channel names, data formats |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Current status and remaining steps up to the final submission |

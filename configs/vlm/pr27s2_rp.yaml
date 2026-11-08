@@ -1,0 +1,16 @@
+# Protocol channel, SECOND DRAW of the answers on 860 training rows (data/derived/proto_rows/train_sample.npy): the same settings
+# as pr27_rp / proto_a (greedy), another processing order (order_seed 2) — the server computes in other batches, so the generated
+# texts differ (every answer is a draw). Together with pr27s3_rp (the other 640 training rows) this is the second draw n2 of the
+# protocol notes on all 1,500 training rows (data/derived/proto_notes/train_pr27d2.jsonl, tools/export_proto_notes.py); the safety
+# line uses it only as a sensitivity check of the rule of its regex note columns (eda/c130_safety_ndr.py).
+# Training rows only. About 3.3 s per row: about 48 minutes, about 2.30 USD.
+run: pr27s2_rp
+models:
+  q38_27b: {repo: Qwen/Qwen3.8-27B, revision: 1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0, dtype: bf16, max_beam_tokens: 600000}
+workers:
+- gpu: 0
+  jobs:
+  - {name: proto_a2, kind: proto_gen, model: q38_27b, split: train, rows: {only: derived/proto_rows/train_sample.npy}, order_seed: 2, tag: proto,
+     image: {max_side: 1024, question_max_side: 448}, max_tokens: 2500, finish_tokens: 1500, note_chars: 16000,
+     concurrency: 64, guard_rows: 24, guard_min_valid: 0.5, request_timeout_s: 600,
+     server: {max_model_len: 16000, gpu_memory_utilization: 0.93, max_num_seqs: 64, startup_s: 900, pip: "vllm==0.31.0 transformers==5.17.0"}}

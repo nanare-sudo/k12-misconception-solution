@@ -1,6 +1,6 @@
 # Results
 
-*Status: 2026-11-07 (version 0.2). Cross-validated (CV) values are out-of-fold MAP@3 on the 1,500 labelled rows; "±" is
+*Status: 2026-11-08 (version 0.3). Cross-validated (CV) values are out-of-fold MAP@3 on the 1,500 labelled rows; "±" is
 the standard error of a paired difference from a bootstrap over questions. The measurement forms (per fold, without the
 last step, as one set) are defined in [VALIDATION.md](VALIDATION.md#4-three-measurement-forms). Public leaderboard values
 come from 1,000 test rows and are reported as observations only; the private leaderboard (2,498 rows) decides the
@@ -21,13 +21,16 @@ competition. Final scores will be added after the competition closes.*
 
 | Line and form | CV per fold | CV without last step | CV as one set | Public LB |
 |---|---:|---:|---:|---:|
-| **Primary line, final form: I1 form with the minor-code × mechanical-match column** (current primary candidate) | 0.84089 | 0.83433 | 0.83978 | 0.84100 |
+| **Primary line, final form with the M3 ranking behind the protocol notes (`m3px27xm`)** (current primary candidate) | 0.84256 | 0.83456 | 0.83822 | 0.84116 |
+| Primary line, final form with `pr27xm`: I1 form with the minor-code × mechanical-match column | 0.84089 | 0.83433 | 0.83978 | 0.84100 |
 | Primary line, I1 form: guard form with row × candidate interactions | 0.84078 | 0.83322 | 0.83867 | 0.84150 |
 | Primary line, guard form: reranker main form with NONE guard and general-code identifiers | 0.83889 | 0.83522 | 0.83767 | 0.84200 |
 | Primary line, reranker main form | 0.83756 | 0.83011 | 0.83456 | 0.84166 |
 | Primary line, reranker fallback form ¹ | 0.83556 | 0.82989 | 0.83378 | 0.84033 |
 | Primary line before the reranker (same channels, β = 0.2) | 0.83267 | 0.81844 | 0.82533 | 0.83616 |
-| **Safety line, alignment over the test set, reranker with interactions (variant b)** (current safety candidate) ³ | 0.82778 | 0.82411 | 0.82167 | 0.83516 |
+| **Safety line, reranker with note mentions, example similarity and regex note columns** (current safety candidate) ⁴ | 0.83156 | — | 0.82844 | 0.83716 |
+| Safety line, reranker with note mentions and example similarity ⁴ | 0.83111 | — | 0.82744 | 0.83750 |
+| Safety line, alignment over the test set, reranker with interactions (variant b) ³ | 0.82778 | 0.82411 | 0.82167 | 0.83516 |
 | Safety line, alignment over the test set, reranker without interactions (variant a) ³ | 0.82556 | 0.82267 | 0.82122 | — |
 | Safety line, strictly inductive form with second stage and NONE guard (fallback) | 0.82333 | — | — | 0.83183 |
 | Safety line, strictly inductive form without second stage | 0.81844 | — | — | 0.82966 |
@@ -43,6 +46,20 @@ The single model has no last step.
 ³ With the nested abstention gate and the NONE guard, as the pre-registered rule of the safety line is written; its
 deployment form is as one set. The deployment fit on all 1,500 rows does not abstain.
 
+⁴ With the nested abstention gate and the NONE guard; the gate abstains in no fold, so the values equal the forced form. These
+two forms were decided by the mean of the per-fold and the as-one-set difference; the form without the last step was not
+computed. As one set with the gate the predecessor (variant b) reaches 0.82167 because its gate abstains in one fold; forced it
+reaches 0.82433.
+
+- **M3 ranking behind the protocol notes** (`m3px27xm` instead of `pr27xm`) over the final form with `pr27xm`: ½(F+M) +0.00006
+  (per fold +0.0017, as one set −0.0016); over 20 new meta-splits +0.00013 ± 0.00018, above the mean of four controls of the
+  same role (−0.00045). Without the 397B channel: ½(F+M) +0.0019, over 20 new meta-splits +0.0010 ± 0.0002. The channel alone
+  reaches 0.7551 against 0.7459 for `pr27xm`.
+- **Regex-exact note columns** in the safety line over the form with note mentions and example similarity: ½(F+M) +0.00072
+  ± 0.00108 against a placebo mean of −0.00012; full draw swap over four M3 draw sets +0.00056 (4 of 4 positive); over 20 new
+  meta-splits +0.00087 ± 0.00022; risk rule P(θ < −0.002) = 0.0007 / 0.0010.
+- **Note mentions and example similarity** in the safety line over variant b: ½(F+M) +0.0032 ± 0.0015 against a placebo mean
+  of +0.0005; over 20 new meta-splits +0.0028 ± 0.0002, positive in 20 of 20; risk rule P(θ < −0.002) = 0.0001.
 - **Minor-code × mechanical-match column** over the I1 form: per fold +0.0001 ± 0.0005, as one set +0.0011 ± 0.0006,
   ½(F+M) +0.0006 against a placebo mean of −0.0001; over 20 new meta-splits +0.0005 ± 0.0001, positive in 19 of 20.
 - **Row × candidate interactions** over the guard form: per fold +0.0019 ± 0.0011, as one set +0.0010 ± 0.0010, ½(F+M)
@@ -50,7 +67,7 @@ deployment form is as one set. The deployment fit on all 1,500 rows does not abs
 - **Safety line, alignment over the test set:** over 20 new meta-splits variant a lies +0.0007 ± 0.0002 above the
   strictly inductive form with second stage (16 of 20 positive), and variant b +0.0007 ± 0.0001 above variant a. On the
   original meta-split the CV part of the pre-registered condition was missed by one sixth in 9,000 and overridden by a
-  recorded decision ([METHOD.md](METHOD.md#99-second-stage-of-the-safety-line-with-alignment-over-the-test-set-final-safety-candidate)).
+  recorded decision ([METHOD.md](METHOD.md#99-second-stage-of-the-safety-line-with-alignment-over-the-test-set)).
   The test-side class masses after the alignment lie at L1 0.028 from the target, against 0.087 with the inductive
   alignment.
 - **NONE guard and general-code identifiers** over the main form: +0.0013 ± 0.0014 per fold and +0.0031 ± 0.0015 as one
@@ -62,7 +79,8 @@ deployment form is as one set. The deployment fit on all 1,500 rows does not abs
   meta-splits. The gain depends on the generated M3 texts; on the test side, whose M3 texts are independent draws,
   +0.002 to +0.003 is expected
   ([VALIDATION.md](VALIDATION.md#54-validation-of-the-second-stage-components)).
-- Per fold, the primary candidate is about 0.018 ahead of the strictly inductive form of the safety line.
+- Per fold, the primary candidate is about 0.011 ahead of the safety candidate and about 0.019 ahead of the strictly
+  inductive form of the safety line.
 
 ## 2. How the solution was built
 
@@ -150,6 +168,9 @@ Not every submission is listed. Dates are UTC.
 | 11-06 | primary | + row × candidate interactions in the reranker | 0.84078 (per fold) / 0.83867 (as one set) | 0.84150 |
 | 11-06 | primary | + minor-code × mechanical-match column | 0.84089 (per fold) / 0.83978 (as one set) | 0.84100 |
 | 11-07 | safety | Alignment over the test set, second stage with interactions and NONE guard | 0.82167 (as one set, with gate) | 0.83516 |
+| 11-07 | safety | + note mentions and example similarity in the second stage | 0.83111 (per fold) / 0.82744 (as one set) | 0.83750 |
+| 11-07 | safety | + regex-exact columns of the M3 and protocol notes | 0.83156 (per fold) / 0.82844 (as one set) | 0.83716 |
+| 11-08 | primary | M3 ranking behind the protocol notes in the mean channel; blend and second stage refitted | 0.84256 (per fold) / 0.83822 (as one set) | 0.84116 |
 
 Other calibration points: the 27B model fine-tuned code-first scored 0.71716 on the public leaderboard with the task block
 and 0.69916 without it. The channels of the inductive line combined with the transductive alignment scored 0.82750.
@@ -160,7 +181,9 @@ happens. The three files of 2026-11-01 differed from their predecessors by +0.00
 leaderboard, against CV expectations of about +0.0010, +0.0013 to +0.0016 and +0.002 to +0.003. The three files of
 2026-11-06/07 differed by −0.0005 (interactions; 26 test rows with another top code), −0.0005 (mechanical-match column;
 6 rows) and +0.0033 (safety line with alignment over the test set; 70 rows), against CV expectations of about +0.001,
-+0.0005 and +0.003 (the last from the better-calibrated test-side class masses). None of these differences is
++0.0005 and +0.003 (the last from the better-calibrated test-side class masses). The three files of 2026-11-07/08 differed by
++0.0023 (note mentions and example similarity; 70 rows), −0.0003 (regex columns; 38 rows) and +0.0002 (M3 ranking behind the
+protocol notes; 52 rows), against CV expectations of about +0.003, +0.0006 and +0.0001. None of these differences is
 interpreted. No variant was chosen by its public score.
 
 ## 4. Single channels and their contribution

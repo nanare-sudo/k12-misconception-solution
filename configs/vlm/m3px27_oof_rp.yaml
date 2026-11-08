@@ -1,0 +1,212 @@
+# Channel m3px27 on all 1,500 training rows (primary line only).
+# PURPOSE: M3 (Qwen3.8-27B + LoRA, gold targets only, task proto_sft; it has learned how the annotators assign codes) reads the
+# frozen note of the FIRST pr27 pass (own 27B without training in the teacher protocol, first draw) as its OWN reasoning, writes its
+# finding itself (finish_tokens 320, greedy up to "Root:") and scores all 74 codes exactly (probe proto_rank, sft mode) — exactly as
+# q397m3 behind the 397B notes (configs/vlm/q397m3_oof_rp.yaml). These are THE SAME notes behind which the untrained 27B computed the
+# channel px27 (px27_rp/rank_tr; pr27xm = ½(pr27 + px27)): derived/sft_m3px27/m3px27_train_notes.jsonl (tools/make_m3px27_notes.py;
+# every note character-identical with derived/proto_notes/train_pr27.jsonl, SHA-256 d615b707…; SHA-256 of the note file 907bdf35…;
+# format as in tools/freeze_m3_texts.py with finding = null). No notes are generated on the machine.
+# FOLD RULE: per fold k the adapter that has NOT learned fold k (folds 1/2 from m3_pilot_rp, folds 0/3/4 from m3_f034_rp, the same as
+# for d1–d4 and q397m3); the runner checks per ranking that all rows lie in the fold held out by the merged model (sft.check_recipe),
+# and eda/c132_m3px27_eval.py checks it again afterwards via run configuration -> merge job -> sft_recipe.json (c108.fold_check). The
+# pr27 notes depend on no fold (model without training, no labelled row in the prompt); the same notes were part of the M3 training
+# targets of the OTHER folds (with loss where pr27 had the gold code at the top, otherwise as input without loss) — the rows of the
+# held-out fold were never seen by the respective adapter.
+# RANKING exactly as for d1–d4 (m3d3_rank_f*: beams 74, finish_tokens 320, image 1,024/448, bf16, batch 6). The pre-run m3px27_smoke
+# (must_pass, 6 rows of fold 1, own folder) stops the worker before a form error costs five folds.
+# PRE-REGISTERED m3px27 RULE (binding; evaluation python -I eda/c132_m3px27_eval.py):
+#   TECHNICAL CHECKS (otherwise abort): 1,500/1,500 rows exact, fold integrity (c108.fold_check), the log line "of which without a
+#     finding 1500" in every ranking job, NONE at the top 0.30-0.38; pre-run must_pass.
+#   EARLY STOP (only to save compute): after the first complete fold shard (fold 1, 300 rows) fetch the outputs and run
+#     python -I eda/c132_m3px27_eval.py --early   -> same top m3px27/px27 >= 0.95 on >= 300 rows: stop the machine, STOP (copy).
+#   PRIMARY ROLE: pr27xm' = ½(pr27 + m3px27) instead of ½(pr27 + px27) in the final primary form (the channel name stays, everything
+#     is refitted nested); copy null point m3px27 := px27 ⇒ final primary form bit-identical. DEPLOY only if ½(F+M) on the original
+#     split lies above max(0, controls of the same role) — controls pre-registered: copy px27 (0), ½(px27 + d4) (-0.0009), d4
+#     (-0.0017), copy m3x3_full (0.0000) — AND the mean over 20 meta-splits is > 0 and above the control mean; secondary roles only
+#     nested; the expected-value rule additionally in the recipe without the 397B (report). Test side (configs/vlm/m3px27te_rp.yaml)
+#     only after the rule has passed.
+# Inputs: the training-note folder data/derived/sft_m3px27 (it carries ONLY the training-note file and its meta file) and the
+# adapters m3_pilot_rp/m3_train_f{1,2} and m3_f034_rp/m3_train_f{0,3,4} under the same output root.
+# Evaluation: python -I eda/c132_m3px27_eval.py --status; --early (after fold 1); python -I eda/c132_m3px27_eval.py (verdict);
+#   python -I eda/c132_m3px27_eval.py --oof-save (artifact oof_m3px27 / meta_m3px27, independently of the verdict)
+# Hardware: one RTX PRO 6000 (96 GB, 200 GB disk). Time: setup and upload about 10 min; loading the base model about 1 min; per fold
+# merge about 1 min and ranking of 300 rows x about 4.5-4.9 s (q397m3_rank_f*: 4.65-4.84 s per row; the pr27 notes are on average
+# somewhat shorter: 2,281 against 2,413 tokens) about 23-25 min; pre-run about 2 min -> fold 1 finished about 40 min after the start,
+# everything about 2.1-2.4 h.
+run: m3px27_oof_rp
+models:
+  q38_27b:
+    repo: Qwen/Qwen3.8-27B
+    revision: 1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0
+    dtype: bf16
+    max_beam_tokens: 600000
+  m3px27_f1:
+    merged: m3px27_f1_merged
+    dtype: bf16
+    max_beam_tokens: 600000
+  m3px27_f2:
+    merged: m3px27_f2_merged
+    dtype: bf16
+    max_beam_tokens: 600000
+  m3px27_f0:
+    merged: m3px27_f0_merged
+    dtype: bf16
+    max_beam_tokens: 600000
+  m3px27_f3:
+    merged: m3px27_f3_merged
+    dtype: bf16
+    max_beam_tokens: 600000
+  m3px27_f4:
+    merged: m3px27_f4_merged
+    dtype: bf16
+    max_beam_tokens: 600000
+workers:
+- gpu: 0
+  jobs:
+  - name: m3px27_merge_f1
+    kind: merge
+    model: q38_27b
+    adapter_from: ../m3_pilot_rp/m3_train_f1
+    out_model: m3px27_f1_merged
+  - name: m3px27_smoke
+    kind: bench
+    must_pass: true
+    model: m3px27_f1
+    rows:
+      folds:
+      - 1
+      limit: 6
+    sft_from: derived/sft_m3px27/m3px27_train_notes.jsonl
+    probes:
+    - proto_rank
+    image:
+      max_side: 1024
+      question_max_side: 448
+    batch: 6
+    beams: 74
+    finish_tokens: 320
+    prefix_cache_tol: 0.12
+    prefix_cache_same_top: false
+    prefix_cache_check_rows: 4
+    save_every: 1
+    drop_model: false
+  - name: m3px27_rank_f1
+    kind: bench
+    model: m3px27_f1
+    rows:
+      folds:
+      - 1
+    sft_from: derived/sft_m3px27/m3px27_train_notes.jsonl
+    probes:
+    - proto_rank
+    image:
+      max_side: 1024
+      question_max_side: 448
+    batch: 6
+    beams: 74
+    finish_tokens: 320
+    prefix_cache_tol: 0.12
+    prefix_cache_same_top: false
+    prefix_cache_check_rows: 4
+    save_every: 25
+    drop_model: true
+  - name: m3px27_merge_f2
+    kind: merge
+    model: q38_27b
+    adapter_from: ../m3_pilot_rp/m3_train_f2
+    out_model: m3px27_f2_merged
+  - name: m3px27_rank_f2
+    kind: bench
+    model: m3px27_f2
+    rows:
+      folds:
+      - 2
+    sft_from: derived/sft_m3px27/m3px27_train_notes.jsonl
+    probes:
+    - proto_rank
+    image:
+      max_side: 1024
+      question_max_side: 448
+    batch: 6
+    beams: 74
+    finish_tokens: 320
+    prefix_cache_tol: 0.12
+    prefix_cache_same_top: false
+    prefix_cache_check_rows: 4
+    save_every: 25
+    drop_model: true
+  - name: m3px27_merge_f0
+    kind: merge
+    model: q38_27b
+    adapter_from: ../m3_f034_rp/m3_train_f0
+    out_model: m3px27_f0_merged
+  - name: m3px27_rank_f0
+    kind: bench
+    model: m3px27_f0
+    rows:
+      folds:
+      - 0
+    sft_from: derived/sft_m3px27/m3px27_train_notes.jsonl
+    probes:
+    - proto_rank
+    image:
+      max_side: 1024
+      question_max_side: 448
+    batch: 6
+    beams: 74
+    finish_tokens: 320
+    prefix_cache_tol: 0.12
+    prefix_cache_same_top: false
+    prefix_cache_check_rows: 4
+    save_every: 25
+    drop_model: true
+  - name: m3px27_merge_f3
+    kind: merge
+    model: q38_27b
+    adapter_from: ../m3_f034_rp/m3_train_f3
+    out_model: m3px27_f3_merged
+  - name: m3px27_rank_f3
+    kind: bench
+    model: m3px27_f3
+    rows:
+      folds:
+      - 3
+    sft_from: derived/sft_m3px27/m3px27_train_notes.jsonl
+    probes:
+    - proto_rank
+    image:
+      max_side: 1024
+      question_max_side: 448
+    batch: 6
+    beams: 74
+    finish_tokens: 320
+    prefix_cache_tol: 0.12
+    prefix_cache_same_top: false
+    prefix_cache_check_rows: 4
+    save_every: 25
+    drop_model: true
+  - name: m3px27_merge_f4
+    kind: merge
+    model: q38_27b
+    adapter_from: ../m3_f034_rp/m3_train_f4
+    out_model: m3px27_f4_merged
+  - name: m3px27_rank_f4
+    kind: bench
+    model: m3px27_f4
+    rows:
+      folds:
+      - 4
+    sft_from: derived/sft_m3px27/m3px27_train_notes.jsonl
+    probes:
+    - proto_rank
+    image:
+      max_side: 1024
+      question_max_side: 448
+    batch: 6
+    beams: 74
+    finish_tokens: 320
+    prefix_cache_tol: 0.12
+    prefix_cache_same_top: false
+    prefix_cache_check_rows: 4
+    save_every: 25
+    drop_model: true

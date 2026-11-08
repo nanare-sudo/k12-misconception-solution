@@ -1,0 +1,88 @@
+# Channel m3px27: TEST side (all 3,498 test rows), run ONLY after the pre-registered m3px27 rule has passed on the training rows
+# (configs/vlm/m3px27_oof_rp.yaml, eda/c132_m3px27_eval.py: verdict DEPLOY). Primary line (primary role pr27xm' = ½(pr27 + m3px27)).
+# PURPOSE: M3 of the full fit (m3_fullte_rp/m3_train_full, gold targets only, all 1,500 rows; the same source as m3d3te_rp and
+# q397m3te_rp) reads per test row the frozen note of the FIRST pr27 pass of the test side (runs/pr27te_rp/proto_te/proto), writes its
+# finding itself (finish_tokens 320) and scores all 74 codes exactly (probe proto_rank, sft mode) — compute path and settings as in
+# q397m3te_rp / m3d3_test_rank, without own generation: the notes come frozen from derived/sft_m3px27te/m3px27_test_notes.jsonl
+# (tools/make_m3px27_notes.py --table test; every note character-identical with derived/proto_notes_test/test_pr27.jsonl, SHA-256
+# 1b459a40…, behind which the px27 test side computed (n1_rp/rank_test); SHA-256 of the note file dddc7ce6…). Test notes and test
+# outputs stay under data/derived/ and artifacts/runs/ and are NEVER inspected, only aggregates and checksums; offline on the machine
+# for the computation (local weights, no outbound call).
+# BEFORE (local):
+#   python -I eda/c132_m3px27_eval.py               # verdict DEPLOY under the m3px27 rule (otherwise no test side)
+#   python -I tools/make_m3px27_notes.py --table test  # only if the test notes are missing (reproducible byte for byte, SHA dddc7ce6…)
+# Inputs: the test-note folder data/derived/sft_m3px27te and the adapter m3_fullte_rp/m3_train_full under the same output root.
+# Afterwards: freeze the test outputs (private dataset k12-derived).
+# Checks (aggregates only): summary.json of the merge job, m3px27_test_rank 'failed': 0, 3,498 rows exact, the log line "sft_from:
+#   notes for 3498 rows of table test, of which without a finding 3498", NONE at the top within the band (OOF value ± 0.04).
+# Hardware: one RTX PRO 6000 (96 GB, 200 GB disk). Time: setup about 10-15 min, merge about 1 min, pre-run about 2 min, ranking of
+# 3,498 rows x about 3.8-4.8 s (q397m3te_rp about 4 h for 3,498 rows; m3_fullte_rp 3.85 s per row; here M3 writes the finding in
+# every row) about 3.7-4.7 h: about 4.0-5.0 h.
+run: m3px27te_rp
+models:
+  q38_27b:
+    repo: Qwen/Qwen3.8-27B
+    revision: 1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0
+    dtype: bf16
+    max_beam_tokens: 600000
+  m3px27_full:
+    merged: m3px27_full_merged
+    dtype: bf16
+    max_beam_tokens: 600000
+workers:
+- gpu: 0
+  jobs:
+  - name: m3px27_merge_full
+    kind: merge
+    model: q38_27b
+    adapter_from: ../m3_fullte_rp/m3_train_full
+    out_model: m3px27_full_merged
+  - name: m3px27_test_smoke
+    kind: predict
+    must_pass: true
+    model: m3px27_full
+    fold: null
+    sft_from: derived/sft_m3px27te/m3px27_test_notes.jsonl
+    probes:
+    - proto_rank
+    predict:
+    - split: test
+      tag: smoke
+      probes:
+      - proto_rank
+      rows:
+        limit: 6
+    image:
+      max_side: 1024
+      question_max_side: 448
+    batch: 6
+    beams: 74
+    finish_tokens: 320
+    prefix_cache_tol: 0.12
+    prefix_cache_same_top: false
+    prefix_cache_check_rows: 4
+    save_every: 1
+    drop_model: false
+  - name: m3px27_test_rank
+    kind: predict
+    model: m3px27_full
+    fold: null
+    sft_from: derived/sft_m3px27te/m3px27_test_notes.jsonl
+    probes:
+    - proto_rank
+    predict:
+    - split: test
+      tag: test
+      probes:
+      - proto_rank
+    image:
+      max_side: 1024
+      question_max_side: 448
+    batch: 6
+    beams: 74
+    finish_tokens: 320
+    prefix_cache_tol: 0.12
+    prefix_cache_same_top: false
+    prefix_cache_check_rows: 4
+    save_every: 25
+    drop_model: true

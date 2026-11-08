@@ -1,6 +1,6 @@
 # Data and compliance
 
-*Status: 2026-11-07 (version 0.2).*
+*Status: 2026-11-08 (version 0.3).*
 
 This document states which data the solution uses and where each part is kept. It also explains why some parts are not in
 this repository, how external APIs were used, and how the solution meets the competition's requirements for the final
@@ -23,7 +23,7 @@ submission.
 | Item | Why it is not here | Where it is kept |
 |---|---|---|
 | Competition data | Competition rules | Kaggle competition page |
-| Per-row derived inputs: frozen reasoning texts, protocol answers and notes, M3 texts, 397B notes, rotation, gate and blank-photo lists, training targets | Derived from competition data, row by row | Private Kaggle dataset `k12-derived` (frozen inputs for `assemble` and `rescore`); locally under `data/derived/` |
+| Per-row derived inputs: frozen reasoning texts, protocol answers and notes, M3 texts (test and training rows), 397B notes, notes in the M3 format, rotation, gate and blank-photo lists, training targets | Derived from competition data, row by row | Private Kaggle dataset `k12-derived` (frozen inputs for `assemble` and `rescore`); locally under `data/derived/` |
 | Teacher pseudo-labels for the unlabelled pool | Derived from competition data; to be used only for this competition | Private (`data/derived/teacher/`), with checksums |
 | OOF and test probability matrices, channel outputs, stored reports | Per-row predictions | Private Kaggle dataset `k12-derived` (the files the build scripts read); locally under `artifacts/` |
 | Blend and second-stage files | Fitted weights, partly with row positions | Private Kaggle model `k12-weights`; locally under `artifacts/` |
@@ -83,7 +83,7 @@ out of one of the two lines, and to keep one file that holds under the strictest
 
 | Technique | Basis | Line |
 |---|---|---|
-| Transductive class-marginal alignment | It uses the set of test predictions: no label and no information about individual rows. It relies on the split being stratified by root code; the host said of the test share of `NONE`: "It should be similar". Asked about teams adapting to the test data that all participants have, the host answered: "We don't see any issue so far. Prize winner needs to submit final code, model weights and instructions to generate predictions from a model and won't be decided just based on submission file score during competition." | Primary line; since 2026-11-06 also the final candidate of the safety line |
+| Transductive class-marginal alignment | It uses the set of test predictions: no label and no information about individual rows. It relies on the split being stratified by root code; the host said of the test share of `NONE`: "It should be similar". Asked about teams adapting to the test data that all participants have, the host answered: "We don't see any issue so far. Prize winner needs to submit final code, model weights and instructions to generate predictions from a model and won't be decided just based on submission file score during competition." | Primary line; since 2026-11-06 also the forms of the safety line with the alignment over the test set, including its final candidate |
 | Teacher pseudo-labels of the unlabelled pool (task block) | API pseudo-labels on unlabelled rows are explicitly allowed for this competition | Primary line only |
 | Blend weight of the 397B channel fitted on API outputs for training rows | API use on training rows is allowed; the test side is computed locally with the same open model (FP8 release) | Primary line only |
 
@@ -92,7 +92,10 @@ it in both final submissions: the inductive alignment had missed the class masse
 target, against 0.028 for the alignment over the test set), and the host's statement above raises no objection to it.
 
 The **safety line** uses neither the teacher pseudo-labels, nor API-derived inputs, nor the 397B channel. Its final
-candidate uses the alignment over the test set. Its **strictly inductive form**, the fallback of the safety slot, uses
+candidate uses the alignment over the test set. The note features of its second stage read only frozen texts of our own
+models: the M3 notes (M3 is trained on gold labels only) and the notes of the untrained 27B protocol channel; the reference
+of the example similarity consists of training rows only, and test-set aggregates of these notes enter only guards that can
+abort a build. Its **strictly inductive form**, the fallback of the safety slot, uses
 none of the three techniques: every test row is processed independently with parameters fixed before inference (blend
 weights, inductive class weights and the second stage are fitted on training rows only), and test-set aggregates enter
 only guards that can abort a build but change no prediction, so that form holds under the strictest reading of the
@@ -103,7 +106,7 @@ These matrices enter neither the blend, nor the second stage, nor the test side 
 The final safety candidate was built although the cross-validation part of one condition of its pre-registered rule was
 missed by one sixth in 9,000; the decision is recorded with its scope in
 [`decisions/override_cv_condition_ii.json`](../decisions/override_cv_condition_ii.json) and checked by checksum
-([METHOD.md](METHOD.md#99-second-stage-of-the-safety-line-with-alignment-over-the-test-set-final-safety-candidate)).
+([METHOD.md](METHOD.md#99-second-stage-of-the-safety-line-with-alignment-over-the-test-set)).
 
 ## 7. Licences
 

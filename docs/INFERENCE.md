@@ -1,6 +1,6 @@
 # Inference
 
-*Status: 2026-11-07 (version 0.2). Planned items are marked **Planned** and listed in [ROADMAP.md](ROADMAP.md).*
+*Status: 2026-11-08 (version 0.3). Planned items are marked **Planned** and listed in [ROADMAP.md](ROADMAP.md).*
 
 The final solution is built to run **without network access and without any human step**. No external API is called at
 inference time, and all models in the inference path are open-weight models whose weights, including our trained
@@ -16,6 +16,7 @@ adapters, are part of the delivered package. Smoke tests without network access 
 6. [Modes `rescore` and `full`](#6-modes-rescore-and-full)
 7. [Run times, cost and package size](#7-run-times-cost-and-package-size)
 8. [Operating rules](#8-operating-rules)
+9. [Running on a new test set](#9-running-on-a-new-test-set)
 
 ---
 
@@ -35,30 +36,35 @@ only 84 % of rows, because the server batches requests differently. The texts ar
 ## 2. Lines and expected checksums
 
 The current candidates for the two final submissions are the first two rows; the next rows are their fallbacks and the
-files of version 0.1. All of them use the rotation list of the released orientation network (`ORIENT=repro`, the default
-of the build scripts; see below).
+files of versions 0.2 and 0.1. All of them use the rotation list of the released orientation network (`ORIENT=repro`, the
+default of the build scripts; see below).
 
 | Line and form | Build script | Output file in `artifacts/submissions/` | Bytes | SHA-256 |
 |---|---|---|---:|---|
-| **Primary line, final form: I1 form with the minor-code × mechanical-match column** (candidate) | `bash tools/builds/primary_final.sh` | `sub_primary_final.csv` | 115,282 | `d9c68c460c6da06d4975513911e11c4541d70d07b78f132566a3e43e7ad60b24` |
-| **Safety line, alignment over the test set, second stage with interactions and NONE guard** (candidate) | `OVERRIDE_CV_II=override_cv_condition_ii bash tools/builds/safety_final.sh` | `sub_safety_final.csv` | 115,500 | `736d87b3cb61494aeb6dcac29bc248a909138c6e85e3939f37a01180984e78f7` |
-| Primary line, I1 form: guard form with row × candidate interactions (fallback of the primary candidate) | `bash tools/builds/primary_i1.sh` | `sub_primary_i1.csv` | 115,233 | `60b63d69bcdd5970cafaf4d5645440d8d375953871d6dd688ae5091b25256bee` |
-| Strictly inductive line with second stage and NONE guard (fallback of the safety candidate; candidate of version 0.1) | `bash tools/builds/s036_safe_stage2.sh` | `sub_s036_safe_stage2.csv` | 115,508 | `ff45c2f72d21fd9d6b227fc47bad10b4b4092cd79008734da917e2ba3bcefd13` |
+| **Primary line, final form with the mean channel `m3px27xm` (M3 ranking behind the protocol notes)** (candidate) | `bash tools/builds/primary_m3px27.sh` | `sub_primary_m3px27.csv` | 115,234 | `23101e74aa530b9c280087442b15f72bdf25a0c4627f0207e92c648e83a2176a` |
+| **Safety line, second stage with note mentions, example similarity and regex note columns** (candidate) | `bash tools/builds/safety_ndr.sh` | `sub_safety_ndr.csv` | 115,173 | `b8f17ce3e5fe1ed6dbf22febf9b153ec7c23870af123fa60d4342979d67270f6` |
+| Primary line, final form with `pr27xm`: I1 form with the minor-code × mechanical-match column (fallback of the primary candidate; candidate of version 0.2) | `bash tools/builds/primary_final.sh` | `sub_primary_final.csv` | 115,282 | `d9c68c460c6da06d4975513911e11c4541d70d07b78f132566a3e43e7ad60b24` |
+| Safety line, second stage with note mentions and example similarity (fallback of the safety candidate) | `bash tools/builds/safety_nd.sh` | `sub_safety_nd.csv` | 115,210 | `561a3c45ca3579763c44780b1f0cb009a6b75d5c730d4cbe42c4d11ce7e45025` |
+| Safety line, alignment over the test set, second stage with interactions and NONE guard (candidate of version 0.2) | `OVERRIDE_CV_II=override_cv_condition_ii bash tools/builds/safety_final.sh` | `sub_safety_final.csv` | 115,500 | `736d87b3cb61494aeb6dcac29bc248a909138c6e85e3939f37a01180984e78f7` |
+| Primary line, I1 form: guard form with row × candidate interactions | `bash tools/builds/primary_i1.sh` | `sub_primary_i1.csv` | 115,233 | `60b63d69bcdd5970cafaf4d5645440d8d375953871d6dd688ae5091b25256bee` |
+| Strictly inductive line with second stage and NONE guard (fallback of the safety line under the strictest reading of the rules; candidate of version 0.1) | `bash tools/builds/s036_safe_stage2.sh` | `sub_s036_safe_stage2.csv` | 115,508 | `ff45c2f72d21fd9d6b227fc47bad10b4b4092cd79008734da917e2ba3bcefd13` |
 | Primary line, guard form: reranker main form with NONE guard and general-code identifiers (candidate of version 0.1) | `bash tools/builds/s035_stage2_guard.sh` | `sub_s035_stage2_guard.csv` | 115,318 | `d4dce1aaa5cfbd1fd5668a9e7073a47734c0c5aacda7b7c2020255005a81f360` |
 | Primary line, reranker main form | `bash tools/builds/s034n_stage2_main.sh` | `sub_s034n_stage2_main.csv` | 115,359 | `8b8892e474ace44048d6c02eba7622288599990f5f5f0814cbefaeb6bd9ce242` |
 | Strictly inductive line without second stage | `bash tools/builds/s030n_safe.sh` | `sub_s030n_safe.csv` | 115,238 | `8cca7bbfe9b8c9dce47d6153d59712575bb7b8ad6dea8a286f7ef530df448b67` |
 | Primary line, reranker fallback form | `bash tools/builds/s033n_stage2.sh` | `sub_s033n_stage2.csv` | 115,498 | `76aba64fbc431b9ad403a5dec9fb2cefdb7fe2e76260149c96176459c4cd8dfe` |
 | Primary line without second stage (intermediate file) | built by `s033n_stage2.sh` | `sub_s032n_q397m3.csv` | 115,404 | `d1667f6d2fb118844b72ecd8abd85220754a709d468519b7a047a893bbea12f1` |
 
-**Names of the version-0.2 files.** The three new build scripts, their deployment files (`artifacts/stage2_<name>.json`),
-their output files (`sub_<name>.csv`) and their report folders are named by role: `primary_i1`, `primary_final`,
-`safety_final`. The earlier scripts keep their historical build labels (`s029` … `s036`), because frozen artifacts and
-their checksums refer to them.
+**Names of the files of versions 0.2 and 0.3.** The build scripts added in these versions, their deployment files
+(`artifacts/stage2_<name>.json`), their output files (`sub_<name>.csv`) and their report folders are named by role:
+`primary_i1`, `primary_final`, `safety_final` (version 0.2) and `safety_nd`, `safety_ndr`, `primary_m3px27` (version 0.3;
+report folders `safety_nd/`, `safety_ndr/`, `primary_m3px27/`, and `m3px27_eval/` for the stored evaluation of the channel
+`m3px27`). The earlier scripts keep their historical build labels (`s029` … `s036`), because frozen artifacts and their
+checksums refer to them.
 
-**Override of the safety candidate.** `safety_final.sh` needs `OVERRIDE_CV_II=override_cv_condition_ii`. The
-cross-validation part of one condition of its pre-registered rule was missed by one sixth in 9,000; the decision to build
-the file anyway is recorded in [`decisions/override_cv_condition_ii.json`](../decisions/override_cv_condition_ii.json),
-whose SHA-256 is pinned in `eda/c123_safety_set.py` ([METHOD.md](METHOD.md#99-second-stage-of-the-safety-line-with-alignment-over-the-test-set-final-safety-candidate)).
+**Override in the safety chain.** `safety_final.sh` needs `OVERRIDE_CV_II=override_cv_condition_ii`; `safety_nd.sh` sets it
+when it runs `safety_final.sh` in its step 0. The cross-validation part of one condition of the pre-registered rule of the
+`safety_final` form was missed by one sixth in 9,000; the decision to build the file anyway is recorded in [`decisions/override_cv_condition_ii.json`](../decisions/override_cv_condition_ii.json),
+whose SHA-256 is pinned in `eda/c123_safety_set.py` ([METHOD.md](METHOD.md#99-second-stage-of-the-safety-line-with-alignment-over-the-test-set)).
 Without the variable the script stops with exit code 5 after the rule; any other value stops it with exit code 2. The
 override affects only that condition; all other conditions, the copy null points, the guards and the checksums stay in
 force.
@@ -87,6 +93,11 @@ second-stage files in [TRAINING.md](TRAINING.md#13-second-stages). The script na
 frozen artifacts refer to them, so they are kept.
 
 **The build scripts are chained.**
+- `primary_m3px27.sh` runs `primary_final.sh` (`PRIMARY_M3PX27_REGRESSION=full` runs `safety_ndr.sh` instead, which contains
+  it; `PRIMARY_M3PX27_REGRESSION=0` only checks the checksums of the earlier files) and then checks the files of `safety_nd.sh`
+  and `safety_ndr.sh` by their checksums.
+- `safety_ndr.sh` runs `safety_nd.sh`, which runs `safety_final.sh` (with the override) and `primary_final.sh`
+  (`SAFETY_NDR_NO_REGRESSION=1` and `SAFETY_ND_NO_REGRESSION=1` skip this step 0 and are meant for debugging only).
 - `primary_final.sh` runs `primary_i1.sh`, which runs `s035_stage2_guard.sh`.
 - `s035_stage2_guard.sh` runs `s034n_stage2_main.sh`, which runs `s034_stage2_main.sh best` with `ORIENT=repro` (main
   form). That script first runs `s032_stage2.sh best` (fallback form, the same steps as `s033n_stage2.sh`), which first
@@ -98,7 +109,9 @@ frozen artifacts refer to them, so they are kept.
   the script aborts. The exceptions are `s029_m3x3.sh` with `ORIENT=legacy` and `s029_q397.sh`, which overwrite their
   outputs. Test matrices written next to an unchanged CSV file are not compared; pinned are the test matrices of the
   inductive file without second stage (by `s036_safe_stage2.sh`), of the strictly inductive file with second stage (by
-  `safety_final.sh`), of the guard form and of the I1 form (by `primary_i1.sh` and `primary_final.sh`).
+  `safety_final.sh`), of the guard form and of the I1 form (by `primary_i1.sh` and `primary_final.sh`), and those of the
+  three version-0.3 files and of their predecessors (by `safety_ndr.sh` and `primary_m3px27.sh`; `safety_nd.sh` compares the
+  test matrix of its copy null point with that of `safety_final`).
 
 > **Planned.** A single entry point that reads a line definition (sources, floors, last step, expected checksums), verifies
 > every input checksum and calls `tools/make_submission.py` directly, without the chain of earlier builds. The build
@@ -117,11 +130,12 @@ data/                                   K12_DATA may point to another folder wit
     ├── orient/           first-version rotation lists (c50: photos turned upright; c80: rows using the upright reading)
     ├── orient_repro/     rotation lists of the released orientation network (test_c80_rows.npy, test_c80.json, .meta.json)
     ├── think_rows/       gate lists of the reasoning channels
-    ├── sft/              frozen M3 test texts (draws d1–d3), 397B notes for M3, M3 training targets
+    ├── sft/              frozen M3 test texts and training notes (draws d1–d3), 397B notes for M3, M3 training targets
     ├── sft_q397m3/  sft_q397m3te/   copies of the 397B notes for M3 as read by the model runs (primary line)
+    ├── sft_m3px27/  sft_m3px27te/   protocol notes in the M3 format, behind which M3 ranks for `m3px27xm` (primary line)
     ├── open_teacher/     frozen 397B answers on the training rows (primary line)
     ├── m3x3_full_rows.npy  training rows with all three M3 draws (rewritten identically by s029_m3x3.sh)
-    ├── proto_notes/  proto_notes_test/   frozen protocol notes of the training and test rows (model runs only)
+    ├── proto_notes/  proto_notes_test/   frozen protocol notes of the training rows (two draws) and of the test rows
     └── teacher/          teacher pool labels (primary line; model runs only)
 artifacts/                              private
 ├── folds.npy                                     fold array (tools/make_folds.py); its checksum is recorded by the second stage
@@ -134,7 +148,8 @@ artifacts/                              private
 └── submissions/                                  earlier files used as references, and the files written by the assembly
 ```
 
-Folders marked *model runs only* are read by `rescore` and `full`, not by `assemble`.
+Folders marked *model runs only* are read by `rescore` and `full`, not by `assemble`. Since version 0.3 the protocol notes are
+also read by `assemble`: by the regex note columns of the safety candidate and by the checks of the primary candidate.
 
 **Inputs per line** (in addition to the competition CSV files and `taxonomy_v1.csv`). The list was taken from a trace of
 every file the build scripts open in a fresh copy of the repository with the frozen inputs; it covers the assembly and
@@ -151,7 +166,11 @@ and the final candidate with the alignment over the test set); they read the sam
 | `artifacts/runs/pr27te_rp`, `n1_rp` (protocol channel), `m3_fullte_rp`, `m3d2te_rp`, `m3d3te_rp` (M3 draws) | yes | yes |
 | Training-side rankings, read when the M3 channel and the protocol mean channel are re-verified: `artifacts/runs/m3_pilot_rp`, `m3_f034_rp`, `m3_5f`, `m3long_rp`, `m3long_comb`, `cv01_m3d2_f034`, `m3d3_oof_rp`, `px27_rp` | yes | yes |
 | `artifacts/runs/q397te_rp`, `q397m3te_rp`, `q397m3_oof_rp`, `q397_tinker`, `pr27_rp`; `data/derived/sft/q397m3_*`, `data/derived/sft_q397m3/`, `data/derived/sft_q397m3te/`; `data/derived/open_teacher/` | — | yes |
-| `data/derived/sft/m3_d{1,2,3}_test_frozen_notes.jsonl` and their meta files (frozen M3 texts, read by the second stage) | — | yes |
+| `data/derived/sft/m3_d{1,2,3}_test_frozen_notes.jsonl` and their meta files (frozen M3 texts, read by the second stage) | yes (forms with note features) | yes |
+| `data/derived/sft/m3_d{1,2,3}_train_frozen_notes.jsonl` and their meta files (frozen M3 training notes: reference of the example similarity; rebuilt from the training-side rankings for the check) | yes (forms with note features) | — |
+| Frozen protocol notes: `data/derived/proto_notes/train_pr27.jsonl`, `train_pr27d2.jsonl`, `data/derived/proto_notes_test/test_pr27.jsonl` and their meta files; for their re-export check the raw answers `artifacts/runs/pr27_rp/pr27_rp/proto_a/`, `proto_b/`, `pr27s2_rp/pr27s2_rp/proto_a2/`, `pr27s3_rp/pr27s3_rp/proto_b2/`, `pr27te_rp/pr27te_rp/proto_te/` | yes (final candidate) | `train_pr27.jsonl`, `test_pr27.jsonl` (checksums, final candidate) |
+| Fourth M3 draw on the training rows `artifacts/runs/m3d4_oof_rp/` (draw swap of the rule; read only when the draw-swap file `eda/private/safety_ndr/c130_swap.json` is absent and recomputed) | yes (final candidate) | — |
+| Channel `m3px27xm`: `data/derived/sft_m3px27/`, `data/derived/sft_m3px27te/`, `artifacts/runs/m3px27_oof_rp/` (five shards), `artifacts/runs/m3px27te_rp/` (test ranking), `artifacts/oof_m3px27.npy`, `meta_m3px27.json`, the stored evaluation `eda/private/m3px27_eval/c132_m3px27_eval.json` and `…_rows.npz` | — | yes (final candidate) |
 | Answers of the protocol channel as text, for the mechanical comparison of the final answer with the key (final primary form): `artifacts/runs/pr27_rp/pr27_rp/proto_a/`, `proto_b/` (training rows), `artifacts/runs/pr27te_rp/pr27te_rp/proto_te/proto_raw.jsonl` (test rows, pinned by SHA-256) | — | yes |
 | Decision file of the override (repository file): `decisions/override_cv_condition_ii.json` | yes (final candidate) | — |
 | `data/derived/think_rows/*`, `data/derived/blank/test_rows.npy` | yes | yes |
@@ -166,7 +185,8 @@ and the final candidate with the alignment over the test set); they read the sam
 The files that the build scripts write and pin themselves are not listed: blend and second-stage files, the meta-split
 files and the probe files of the safety line. The private package contains them, so that the scripts verify them instead
 of recomputing them; without them the scripts recompute them and require the pinned checksums
-([TRAINING.md](TRAINING.md#13-second-stages)).
+([TRAINING.md](TRAINING.md#13-second-stages)). Steps 2–4 of `primary_m3px27.sh` (mean channel, blend, second stage)
+always recompute; files that are already present must be byte-identical to the recomputation.
 
 The historical six-channel file (`s029_q397.sh`) additionally reads `submissions/sub_cv01_best_l2.csv`; the historical
 five-channel file (`ORIENT=legacy s029_m3x3.sh best`) reads `stack_v1r_zs27q_think18nb_pr27xm_w14.json` and
@@ -220,9 +240,10 @@ ORIENT=legacy bash tools/builds/s029_m3x3.sh safe          # strictly inductive 
 ORIENT=legacy bash tools/builds/s034_stage2_main.sh best   # primary line: file without second stage, fallback form, main form
 
 # 4. Final candidates and their fallbacks (released rotation list)
-bash tools/builds/primary_final.sh        # primary line; builds sub_s032n…, sub_s033n…, sub_s034n…, sub_s035…, sub_primary_i1 on the way
-OVERRIDE_CV_II=override_cv_condition_ii bash tools/builds/safety_final.sh   # safety line; builds sub_s030n_safe, sub_s036… on the way
-sha256sum artifacts/submissions/sub_primary_final.csv artifacts/submissions/sub_safety_final.csv
+bash tools/builds/safety_ndr.sh       # safety line; builds sub_s030n_safe, sub_s036…, sub_safety_final, the primary chain up to
+                                      #   sub_primary_final, and sub_safety_nd on the way
+bash tools/builds/primary_m3px27.sh   # primary line; runs primary_final.sh again and checks the files of the safety chain
+sha256sum artifacts/submissions/sub_primary_m3px27.csv artifacts/submissions/sub_safety_ndr.csv
 ```
 
 Each build script first verifies the checksums of its pinned inputs and recomputes (or verifies) its blend and
@@ -237,9 +258,13 @@ second-stage files from the OOF artifacts. It then calls `tools/make_submission.
 
 The checks of [VALIDATION.md](VALIDATION.md#6-checks-before-a-submission) run along the way. Only aggregates are printed.
 Each candidate script additionally runs its copy null points: with weight 0, the second stage reproduces the file without
-it byte for byte, and the scripts of version 0.2 also show that the new columns with weight 0 reproduce the file of the
-predecessor form. The three scripts of version 0.2 recompute their meta-split files (about 8 minutes each) only if they
-are absent; the private package contains them, and the scripts check them against their pinned checksums. Besides the submission files, the build scripts rewrite some of their own reports under
+it byte for byte, and the scripts of versions 0.2 and 0.3 also show that the new columns with weight 0 reproduce the file of
+the predecessor form (`primary_m3px27.sh`: the channel `m3px27xm` with the ranking of the untrained 27B in place of the M3
+ranking reproduces the predecessor file). The scripts of versions 0.2 and 0.3 recompute their meta-split files (about 8
+minutes each), the draw swap of `safety_ndr.sh`, and the blend and second-stage files of `primary_m3px27.sh` only if they are
+absent; the private package contains them, and the scripts check them against their pinned checksums. The safety scripts of
+version 0.3 also run positive controls of their test-side guards (changed test notes in memory: a guard must fire, no file is
+written). Besides the submission files, the build scripts rewrite some of their own reports under
 `artifacts/eda/private/` (new time stamps), and `s029_m3x3.sh` rewrites the two blend files of its line with identical
 content (in both `ORIENT` modes); one test rewrites a stored report of the 397B deployment in the same way. Of these
 files only the blend file of the inductive line, `stack_v1r_zs27t_think18sb_pr27xm_m3x3_full_ar.json`, is pinned (by
@@ -253,7 +278,7 @@ The final `make_submission` call of each candidate is shown for reference. Its a
 - Row lists after `@` and after `--blank-rows` are relative to the data folder.
 
 ```bash
-# Safety line, final candidate (safety_final.sh, step 7)
+# Safety line, final candidate (safety_ndr.sh, step 9)
 python -I tools/make_submission.py --name v1r_zs27t_think18sb_pr27xm_m3x3_full_ar \
   --test v1r=v1rot_t4/rot_test/test@derived/orient_repro/test_c80_rows.npy --fill v1r=v1 \
   --test v1=v1te_a_t4/v1_test_a/test+v1te_b_t4/v1_test_b/test \
@@ -263,25 +288,30 @@ python -I tools/make_submission.py --name v1r_zs27t_think18sb_pr27xm_m3x3_full_a
   --proto pr27xm=runs/pr27te_rp/proto_te/proto --rank pr27xm=runs/n1_rp/rank_test/test \
   --rank-only m3x3_full=runs/m3_fullte_rp/m3_test_rank/test,runs/m3d2te_rp/m3d2_test_rank/test,runs/m3d3te_rp/m3d3_test_rank/test \
   --align 0.75 --align-min 3 --blank-rows derived/blank/test_rows.npy \
-  --stage2 artifacts/stage2_safety_final.json --stage2-report artifacts/eda/private/safety_set/guards_safety_final.json \
-  --out artifacts/submissions/sub_safety_final.csv --suffix _safety_final
+  --stage2 artifacts/stage2_safety_ndr.json --stage2-report artifacts/eda/private/safety_ndr/guards_safety_ndr.json \
+  --out artifacts/submissions/sub_safety_ndr.csv --suffix _safety_ndr
 
-# Primary line, final form (primary_final.sh, step 9)
-python -I tools/make_submission.py --name s032_stage2 \
+# Primary line, final candidate (primary_m3px27.sh, step 9)
+python -I tools/make_submission.py --name primary_m3px27 \
   --test v1r=v1rot_t4/rot_test/test@derived/orient_repro/test_c80_rows.npy --fill v1r=v1 \
   --test v1=v1te_a_t4/v1_test_a/test+v1te_b_t4/v1_test_b/test \
   --test zs27q=zs27q_test0_rp/zs27q_test0/test+zs27q_test1_rp/zs27q_test1/test \
   --fill think18nb=zs27q \
   --test think18nb=zs27v_te_rp/think_te/test/think@derived/think_rows/test.npy,zs27v_n3_rp/think_nte/test/think@derived/think_rows/test_tb_q.npy \
-  --proto pr27xm=runs/pr27te_rp/proto_te/proto --rank pr27xm=runs/n1_rp/rank_test/test \
+  --proto m3px27xm=runs/pr27te_rp/proto_te/proto --rank m3px27xm=runs/m3px27te_rp/m3px27_test_rank/test \
   --rank-only m3x3_full=runs/m3_fullte_rp/m3_test_rank/test,runs/m3d2te_rp/m3d2_test_rank/test,runs/m3d3te_rp/m3d3_test_rank/test \
   --rank-only q397m3=runs/q397m3te_rp/q397m3_test_rank/test --rank-none-band-for q397m3=0.27,0.35 \
   --align 0.75 --align-min 3 --blank-rows derived/blank/test_rows.npy \
-  --out artifacts/submissions/sub_primary_final.csv --suffix _primary_final \
-  --stage2 artifacts/stage2_primary_final.json --stage2-report artifacts/eda/private/stage2_mm/guards_primary_final.json
+  --out artifacts/submissions/sub_primary_m3px27.csv --suffix _primary_m3px27 \
+  --stage2 artifacts/stage2_primary_m3px27.json --stage2-report artifacts/eda/private/primary_m3px27/guards_primary_m3px27.json
 ```
 
-- **Fallback forms.** The I1 form of the primary line uses `--stage2 artifacts/stage2_primary_i1.json`
+- **Fallback forms.** The final form of the primary line with `pr27xm` uses `--name s032_stage2`, `--proto
+  pr27xm=runs/pr27te_rp/proto_te/proto --rank pr27xm=runs/n1_rp/rank_test/test` instead of the two `m3px27xm` arguments and
+  `--stage2 artifacts/stage2_primary_final.json` (`--out …/sub_primary_final.csv --suffix _primary_final`). The form of the
+  safety line with note mentions and example similarity uses `--stage2 artifacts/stage2_safety_nd.json` (`--out
+  …/sub_safety_nd.csv --suffix _safety_nd`), the form before it `--stage2 artifacts/stage2_safety_final.json` (`--out
+  …/sub_safety_final.csv --suffix _safety_final`). The I1 form of the primary line uses `--stage2 artifacts/stage2_primary_i1.json`
   (`--out …/sub_primary_i1.csv --suffix _primary_i1`; `primary_i1.sh` runs this call through `eda/c121_stage2_i1.py submit`,
   which gives the same file), the guard form `--stage2 artifacts/stage2_s035.json` (`--out …/sub_s035_stage2_guard.csv
   --suffix _s035guard`), the main form without the NONE guard `--stage2 artifacts/stage2_s034.json` (`--out
@@ -299,7 +329,12 @@ python -I tools/make_submission.py --name s032_stage2 \
   `make_submission` requires `--align-inductive 0.75 --align-min 3` and uses the fallback feature set without notes.
   `stage2_safety_final.json` names `align_mode: set`, so `make_submission` requires `--align 0.75 --align-min 3` and runs the
   same path without notes, with the feature set `fallback_i1`
-  ([METHOD.md](METHOD.md#9-second-stage-conditional-logit-reranker)).
+  ([METHOD.md](METHOD.md#9-second-stage-conditional-logit-reranker)). `stage2_safety_nd.json` equals it in form and adds the
+  feature set `fallback_i1_nd` (58 features), the frozen M3 test and training notes (`test_notes`, `train_notes`, files and
+  SHA-256) and the reference statistics of the note and similarity guards; `stage2_safety_ndr.json` adds the feature set
+  `fallback_i1_ndr` (64), the frozen protocol test notes (`r_notes`, file and SHA-256) and the reference of the guard of the
+  columns R. `stage2_primary_m3px27.json` has the fields of `stage2_primary_final.json` with the channel `m3px27xm` in place of
+  `pr27xm` (in the channel list and the feature names), its own blend file and refitted models, and the field `m3px27_build`.
 - **First-version list.** The historical files use `--test v1r=v1rot_t4/rot_test/test@derived/orient/test_c80_rows.npy`
   with otherwise the same arguments and their own output names.
 
@@ -323,11 +358,13 @@ texts, notes and gate lists. In `full` the generation jobs run as well.
 | Reasoning draw g | `think18nb` | `zs27v_te_rp` (`think_te`) | RTX PRO 6000 96 GB | primary |
 | Reasoning draw n | `think18nb`, `think18sb` | `zs27v_n3_rp` (`think_nte`) | RTX PRO 6000 96 GB | both |
 | Protocol answers | `pr27xm` | `pr27te_rp` (`proto_te`) | RTX PRO 6000 96 GB | both |
-| Protocol notes | `pr27xm` | frozen notes `data/derived/proto_notes_test/test_pr27.jsonl` (exported from the answers; the export script is not part of this repository) | CPU | both |
-| Exact ranking behind the notes | `pr27xm` | `n1_rp` (`rank_test`) | RTX PRO 6000 96 GB | both |
+| Protocol notes | `pr27xm`, `m3px27xm`, second stage of the safety candidate | frozen notes `data/derived/proto_notes_test/test_pr27.jsonl` (`python tools/export_proto_notes.py --name test_pr27 --from pr27te_rp/proto_te/proto --allow-test`) | CPU | both |
+| Exact ranking behind the notes | `pr27xm` | `n1_rp` (`rank_test`) | RTX PRO 6000 96 GB | both (primary: fallbacks) |
+| Notes for M3 behind the protocol notes | `m3px27xm` | `tools/make_m3px27_notes.py` (test table) → `data/derived/sft_m3px27te/` | CPU | primary |
+| M3 behind the protocol notes | `m3px27xm` | `m3px27te_rp` (full-fit adapter of M3) | RTX PRO 6000 96 GB | primary |
 | M3 merge and draw d1 | `m3x3_full` | `m3_fullte_rp` | RTX PRO 6000 96 GB | both |
 | M3 draws d2 and d3 | `m3x3_full` | `m3d2te_rp`, `m3d3te_rp` | RTX PRO 6000 96 GB | both |
-| Frozen M3 texts | `m3x3_full`, second stage | `tools/freeze_m3_texts.py` | CPU | both |
+| Frozen M3 texts | `m3x3_full`, second stage | `tools/freeze_m3_texts.py` (test rows); the frozen training notes of the safety candidate's similarity reference are part of the training side (`eda/c129_safety_nd.py export-notes`) | CPU | both |
 | 397B protocol notes | `q397m3` | `q397te_rp` (`proto_te`) | 4×H200, tensor parallel 4, FP8 | primary |
 | 397B parity check (64 training rows) | `q397m3` | `q397p_rp`; the stored verdict `eda/private/q397_deploy/c109_parity.json` is read by the build scripts | 4×H200 | primary |
 | Notes for M3 | `q397m3` | `tools/make_q397m3_notes.py` | CPU | primary |
@@ -398,7 +435,12 @@ predecessors again and were measured with a second copy of the repository runnin
 minutes and `primary_final.sh` about 20 minutes, each including 4–7 minutes for its 20 meta-splits when these are absent;
 the probe run of variant b of the safety line about 9 minutes (including its meta-splits) and `safety_final.sh` with the
 override about 5 minutes. With the complete private package (meta-splits and deployment files present, so the scripts
-verify them), the README quick start took about 32 minutes.
+verify them), the README quick start took about 32 minutes. The build scripts added in version 0.3 were measured in the
+same way on a machine shared with other jobs, on which the version-0.2 scripts ran two to four times slower than above:
+`safety_nd.sh` about 42 minutes and `safety_ndr.sh` about 78 minutes, each without its step 0 and including its
+meta-splits (and, for `safety_ndr.sh`, the draw swap) when these are absent, and `primary_m3px27.sh` about 8 minutes
+without its step 0 (its steps 2–4 recompute the mean channel, the blend and the second stage on every run). On that
+machine the README quick start of version 0.3 took about 3.3 hours.
 
 **Test side per channel** (3,498 rows unless stated):
 
@@ -413,6 +455,7 @@ verify them), the README quick start took about 32 minutes.
 | M3 ranking only | Kaggle T4, 4-bit | 26.5 s per row, about 26 T4 hours per draw | free quota |
 | 397B notes | 4×H200 | 1.49 s per row | — |
 | M3 behind the 397B notes | RTX PRO 6000 | about 3.4 s per row | about 10 USD |
+| M3 behind the protocol notes (`m3px27`) | RTX PRO 6000 | 4.9 s per row, about 4.8 h | about 12 USD |
 
 **Totals.** The following estimates are preliminary. They were made for the two lines before the 397B channel and the
 second stages were added and will be updated.
@@ -437,5 +480,96 @@ and merged at run time.
   rebuild the historical files.
 - **Aggregates only.** Model outputs for test rows are written to files and never printed. Logs contain counts, shares
   and checksums.
+- **Guards of the note features only abort.** In the safety candidate and its fallback the note guard, the similarity guard,
+  the guard of the regex columns and guard (c) never switch to another form: a failing guard stops the build without a file.
+  Their thresholds are written in the deployment file and checked by the assembly.
 - **Fault bands are not tuning knobs.** The bands for the share of `NONE` at the top and for the rate of changed top codes
   detect technical faults. They are fixed in advance and never used to choose between variants.
+
+## 9. Running on a new test set
+
+The checksums of §2 and the build scripts belong to the competition test set. On another set of test photos, everything
+fitted on the 1,500 training rows stays as delivered, and only the test side is computed.
+
+1. **What stays.** The adapters, the orientation network, the OOF matrices with their metadata, the blend files and the
+   fitted weights of the deployment files (`artifacts/stage2_*.json`). Nothing is refitted.
+2. **Test side.** The new `test.csv` and photos go into the layout of §3, and the test-side steps of §6.1 run for every
+   channel of the line in the stage order of §6.2, in mode `full` (every generated text is a new draw). The three inputs
+   that §6.1 takes as frozen lists are made anew: the rotation lists (`tools/orient_net.py infer`), the gate lists
+   (`python -I tools/replay/gates.py write --out <folder> --table test --line all --sources t4`) and the blank-photo list,
+   whose script is not part of this repository ([CODEMAP.md](CODEMAP.md#10-steps-whose-scripts-are-not-part-of-this-repository)).
+3. **Assembly.** The build scripts are not used: they compare every input and output with the checksums of the competition
+   test set. `tools/make_submission.py` is called directly, with the arguments of the reference calls of §5 or of the calls
+   below; the run folders named there then hold the runs on the new photos.
+4. **Records of the competition test set.** Three inputs of the final candidates record the SHA-256 of a frozen test-side
+   file of the competition test set: the field `mech27.test` of `stage2_primary_m3px27.json` and `stage2_primary_final.json`
+   (the protocol answers of the test rows), the field `r_notes.pr27_test` of `stage2_safety_ndr.json` (the protocol notes of
+   the test rows) and the test-note fields of `meta_m3px27xm.json` (the notes behind which both rankings of the mean channel
+   were computed). They tie these candidates to the test files on which they were checked; on any other test set they stop
+   the assembly with an error, independently of the guards. Rewriting them for a new set has not been done or tested. The
+   calls below read none of them.
+5. **Guards.** The second stages compare aggregates of the test rows with values from the training rows
+   ([METHOD.md](METHOD.md#92-test-side-guards), §9.10 and §9.11). They are meant to stop on a set that does not look like
+   the training rows:
+   - Safety line (`stage2_safety_ndr.json`, `stage2_safety_nd.json`, `stage2_safety_final.json`): the note guard, the
+     similarity guard, the guard of the regex columns and guard (c) only abort. The call ends with a non-zero exit code,
+     writes no file and does not switch to another form.
+   - Primary line: guard (c) aborts in the same way. The note guard (a) is the one documented exception: if it fails, the
+     fallback model of the same deployment file, which reads no notes, is applied.
+   - The fault bands of the channels (share of `NONE` at the top of a ranking, completeness of every test run, settings of
+     the test runs against those of the training runs) abort as well.
+
+   None of these guards can be switched off. If one stops the assembly, the line falls back to its file without second
+   stage, by an explicit call.
+6. **Files without second stage.** The blend of the line, the alignment and the `REL-01` rule, without `--stage2`. On the
+   competition test set the three calls reproduce files that the build scripts check: the primary call gives
+   `sub_s032n_q397m3.csv` byte for byte (the file under the second stages of the primary line with `pr27xm`; the mean
+   channel `m3px27xm` is left out because of its record, item 4), the safety call gives the file without second stage under
+   the safety candidates (the copy null point that every safety build recomputes), and the strictly inductive call gives
+   `sub_s030n_safe.csv` byte for byte. The alignment of the first two calls assumes that the new set has the class shares of
+   the training rows, as the stratified competition split has; the strictly inductive call scores each row on its own and
+   makes no assumption about the set.
+
+```bash
+# Primary line without second stage
+python -I tools/make_submission.py --name s029_best_q397m3 \
+  --test v1r=v1rot_t4/rot_test/test@derived/orient_repro/test_c80_rows.npy --fill v1r=v1 \
+  --test v1=v1te_a_t4/v1_test_a/test+v1te_b_t4/v1_test_b/test \
+  --test zs27q=zs27q_test0_rp/zs27q_test0/test+zs27q_test1_rp/zs27q_test1/test --fill think18nb=zs27q \
+  --test think18nb=zs27v_te_rp/think_te/test/think@derived/think_rows/test.npy,zs27v_n3_rp/think_nte/test/think@derived/think_rows/test_tb_q.npy \
+  --proto pr27xm=runs/pr27te_rp/proto_te/proto --rank pr27xm=runs/n1_rp/rank_test/test \
+  --rank-only m3x3_full=runs/m3_fullte_rp/m3_test_rank/test,runs/m3d2te_rp/m3d2_test_rank/test,runs/m3d3te_rp/m3d3_test_rank/test \
+  --rank-only q397m3=runs/q397m3te_rp/q397m3_test_rank/test --rank-none-band-for q397m3=0.27,0.35 \
+  --align 0.75 --align-min 3 --blank-rows derived/blank/test_rows.npy \
+  --out artifacts/submissions/sub_primary_base.csv --suffix _primary_base
+
+# Safety line without second stage (alignment over the test set)
+python -I tools/make_submission.py --name v1r_zs27t_think18sb_pr27xm_m3x3_full_ar \
+  --test v1r=v1rot_t4/rot_test/test@derived/orient_repro/test_c80_rows.npy --fill v1r=v1 \
+  --test v1=v1te_a_t4/v1_test_a/test+v1te_b_t4/v1_test_b/test \
+  --test zs27t=px27_t4zt0/zs27t_test_t4/test+px27_t4zt1/zs27t_test_t4/test --fill think18sb=zs27t \
+  --test think18sb=zs27v_n3_rp/think_nte/test/think@derived/think_rows/test_tb_t.npy \
+  --proto pr27xm=runs/pr27te_rp/proto_te/proto --rank pr27xm=runs/n1_rp/rank_test/test \
+  --rank-only m3x3_full=runs/m3_fullte_rp/m3_test_rank/test,runs/m3d2te_rp/m3d2_test_rank/test,runs/m3d3te_rp/m3d3_test_rank/test \
+  --align 0.75 --align-min 3 --blank-rows derived/blank/test_rows.npy \
+  --out artifacts/submissions/sub_safety_base.csv --suffix _safety_base
+
+# Strictly inductive line without second stage (each row on its own)
+python -I tools/make_submission.py --name v1r_zs27t_think18sb_pr27xm_m3x3_full_ar \
+  --test v1r=v1rot_t4/rot_test/test@derived/orient_repro/test_c80_rows.npy --fill v1r=v1 \
+  --test v1=v1te_a_t4/v1_test_a/test+v1te_b_t4/v1_test_b/test \
+  --test zs27t=px27_t4zt0/zs27t_test_t4/test+px27_t4zt1/zs27t_test_t4/test --fill think18sb=zs27t \
+  --test think18sb=zs27v_n3_rp/think_nte/test/think@derived/think_rows/test_tb_t.npy \
+  --proto pr27xm=runs/pr27te_rp/proto_te/proto --rank pr27xm=runs/n1_rp/rank_test/test \
+  --rank-only m3x3_full=runs/m3_fullte_rp/m3_test_rank/test,runs/m3d2te_rp/m3d2_test_rank/test,runs/m3d3te_rp/m3d3_test_rank/test \
+  --align-inductive 0.75 --align-min 3 --blank-rows derived/blank/test_rows.npy \
+  --out artifacts/submissions/sub_inductive_base.csv --suffix _inductive_base
+```
+
+On the competition test set (checked in a fresh copy of the repository with the private package):
+
+| Call | Output | SHA-256 |
+|---|---|---|
+| Primary line without second stage | `sub_primary_base.csv`, byte-identical to `sub_s032n_q397m3.csv` | `d1667f6d2fb118844b72ecd8abd85220754a709d468519b7a047a893bbea12f1` |
+| Safety line without second stage | `sub_safety_base.csv`, the copy null point of the safety builds | `91a14773ac7ec367b1385f1d304b3b8a74b3d9598aecfd91fee49f62ee4e4bb2` |
+| Strictly inductive line without second stage | `sub_inductive_base.csv`, byte-identical to `sub_s030n_safe.csv` | `8cca7bbfe9b8c9dce47d6153d59712575bb7b8ad6dea8a286f7ef530df448b67` |

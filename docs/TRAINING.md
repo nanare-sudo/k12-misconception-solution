@@ -1,6 +1,6 @@
 # Training
 
-*Status: 2026-11-07 (version 0.2). This document lists every component that is trained or fitted on the labelled data:
+*Status: 2026-11-08 (version 0.3). This document lists every component that is trained or fitted on the labelled data:
 inputs, command, hardware, duration and the values to check. Model details are in [METHOD.md](METHOD.md); inference is
 in [INFERENCE.md](INFERENCE.md); every script is listed in [CODEMAP.md](CODEMAP.md).*
 
@@ -20,6 +20,7 @@ train.csv + training photos + question diagrams + taxonomy
   ├─ (§7)  27B zero-shot scorers ────────────────────────────────── oof_zs27q, oof_zs27t
   ├─ (§8)  gates → reasoning draws g / n → scoring ──────────────── oof_think18nb, oof_think18sb
   ├─ (§9)  protocol answers → notes → exact ranking ─────────────── oof_pr27, oof_pr27xm
+  │         → M3 ranking behind the same notes ──────────────────── oof_m3px27, oof_m3px27xm  [primary line]
   ├─ (§10) M3 targets → M3 LoRA: 5 fold adapters + full fit ─────── m3_f0 … m3_f4, m3_full
   │         → OOF draws d1, d2, d3 ──────────────────────────────── oof_m3x3_full
   ├─ (§11) 397B training side (API) → notes → M3 scores behind them oof_q397m3          [primary line]
@@ -34,6 +35,32 @@ train.csv + training photos + question diagrams + taxonomy
 | M3 adapter | LoRA fine-tuning | RTX PRO 6000 96 GB | no (GPU) |
 | OOF of the untrained channels and of M3 | inference: exact scoring behind generated texts | A40, RTX PRO 6000 | scoring yes on given hardware; text generation no |
 | Teacher labels, 397B training side | paid APIs, frozen | — | no; delivered as frozen files |
+
+**Channels of the final candidates.** Every training-side step of the channels that the three candidates use
+(`primary_m3px27`, `safety_ndr` and its fallback `safety_nd`), with the section that gives its command, configuration and
+checks. All configurations are files in `configs/vlm/`, run with the runner of §2.
+
+| Channel | Used by | Trained here | Section, configurations | Inputs besides `train.csv`, photos, diagrams and taxonomy | Hardware |
+|---|---|---|---|---|---|
+| `v1`, `v1r` | all three | 9B LoRA on the gold labels; orientation network | §4: `ft_v1a_rp`, `ft_sum1_rp`, `ft_v1b_rp`, `ft_v1c_rp`; §5: `tools/orient_net.py train`, `v1rot_t4` | same-question examples of the other folds; for the orientation network 10,000 pool photos, labelled by the rotations applied in training | A40; CPU; Kaggle T4 |
+| `zs27q` | primary | no | §7: `zs27q_oof_rp`, `zs27q2_f1_rp` | examples and topic block of the other folds; task block from the frozen teacher labels of the pool (§6) | A40, 4-bit |
+| `zs27t` | safety | no | §7: `zs27t_all_rp` | examples and topic block of the other folds | A40, 4-bit |
+| `think18nb` | primary | no | §8: draws g and n | draw g as `zs27q` (with the task block), draw n as `zs27t` | RTX PRO 6000 |
+| `think18sb` | safety | no | §8: draw n | as `zs27t` | RTX PRO 6000 |
+| `pr27xm` | safety | no | §9: `pr27_rp`, `px27_rp` | marking protocol only, no labelled row | RTX PRO 6000 |
+| `m3x3_full` | all three | M3 LoRA on the gold codes and the annotators' explanations | §10: `m3_pilot_rp`, `m3_f034_rp`, `m3_fullte_rp`; draws `m3long_rp`, `cv01_m3d2_f034`, `m3d3_oof_rp` | frozen protocol notes of the training rows (`train_pr27.jsonl`) and `oof_pr27` | RTX PRO 6000 |
+| `m3px27xm` | primary | no (the M3 fold adapters of §10) | §9: `m3px27_oof_rp`; §13.6 | frozen protocol notes of the training rows | RTX PRO 6000 |
+| `q397m3` | primary | no (the M3 fold adapters of §10) | §11: `q397m3_oof_rp` | frozen 397B protocol answers of the training rows | RTX PRO 6000 |
+| Blends, second stages | all three | fits on the CPU | §12, §13.1, §13.3–§13.6 | OOF matrices; frozen M3 notes (draws d1–d3) and protocol notes of the training rows; for the rules also the fourth M3 draw `m3d4_oof_rp` and the second draw of the protocol answers `pr27s2_rp`, `pr27s3_rp` | CPU |
+
+**Provenance of labels and texts not written by the annotators.** Three kinds enter training or the training-side
+context: the teacher labels (pool rows only, §6), the 397B protocol answers (training rows only, §11) and the texts of our
+own model runs on training rows (the protocol notes, used as M3 inputs and targets, and the M3 draws d1–d4, used as
+second-stage features and in the rules). None of them was produced for or from a test row, and no test row was ever sent
+to an API. Texts generated for test rows (reasoning, protocol answers and notes, M3 draws, 397B notes) are inference
+outputs; no training step uses their content (the deployment fits only record checksums of some of these files). The
+only step that uses the test rows as a set is the class-marginal alignment at
+assembly ([METHOD.md](METHOD.md#8-class-marginal-alignment)); it uses no label.
 
 ## 2. Environment
 
@@ -154,10 +181,13 @@ No training is involved. Same-question examples and topic blocks are drawn from 
 |---|---|
 | Protocol answers | `pr27_rp` (jobs `proto_a`, `proto_b`; thinking up to 2,500 tokens, then a completion without thinking). RTX PRO 6000, 3.3–3.5 s per row, about 4.3 USD for the 1,500 training rows |
 | Stated-codes channel | `python -I eda/a8_proto_oof.py pr27 runs/pr27_rp/proto_a/proto+runs/pr27_rp/proto_b/proto` |
-| Frozen notes | `data/derived/proto_notes/train_pr27.jsonl`: the first-pass reasoning of the protocol answers, exported per row. The export script is not part of this repository; the file is delivered frozen with its checksum |
+| Frozen notes | `data/derived/proto_notes/train_pr27.jsonl`: the first-pass reasoning of the protocol answers, exported per row (`python tools/export_proto_notes.py --name train_pr27 --from pr27_rp/proto_a/proto --from pr27_rp/proto_b/proto`; the test notes with `--allow-test` into `data/derived/proto_notes_test/`). The files are delivered frozen with their checksums; `eda/c130_safety_ndr.py export-notes --verify` re-exports them from the raw answers byte for byte |
 | Exact ranking behind the notes | `px27_rp` (job `rank_tr`), about 2.8 USD for the training side |
 | Channel | `python -I eda/c95_rank_mean.py` (defaults: name `pr27xm`, the two answer jobs above and `runs/px27_rp/rank_tr/bench`) |
 | Checks | `pr27` MAP@3 about 0.745, `pr27xm` 0.7459. Rebuilding `oof_pr27` from the frozen answers is bit-identical |
+| Second draw of the answers | `pr27s2_rp` (`proto_a2`), `pr27s3_rp` (`proto_b2`): greedy, another processing order; exported as `data/derived/proto_notes/train_pr27d2.jsonl`. Used only as a sensitivity check of the rule of the regex note columns (§13.5) |
+| M3 behind the notes (`m3px27`) | Notes in the format of the frozen M3 notes: `python -I tools/make_m3px27_notes.py --table both` → `data/derived/sft_m3px27/m3px27_train_notes.jsonl`, `data/derived/sft_m3px27te/m3px27_test_notes.jsonl` (character-identical with the input of the untrained ranking). Rankings: `m3px27_oof_rp` (five fold shards, per fold the M3 adapter without that fold; RTX PRO 6000, about 4.7 USD) and `m3px27te_rp` (full-fit adapter; about 12 USD). Channel artifact: `python -I eda/c132_m3px27_eval.py --oof-save` → `artifacts/oof_m3px27.npy` (SHA-256 `a0a9660f6f20099ff1019702a11d881eb4c85a3ce089a645ccbc0ac94428986f`) and `meta_m3px27.json`; evaluation by its rule: `--controls`, then the plain call (§13.6) |
+| Mean channel `m3px27xm` | `python -I eda/c133_primary_m3px27.py oof --save` → `artifacts/oof_m3px27xm.npy` (SHA-256 `47e128eed7865deec8a5818cdbd514ed29246dec79a56f7da59d86ed3897cfe8`), `meta_m3px27xm.json`; MAP@3 0.7551. With the untrained ranking in place of `m3px27` the same path gives `oof_pr27xm.npy` bit for bit |
 
 ## 10. M3: fine-tuned 27B reasoner (`m3x3_full`)
 
@@ -188,6 +218,7 @@ from the frozen inputs was bit-identical). `src/vlm/sft.py` reads and checks the
 | d1 | fold jobs of `m3_pilot_rp`, `m3_f034_rp`; the five fold rankings are combined into the run folder `runs/m3_5f` | greedy, up to 3,200 tokens |
 | d2 | `m3long_rp` (folds 1, 2; combined into `runs/m3long_comb`), `cv01_m3d2_f034` (folds 0, 3, 4) | greedy, up to 5,200 tokens |
 | d3 | `m3d3_oof_rp` (all folds) | sampled: temperature 0.6, top-p 0.95, top-k 20, seed 3; up to 5,200 tokens |
+| d4 (rules only, in no blend) | `m3d4_oof_rp` (all folds) | as d3 with seed 4; used only in the draw swap of the rule of the regex note columns (§13.5) and as a control of the rule of `m3px27` (§13.6) |
 
 The combined run folders `runs/m3_5f` and `runs/m3long_comb` are delivered frozen; the scripts that combined the fold
 runs are not part of this repository. `eda/a9_m3_draws_oof.py` checks each draw (fold coverage, settings) when it reads
@@ -226,6 +257,7 @@ development helper that is not part of this repository, so the stored report is 
 |---|---|---|---|
 | Inductive | `bash tools/builds/s029_m3x3.sh safe`. It calls `eda/c99_m3_deploy.py --channel m3x3_full --rows derived/m3x3_full_rows.npy --lines safe --save`, then adds β = 0.4 and the checksum of the inductive class weights | `artifacts/stack_v1r_zs27t_think18sb_pr27xm_m3x3_full_ar.json` | `7fb543ae5b7cb460a869411c1a97759d5594af66140d6922485b1b1ff421490c` |
 | Primary | `python -I eda/c110_q397_deploy.py stack --line best --m3 m3x3_full --replace-q397 q397m3 --arith-beta-select --stem s032_stage2 --save` | `artifacts/stack_s032_stage2.json` | `d278bbedf7fb4d7564e584a55d45959b826748dfe937d8becf1e0818007281eb` |
+| Primary, final candidate (channel `m3px27xm` instead of `pr27xm`) | `python -I eda/c133_primary_m3px27.py stack --save` (θ on LogLoss over all 1,500 rows, β by the same rule: 0.6) | `artifacts/stack_primary_m3px27.json` | `ebdd585e4650922d59972b3a84eb85c44af4f2dc469dd723ef2100ab7d797a3c` |
 
 Weights are fitted on LogLoss over all 1,500 OOF rows, on the CPU in seconds. The rebuild is character-identical, and
 the build scripts verify it before every assembly. The blend files do not depend on the rotation list of the test side.
@@ -337,7 +369,87 @@ last step / as one set, variant b 7,450 / 7,417 / 7,395; copy null points a (wei
 exact; test-side class masses after the alignment L1 0.028, with the inductive alignment 0.087. The deployment fit on
 all 1,500 rows does not abstain (inner 0.8269 against base 0.8197).
 
-All seven deployment files are rebuilt character for character by the build scripts (`--verify`) or written by them on
+### 13.4 Safety line: note mentions and example similarity
+
+Run by `tools/builds/safety_nd.sh` (after its step 0, which builds `safety_final` and `primary_final`):
+
+```bash
+python -I eda/c129_safety_nd.py export-notes --verify   # the frozen M3 training notes d1–d3 = recomputation from the ranking runs
+python -I eda/c129_safety_nd.py oof                     # nested reproduction: copy null point (ND columns 0 -> safety_final), 15 placebos
+python -I eda/c129_safety_nd.py splits --n 20           # 20 new meta-splits (only if the file is absent; SAFETY_ND_SPLITS=1 recomputes it)
+python -I eda/c129_safety_nd.py rule                    # pre-registered rule with the risk rule; exit code 5 if missed
+python -I eda/c129_safety_nd.py fit --save              # → artifacts/stage2_safety_nd.json (--verify if the file exists)
+```
+
+| File | SHA-256 | Content |
+|---|---|---|
+| `artifacts/stage2_safety_nd.json` | `50217a6c48f16bf35afb97fd755611eba85c43fa81187d0d00a91dbb31cddbee` | Conditional logit after the alignment as one set, feature set `fallback_i1_nd` (58), NONE guard, `align_mode: set`; the frozen M3 test and training notes with their checksums, the references of the note and similarity guards (`guard_reference`, `sim_reference`), `guard_rule` with `abort_only` |
+| `artifacts/eda/private/safety_nd/c129_splits.json` | `703703d46c913b6d5607c47183b734980cfb919d14283c2d83ac9e6c634e891e` | The 20 new meta-splits (pinned; recomputed only if absent) |
+
+Checks: the copy null point holds bit for bit (the three columns at 0 reproduce the rows of `safety_final`); ½(F+M) +0.00322
+± 0.00150 against `safety_final` (per fold 7,480 sixths, as one set 7,447), placebo mean +0.00048; over 20 new meta-splits
++0.00283 ± 0.00024; risk rule P(θ < −0.002) 0.0001. The deployment fit on all 1,500 rows does not abstain; its features
+equal the evaluated rows of the nested run (`eval_features_sha256`).
+
+### 13.5 Safety line: regex-exact note columns
+
+Run by `tools/builds/safety_ndr.sh` (after its step 0, `safety_nd.sh`):
+
+```bash
+python -I eda/c129_safety_nd.py export-notes --verify   # M3 training notes, as in §13.4
+python -I eda/c130_safety_ndr.py export-notes --verify  # the three frozen protocol note files = re-export from the raw answers
+python -I eda/c130_safety_ndr.py oof                    # nested reproduction: R columns 0 -> safety_nd bit for bit, 15 placebos
+python -I eda/c130_safety_ndr.py swap                   # full draw swap over the four sets of three from d1–d4 (only if absent)
+python -I eda/c130_safety_ndr.py splits --n 20          # 20 new meta-splits (only if absent; SAFETY_NDR_RECOMPUTE=1 recomputes both)
+python -I eda/c130_safety_ndr.py rule                   # pre-registered rule (1)–(4) with the risk rule; exit code 5 if missed
+python -I eda/c130_safety_ndr.py fit --save             # → artifacts/stage2_safety_ndr.json (--verify if the file exists)
+```
+
+| File | SHA-256 | Content |
+|---|---|---|
+| `artifacts/stage2_safety_ndr.json` | `bfd8f197fccb3ad9cc623fe2d45930151ac0debf40be3eb5cbafb953c79b2927` | As `stage2_safety_nd.json` with the feature set `fallback_i1_ndr` (64), the frozen protocol test notes (`r_notes`: extractor version, columns, file and SHA-256) and the reference of the guard of the columns R (`r_reference`) |
+| `artifacts/eda/private/safety_ndr/c130_swap.json`, `c130_splits.json` | `fd47ced958c232047fa4516c7b15a00fb583bc0181e63da2ad82c8be17dcc6e2`, `db40c8b8294963f3303c5e700b220868b9338b157c91f5c97b09d2281f1fb9ec` | Draw swap and 20 new meta-splits (pinned; recomputed only if absent) |
+
+Checks: R columns 0 reproduce `safety_nd` bit for bit, and the first 58 columns equal those of `c129`; ½(F+M) +0.00072 ±
+0.00108 against `safety_nd` (per fold 7,484 sixths, as one set 7,456), placebo mean −0.00012; draw swap +0.00099, +0.00026,
++0.00083, +0.00015 (mean +0.00056); 20 new meta-splits +0.00087 ± 0.00022; risk rule P(θ < −0.002) 0.0007 (original) and 0.0010
+(mean of the sets). The deployment fit does not abstain.
+
+### 13.6 Primary line: mean channel with the M3 ranking behind the protocol notes
+
+The rule of the channel was evaluated once, before the test side was computed:
+
+```bash
+python -I eda/c132_m3px27_eval.py --oof-save    # channel artifact oof_m3px27 from the five shards (fold fidelity, settings, notes)
+python -I eda/c132_m3px27_eval.py --controls    # controls of the same role on the original and 20 new meta-splits (cache)
+python -I eda/c132_m3px27_eval.py               # rule -> artifacts/eda/private/m3px27_eval/c132_m3px27_eval.json (verdict DEPLOY)
+```
+
+The build script `tools/builds/primary_m3px27.sh` reads the stored verdict and its row file (pinned) and recomputes the rest;
+steps 2–4 always run with `--save`, which writes missing files and requires existing ones to be byte-identical (a package
+without the report files or the OOF matrix builds the same files):
+
+```bash
+python -I eda/c132_m3px27_eval.py --oof-verify  # oof_m3px27 = recomputation from the five shards
+python -I eda/c133_primary_m3px27.py oof --save    # mean channel m3px27xm → artifacts/oof_m3px27xm.npy, meta_m3px27xm.json
+python -I eda/c133_primary_m3px27.py stack --save  # → artifacts/stack_primary_m3px27.json
+python -I eda/c133_primary_m3px27.py fit --save    # the chain of the final primary form with m3px27xm → artifacts/stage2_primary_m3px27.json
+python -I eda/c133_primary_m3px27.py copy --keep   # copy null point of the training side (m3px27 := untrained ranking)
+python -I eda/c133_primary_m3px27.py test-guard    # completeness, NONE band, settings, note guard and training regime of the test ranking
+```
+
+| File | SHA-256 | Content |
+|---|---|---|
+| `artifacts/stage2_primary_m3px27.json` | `9321d597b175d672fe5b31bf284ce984fbce149cb2e2cd8941a31aa8070d2500` | The fields of `stage2_primary_final.json` with the channel `m3px27xm`: main model `main_guard_i1_mm` (64) with NONE guard, fallback model (40), widened note guard, β 0.6, K 5, λ 0.1, `mech27`; plus `m3px27_build` (verdict, evaluated rows, copy null points, deployment form with β per fold) |
+| `artifacts/eda/private/m3px27_eval/c132_m3px27_eval.json` and `…_rows.npz` | `b3b9c7b87de3d7d25f017369c19e68aec219516a1dd75f9dfcf9455a7bc30ce0`, `cf4af62a74cd3d315d7a0e0c3eefe8f3b8151f9db3d36cd4d2855ee40b5f0fc5` | Stored verdict of the rule and its row vectors (pinned) |
+
+Checks: the chain gives per fold / without the last step / as one set 0.84256 / 0.83456 / 0.83822 for the final form with
+`m3px27xm` (with `pr27xm` 0.84089 / 0.83433 / 0.83978); its row vectors equal those of the evaluation bit for bit; with the
+untrained ranking in place of `m3px27` the blend file, the 15 row vectors and the five deployment files of the chain are
+reproduced (up to provenance and channel names). The deployment form of the training rows is the cross with β per fold
+(fold 1 selects 0.7, the others 0.6; METHOD §4.7); the fixed-β variant is written as a sensitivity file only.
+
+All ten deployment files are rebuilt character for character by the build scripts (`--verify`) or written by them on
 the first run (`--save`), and pinned there by checksum.
 
 ## 14. Scripts per channel
@@ -352,11 +464,12 @@ are marked; their outputs are frozen inputs ([CODEMAP.md](CODEMAP.md#10-steps-wh
 | `v1r` | `tools/orient_net.py` (maps, training), `tools/make_orient.py`, runner (`rot_f*`), `eda/a6_assemble_oof.py` | `tools/orient_net.py infer`, `tools/orient_list.py` (choice and checks), runner (`rot_test`) |
 | `zs27q`, `zs27t` | runner (`bench`), `eda/a6_assemble_oof.py` | runner (`bench`) |
 | `think18nb`, `think18sb` | `tools/replay/gates.py`, runner (`think_gen` + scoring), `eda/a6_assemble_oof.py` | `tools/replay/gates.py check`, runner |
-| `pr27xm` | runner (`proto_gen`, `proto_rank`), `eda/a8_proto_oof.py`, `eda/c95_rank_mean.py`; notes export (frozen, script not included) | runner; notes export (frozen, script not included) |
+| `pr27xm` | runner (`proto_gen`, `proto_rank`), `eda/a8_proto_oof.py`, `eda/c95_rank_mean.py`, `tools/export_proto_notes.py` | runner, `tools/export_proto_notes.py --allow-test` |
+| `m3px27xm` | `tools/make_m3px27_notes.py`, runner (M3 ranking behind the notes), `eda/c132_m3px27_eval.py`, `eda/c133_primary_m3px27.py` | runner, `tools/make_m3px27_notes.py`, `eda/c133_primary_m3px27.py test-guard` |
 | `m3x3_full` | runner (`train`, `merge`, `sft_gen`, ranking), M3 targets (frozen, builder not included), combination of fold runs (frozen, script not included), `eda/a9_m3_draws_oof.py`, `eda/c108_m3_three_draws.py` | runner, `tools/freeze_m3_texts.py`, `eda/a9_m3_draws_oof.py --gen-status`, `eda/c99_m3_deploy.py --variant` |
 | `q397m3` | `tools/open_teacher.py` (development only), `eda/c110_q397_deploy.py`, `tools/make_q397m3_notes.py`, runner, `eda/c117_q397m3_deploy.py`, `eda/c115_q397m3_eval.py` | runner, `tools/make_q397m3_notes.py`, `eda/c117_q397m3_deploy.py test-guard`, `eda/c110_q397_deploy.py test-status`; parity check (stored verdict, script not included) |
 | Blends | `eda/c99_m3_deploy.py`, `eda/c110_q397_deploy.py`, `eda/c107_q397_full.py`, `eda/a2_probe_stack.py`, `eda/c21_margin_align.py` | `tools/make_submission.py` |
-| Second stages | `eda/c118_stage2.py`, `eda/c120_s036_safe_stage2.py`, `eda/c121_stage2_i1.py`, `eda/c123_safety_set.py`, `eda/c124_stage2_mm.py`, `src/stage2.py`, `src/answer_match.py` | `tools/make_submission.py --stage2`, `eda/c121_stage2_i1.py submit` |
+| Second stages | `eda/c118_stage2.py`, `eda/c120_s036_safe_stage2.py`, `eda/c121_stage2_i1.py`, `eda/c123_safety_set.py`, `eda/c124_stage2_mm.py`, `eda/c129_safety_nd.py`, `eda/c130_safety_ndr.py`, `eda/c133_primary_m3px27.py`, `eda/risk_rule.py`, `src/stage2.py`, `src/answer_match.py`, `src/note_sim.py`, `src/note_regex.py` | `tools/make_submission.py --stage2`, `eda/c121_stage2_i1.py submit` |
 
 ## 15. Reproducibility of training
 
@@ -372,3 +485,20 @@ are marked; their outputs are frozen inputs ([CODEMAP.md](CODEMAP.md#10-steps-wh
   - 9B, five folds and full fit: about 6 A40 GPU hours, a few USD;
   - M3, five folds and full fit: about 8 GPU hours on an RTX PRO 6000, about 20 USD;
   - three new M3 OOF draws: about 10 further GPU hours.
+- **What a retraining gives.** The same commands, configurations and seeds give new adapters, new OOF matrices and new
+  test outputs, so every downstream checksum changes: the blend weights and second stages are refitted on the CPU from the
+  new OOF matrices (deterministic for given inputs), the pre-registered rules of §13 have to be evaluated again, and the
+  pins of the build scripts no longer apply. Scores are expected to move within the spread measured on this data, not to
+  repeat:
+  - a new draw of a generated text: two greedy runs with the same prompt agree on the top code in 84 % of rows; the three
+    M3 OOF draws (with different generation settings) reach 0.7621, 0.767 and 0.7701 as single channels; a rerun of the
+    protocol answers changed the blend's top code on 8–9 % of rows of an error-heavy sample without a change in MAP@3
+    ([INFERENCE.md](INFERENCE.md#63-reference-hardware-and-expected-agreement));
+  - other hardware or number format: between an A40 in bf16 and a T4 in fp16 the 9B scorer's top code changes on about 9 %
+    of rows and the blend's on 1–2 %;
+  - the uncertainty of a single cross-validated value is about ±0.01 MAP@3 (`v1` 0.6406 ± 0.0105), so two complete
+    retrainings are compared with the paired bootstrap of [VALIDATION.md](VALIDATION.md#51-paired-comparisons), not by
+    their difference alone.
+
+  A complete retraining of the adapters has not been measured, and the spread of a rerun with all generated texts replaced
+  at once is still open ([ROADMAP.md](ROADMAP.md)).

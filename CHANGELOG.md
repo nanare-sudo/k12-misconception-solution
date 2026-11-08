@@ -3,6 +3,90 @@
 This file records notable changes to the solution repository. Dates are UTC. The repository is a living document until
 the final solution package is delivered.
 
+## v0.3 — 2026-11-08
+
+Fourth pre-final version: new final candidates of both lines.
+
+### Added
+
+- Safety line: note mentions and example similarity in the second stage (feature set `fallback_i1_nd`; `src/note_sim.py`;
+  `eda/c129_safety_nd.py` with `export-notes`, `oof`, `splits`, `rule`, `fit`, `null` and `b-zero`; build script
+  `tools/builds/safety_nd.sh`; tests `tests/test_safety_nd.py`).
+- Safety line, final candidate: six regex-exact columns of the frozen M3 and protocol notes (feature set `fallback_i1_ndr`;
+  the versioned extractor `src/note_regex.py`; `eda/c130_safety_ndr.py` with `export-notes`, `oof`, `swap`, `splits`, `rule`,
+  `fit`, `null` and `b-zero`; build script `tools/builds/safety_ndr.sh`; tests `tests/test_safety_ndr.py`).
+- Primary line, final candidate: the mean channel `m3px27xm`, in which M3 ranks all codes behind the frozen notes of the
+  protocol channel instead of the untrained 27B (`tools/make_m3px27_notes.py`; run configurations
+  `configs/vlm/m3px27_oof_rp.yaml`, `m3px27te_rp.yaml`; evaluation by its pre-registered rule `eda/c132_m3px27_eval.py`;
+  deployment path `eda/c133_primary_m3px27.py` with `oof`, `stack`, `fit`, `copy`, `clean-copy`, `test-guard` and `null`;
+  build script `tools/builds/primary_m3px27.sh`, whose steps 2–4 always run with `--save` (missing files are written,
+  existing ones must be byte-identical, so that a package without the report files or the OOF matrix of the mean channel
+  builds the same files); tests `tests/test_m3px27.py`, `tests/test_primary_m3px27.py`).
+- `eda/risk_rule.py`: the empirical-Bayes posterior of the risk rule (prior from earlier measurements of the same class of
+  component, selection correction), used by the rules of the two note-feature forms of the safety line.
+- `tools/export_proto_notes.py`: the export of the first-pass notes of the protocol answers, which was listed as a step whose
+  script was not included; it reproduces the frozen note files byte for byte.
+- Run configurations of three runs whose outputs the new build scripts read for their checks: `configs/vlm/m3d4_oof_rp.yaml`
+  (a fourth M3 draw on the training rows) and `configs/vlm/pr27s2_rp.yaml`, `pr27s3_rp.yaml` (a second draw of the protocol
+  answers).
+
+### Changed
+
+- `src/stage2.py`: the feature sets `fallback_i1_nd` and `fallback_i1_ndr` and `attach_r`; the existing feature sets and
+  their files are unchanged, bit for bit.
+- `tools/make_submission.py`: deployment files of the safety line with the note feature sets read the frozen notes (checked by
+  SHA-256), compute the example similarity and the regex columns, and stop without a file if a guard fails
+  (`--stage2-control` runs the positive controls in memory); mean channels with the field `rank_mean.rank_compare: sft` are
+  compared with every fold shard and checked by a note guard (`rank_mean.notes`). All earlier files are rebuilt byte for byte.
+- `eda/c118_stage2.py`: `build_stage2` accepts a given deployment form of the training rows (used for the cross with β per fold
+  of the new primary candidate); without it the function is unchanged.
+- Documentation updated for this version: `README.md`, `docs/METHOD.md` (§4.7, §9.10, §9.11, §11), `docs/VALIDATION.md`,
+  `docs/RESULTS.md`, `docs/TRAINING.md` (§9, §10.3, §12, §13.4–§13.6, §14), `docs/INFERENCE.md`, `docs/CODEMAP.md`,
+  `docs/ROADMAP.md`, `docs/DATA_AND_COMPLIANCE.md`, `THIRD_PARTY.md`.
+- `docs/TRAINING.md` §1: every training-side step of the channels of the final candidates with its section, configurations,
+  inputs and hardware, and the provenance of every label or text not written by the annotators (training and pool rows
+  only); §15: what a retraining gives and how far its results are expected to move.
+- `docs/INFERENCE.md` §9 (new): running on a new test set — what stays, what is computed, the records that bind the final
+  candidates to the competition test set, the behaviour of the guards and the calls of the files without second stage.
+
+### Verification
+
+- Two fresh copies of the repository with the private package, the data only as read-only links:
+  - README quick start run verbatim: all 26 reference files byte-identical (`sub_primary_m3px27.csv`, `sub_safety_ndr.csv`,
+    `sub_safety_nd.csv` and their test matrices, and the 20 files of versions 0.1 and 0.2); the two final candidates' build
+    scripts, run once more, give the same files; the `make_submission` reference calls of `docs/INFERENCE.md` §5, run
+    verbatim, give the same files, and the three calls without second stage of §9 give the files that the build scripts
+    check.
+  - Write path, with every file a build script can write deleted beforehand: the same 26 files byte-identical; the
+    deployment files, meta-split files, the draw-swap file, the blend file and the mean channel are rebuilt with their
+    pinned checksums. The primary build gives the same files again with only the metadata of its mean channel present,
+    and with only its deployment files present.
+  - Positive controls of the test side: copied, permuted and truncated M3 notes, shifted protocol notes and M3 notes in
+    place of the protocol notes each stop the safety build without a file.
+- The rebuilt protocol-note files and the notes of the M3 ranking behind them are byte-identical to the frozen files.
+- Tests: 560 passed and 4 skipped with the private package; 487 passed and 77 skipped with the repository files only.
+
+### State of the solution
+
+| Line and form | Status | CV MAP@3 (per fold / as one set) | Public LB |
+|---|---|---|---:|
+| Primary line, final form with the M3 ranking behind the protocol notes | current candidate; submitted 2026-11-08 | 0.8426 / 0.8382 | 0.84116 |
+| Primary line, final form with `pr27xm` | fallback; submitted 2026-11-06 | 0.8409 / 0.8398 | 0.84100 |
+| Safety line, note mentions, example similarity and regex note columns | current candidate; submitted 2026-11-07 | 0.8316 / 0.8284 | 0.83716 |
+| Safety line, note mentions and example similarity | fallback; submitted 2026-11-07 | 0.8311 / 0.8274 | 0.83750 |
+| Safety line, alignment over the test set, reranker with interactions | submitted 2026-11-07 | — / 0.8217 | 0.83516 |
+| Safety line, strictly inductive form with second stage | fallback under the strictest reading; submitted 2026-11-01 | 0.8233 / — | 0.83183 |
+
+### Known gaps
+
+The following items are tracked in [docs/ROADMAP.md](docs/ROADMAP.md):
+- the offline package: lock hashes, wheelhouse, offline runner, single entry point, manifests;
+- smoke tests without network access for the model steps, including the 397B path;
+- the remaining second-hardware checks of the M3 draws;
+- an estimate of the rerun variance of the generated texts;
+- the private copies of the frozen inputs and weights in the state of this version;
+- the per-package licence table.
+
 ## v0.2 — 2026-11-07
 
 Third pre-final version: the final candidates of both lines.

@@ -1,6 +1,6 @@
 # Third-party components
 
-*Status: 2026-11-01 (version 0.1).*
+*Status: 2026-11-08 (version 0.3).*
 
 Our own code and documentation are licensed under the Apache License 2.0 ([LICENSE](LICENSE)). The components below
 belong to third parties and keep their own licences. Model licences were read from the licence files at the pinned
@@ -62,7 +62,7 @@ pinned versions (see also [docs/INFERENCE.md](docs/INFERENCE.md#4-environments))
 | NumPy | 2.1.2 (GPU base), 2.3.5 (vLLM), 2.4.2 (CPU) | BSD-3-Clause |
 | SciPy | 1.17.1 (CPU) | BSD-3-Clause |
 | pandas | 3.1.0 (GPU base), 2.3.3 (CPU) | BSD-3-Clause |
-| scikit-learn | 1.8.0 (CPU) | BSD-3-Clause |
+| scikit-learn | 1.8.0 (CPU; the TF-IDF vectoriser of the example similarity in the safety line, `src/note_sim.py`) | BSD-3-Clause |
 | Pillow | 11.0.0 (GPU base), 13.0.0 (vLLM), 11.3.0 (CPU) | MIT-CMU (HPND) |
 | PyArrow | 26.0.0 (GPU base), 23.0.1 (CPU) | Apache-2.0 |
 | PyYAML | 6.0.3 | MIT |
