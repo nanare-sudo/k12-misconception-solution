@@ -1,0 +1,75 @@
+# M3, draw d4 on all 3,498 test rows (fourth member of the M3 mean of primary submissions A and B): copy of m3d3te_rp.yaml
+# with seed 4 instead of 3 and the names m3d4_*. Adapter of the full fit as for d1–d3 (m3_fullte_rp/m3_train_full), texts with
+# 5,200 tokens, sampled with the settings of the model card (temperature 0.6, top_p 0.95, top_k 20, seed 4) — the same settings
+# as the out-of-fold draw m3d4_oof_rp; exact ranking of all 74 codes as for d1–d3. Test outputs stay under artifacts/runs/;
+# only aggregates are inspected.
+# Inputs: the adapter m3_fullte_rp/m3_train_full under the same output root.
+# Check (aggregates only): python -I eda/a9_m3_draws_oof.py --gen-status runs/m3d4te_rp/m3d4_test_rank/test --table test
+# Hardware: one RTX PRO 6000 (96 GB, 200 GB disk); about 7.4 h, about 17 USD.
+run: m3d4te_rp
+models:
+  q38_27b:
+    repo: Qwen/Qwen3.8-27B
+    revision: 1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0
+    dtype: bf16
+    max_beam_tokens: 600000
+  m3d4:
+    merged: m3d4_merged
+    dtype: bf16
+    max_beam_tokens: 600000
+workers:
+- gpu: 0
+  jobs:
+  - name: m3d4_merge
+    kind: merge
+    model: q38_27b
+    adapter_from: ../m3_fullte_rp/m3_train_full
+    out_model: m3d4_merged
+  - name: m3d4_test_gen
+    kind: sft_gen
+    model: m3d4
+    split: test
+    order_seed: 0
+    image:
+      max_side: 1024
+      question_max_side: 448
+    max_tokens: 5200
+    concurrency: 64
+    guard_rows: 24
+    guard_min_complete: 0.25
+    max_failed: 0.05
+    request_timeout_s: 1200
+    tag: gen
+    server:
+      max_model_len: 16000
+      gpu_memory_utilization: 0.9
+      max_num_seqs: 64
+      startup_s: 900
+      pip: vllm==0.31.0 transformers==5.17.0
+    temperature: 0.6
+    top_p: 0.95
+    top_k: 20
+    seed: 4
+  - name: m3d4_test_rank
+    kind: predict
+    model: m3d4
+    fold: null
+    sft_from: m3d4_test_gen/gen
+    probes:
+    - proto_rank
+    predict:
+    - split: test
+      tag: test
+      probes:
+      - proto_rank
+    image:
+      max_side: 1024
+      question_max_side: 448
+    batch: 6
+    beams: 74
+    finish_tokens: 320
+    prefix_cache_tol: 0.12
+    prefix_cache_same_top: false
+    prefix_cache_check_rows: 4
+    save_every: 25
+    drop_model: true

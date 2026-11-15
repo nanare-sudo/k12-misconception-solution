@@ -1,6 +1,6 @@
 # Validation
 
-*Status: 2026-11-08 (version 0.3).*
+*Status: 2026-11-15 (version 0.4).*
 
 Every model decision in this project was made on cross-validation with the 1,500 labelled rows; the public leaderboard
 was never used to choose between variants. This document describes the protocol: folds, leakage controls, the three
@@ -418,3 +418,74 @@ counts, shares and checksums. No per-row test output is displayed or inspected.
   reranker by +0.011), the inductive line by +0.008 to +0.011 against its per-fold value. A plausible cause is that test
   rows have more same-question reference rows: 1,500 instead of 1,200 training rows, and 95.7 % instead of 90.7 % seen
   questions. This is an observation, not a rule, and no decision relies on it.
+
+## 8. Final submissions (version 0.4)
+
+The three steps from the primary candidate of version 0.3 to the two final submissions were each decided by a rule fixed
+before the measurement, on meta-splits that no earlier decision had used, and checked on the build path by copy null
+points, test-side guards and positive controls. All values are paired differences of MAP@3 on the 1,500 training rows,
+computed exactly in sixths of a row and reported as ½(F+M) (the mean of the per-fold and the as-one-set form) and as the
+as-one-set form M, which is how the test set is processed. A meta-split is a new stratified 5-fold split of the second-
+stage evaluation (`eda/c121_stage2_i1.py split_folds`); the channel OOF matrices stay fixed.
+
+### 8.1 Four M3 draws (submission B)
+
+- **Design (fair bank).** A new draw is compared with the three draws in a frame in which all four play the same role:
+  for every triple T_j of the four draws, R3_j = the line with the mean of T_j, R4_j = the line with the mean of all four,
+  both with the second-stage features of T_j; G = mean_j R4_j − mean_j R3_j. The copy null point repeats the computation
+  with one member of T_j used twice as the fourth member (G_copy, mean over the twelve duplicates).
+- **Rule.** Deploy if mean G over the 20 meta-splits 1000–1019 is above 0 and above mean G_copy, and if on the original
+  split R4_0 − R3_0 is above its copy null point; on the build path the copy null point of the test side (d4 removed) must
+  rebuild `primary_m3px27` byte for byte.
+- **Result.** G = +0.00109 ± 0.00015 (20 of 20 positive) against G_copy = −0.00036; final check on 20 further meta-splits
+  2000–2019 (not used for the choice) +0.00137, 19 of 20 positive.
+- **Code.** `eda/c135_primary_m3x4.py bank`, `final`, `placebo`, `rule`; the build path recomputes the deployment and the
+  copy null points.
+
+### 8.2 Extra second-stage columns (intermediate form, part of submission A)
+
+- **Bundle test.** Candidate columns that were each too small to decide on their own were collected and tested together:
+  the bundle against a placebo bundle (the same columns with their values permuted over the candidates within each row), over 20 meta-splits
+  that the selection of the columns had not used. The bundles were fixed before the run. Rule: mean over the 20
+  meta-splits above 0 in M and in ½(F+M), and real minus placebo above 0.
+- **Result of the deployed bundle** (nine columns from eight sources, METHOD §9.12): +0.00169 ± 0.00015 over 4000–4019 (20
+  of 20 positive), +0.00177 ± 0.00025 over 5000–5019 (placebo bundle −0.00044, real minus placebo +0.00222 ± 0.00022),
+  +0.00178 ± 0.00025 over 6000–6019; original split +0.0016 (as one set +0.0027). The bundle with one more source (novelty
+  of `OTH-00`) measured +0.0019 but failed the test guard (its task row count is not transferable) and was not deployed.
+- **Test guard per column and source.** Every statistic of every column (means and shares per source, valid answers) on
+  the test rows against the training rows: band ±15 % relative or |z| ≤ 3, valid answers ≥ 0.97 per source; rule fixed
+  before the test side was read; only an abort, never a fallback. The 397B columns are the transfer risk (training side
+  through the hosted API, test side from our own FP8 run with the same parser): all 43 statistics held, largest |z| 2.31.
+- **Positive controls** (in memory, never a file): each applicable perturbation of the test sources must trigger the guard
+  (`eda/c151_primary_cols.py controls`, exit code 6 if one does not).
+- **Copy null points.** Columns set to zero in the fit reproduce rows and models of submission B; with zero weights the
+  test side through the new code path rebuilds submission B byte for byte; the null model (all weights 0) leaves the file
+  without second stage unchanged.
+
+### 8.3 Fifth M3 draw with the large photo on the rows with small script (submission A)
+
+- **Roles and rule.** Pre-registered: the best of the roles "fifth member of the M3 mean", "replacement of one 1,024-px
+  member" and "own channel", each also restricted to the rows of the list "character height ≤ 20 px", is deployed only if
+  over 20 untouched meta-splits (11000–11019) it lies above 0 in M and in ½(F+M) and above the same role filled with a
+  1,024-px draw (copy null points: one of d1–d4 used twice).
+- **Result.** Fifth member on the listed rows: +0.00083 ± 0.00017 in ½(F+M), +0.00108 ± 0.00030 in M (positive in 85 % and
+  75 % of the meta-splits), against the intermediate form; on all rows +0.0007; as replacement or with half weight
+  negative; as extra second-stage column −0.0018 ± 0.0003. Original split: ½(F+M) −0.0009, M −0.0002 (as one set 0.8404
+  against 0.8407).
+- **Caveat.** The best copy null point (d3 twice) reaches +0.0009: the gain is that of one more useful draw, not evidence
+  that the larger photo is read better by the line. Submission B (without draw h and without columns) is the second final
+  submission.
+- **Test guard of draw h and positive controls** (METHOD §4.8): statistics of the listed test rows against the listed
+  training rows (±10 % or |z| ≤ 3; answered ≥ 0.97), exact coverage of the list, settings of the OOF draw, adapter of the
+  full fit; three perturbations must trigger it (`eda/c166_primary_m3x5h.py h-guard`, `h-controls`).
+- **Copy null point "empty list".** With an empty row list the five-draw path reproduces the four-draw channel on the
+  training side (blend, chain and columns of submission B and of the intermediate form) and rebuilds the intermediate
+  form byte for byte on the test side. A stand-in run (d4 used as the fifth test draw on the list) checks that the path
+  gives a formally valid file before the real test draw is read; its file is deleted.
+
+### 8.4 Limits
+
+All three steps were measured on the same 1,500 labels as everything before; the meta-splits measure the stability of a
+decision, not new data. The bundle of §8.2 was assembled from single-column results on one set of meta-splits and
+confirmed on three others. Public leaderboard values of the final submissions (A 0.84266, B 0.84450, intermediate form
+0.84283) were observed after the decisions and are not evidence for or against them.

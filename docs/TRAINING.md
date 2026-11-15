@@ -1,11 +1,13 @@
 # Training
 
-*Status: 2026-11-08 (version 0.3). This document lists every component that is trained or fitted on the labelled data:
+*Status: 2026-11-15 (version 0.4). This document lists every component that is trained or fitted on the labelled data:
 inputs, command, hardware, duration and the values to check. Model details are in [METHOD.md](METHOD.md); inference is
 in [INFERENCE.md](INFERENCE.md); every script is listed in [CODEMAP.md](CODEMAP.md).*
 
-**The trained weights are delivered, not retrained.** The competition host reproduces inference only. GPU training is
-not bit-reproducible (see §15), so a retrained model is a new model with a new test file. The adapters used for the
+**The trained weights are delivered, not retrained.** The host has said that both the training and the inference pipeline
+of the winners will be requested and verified; this document therefore lists every training step with its inputs, and
+[PROVENANCE.md](PROVENANCE.md) where each input came from. GPU training is not bit-reproducible (see §15), so a retrained
+model is a new model with a new test file. The adapters used for the
 submissions are stored privately with their checksums ([DATA_AND_COMPLIANCE.md](DATA_AND_COMPLIANCE.md)).
 
 ## 1. Overview
@@ -23,9 +25,12 @@ train.csv + training photos + question diagrams + taxonomy
   │         → M3 ranking behind the same notes ──────────────────── oof_m3px27, oof_m3px27xm  [primary line]
   ├─ (§10) M3 targets → M3 LoRA: 5 fold adapters + full fit ─────── m3_f0 … m3_f4, m3_full
   │         → OOF draws d1, d2, d3 ──────────────────────────────── oof_m3x3_full
+  │         → OOF draw d4 ───────────────────────────────────────── oof_m3x4_full              [final submissions]
+  │         → OOF draw h (photo at 2,048 px) on the listed rows ─── oof_m3x5h                  [submission A]
   ├─ (§11) 397B training side (API) → notes → M3 scores behind them oof_q397m3          [primary line]
   ├─ (§12) blend weights (CPU) ──────────────────────────────────── stack_*.json
-  └─ (§13) second stages (CPU) ──────────────────────────────────── stage2_*.json
+  ├─ (§13) second stages (CPU) ──────────────────────────────────── stage2_*.json
+  └─ (§16) final submissions: blends, second stages, extra columns (CPU) ── stack_primary_*.json, stage2_primary_*.json
 ```
 
 | Component | Kind | Hardware | Deterministic |
@@ -53,10 +58,20 @@ checks. All configurations are files in `configs/vlm/`, run with the runner of �
 | `q397m3` | primary | no (the M3 fold adapters of §10) | §11: `q397m3_oof_rp` | frozen 397B protocol answers of the training rows | RTX PRO 6000 |
 | Blends, second stages | all three | fits on the CPU | §12, §13.1, §13.3–§13.6 | OOF matrices; frozen M3 notes (draws d1–d3) and protocol notes of the training rows; for the rules also the fourth M3 draw `m3d4_oof_rp` and the second draw of the protocol answers `pr27s2_rp`, `pr27s3_rp` | CPU |
 
+**Channels of the final submissions (version 0.4).** The channels of `primary_m3px27` with the M3 channel replaced:
+
+| Channel | Used by | Trained here | Section, configurations | Inputs besides `train.csv`, photos, diagrams and taxonomy | Hardware |
+|---|---|---|---|---|---|
+| `m3x4_full` | submission B, intermediate form | as `m3x3_full` (same adapters) | §10.3: draws d1–d4 (`m3d4_oof_rp`); §16.1 | as `m3x3_full` | RTX PRO 6000 |
+| `m3x5h` | submission A | as `m3x3_full` (same adapters) | §10.3: draws d1–d4 and h (`m3ha_oof_rp`, `m3hb_oof_rp`); §16.3 | as `m3x3_full`; row list of the character-height rule (`tools/make_charsize_rows.py`) | RTX PRO 6000; CPU |
+| Extra second-stage columns | submission A, intermediate form | fits on the CPU | §16.2 | protocol answers of the 27B (`pr27_rp`) and of the 397B (hosted API, §11) on the training rows; training labels of the reference rows | CPU |
+| Blends, second stages | both | fits on the CPU | §16 | as above | CPU |
+
 **Provenance of labels and texts not written by the annotators.** Three kinds enter training or the training-side
 context: the teacher labels (pool rows only, §6), the 397B protocol answers (training rows only, §11) and the texts of our
-own model runs on training rows (the protocol notes, used as M3 inputs and targets, and the M3 draws d1–d4, used as
-second-stage features and in the rules). None of them was produced for or from a test row, and no test row was ever sent
+own model runs on training rows (the protocol notes, used as M3 inputs and targets, and the M3 draws d1–d4 and h, used
+as channel members, second-stage features and in the rules). The 397B protocol answers of the training rows are, in
+submission A, also the training side of six extra columns (§16.2). None of them was produced for or from a test row, and no test row was ever sent
 to an API. Texts generated for test rows (reasoning, protocol answers and notes, M3 draws, 397B notes) are inference
 outputs; no training step uses their content (the deployment fits only record checksums of some of these files). The
 only step that uses the test rows as a set is the class-marginal alignment at
@@ -198,8 +213,11 @@ No training is involved. Same-question examples and topic blocks are drawn from 
 - the frozen protocol notes `data/derived/proto_notes/train_pr27.jsonl`;
 - `oof_pr27`, which decides where the notes carry loss.
 
-The target builder is not part of this repository; the six files are delivered frozen with their checksums (a rebuild
-from the frozen inputs was bit-identical). `src/vlm/sft.py` reads and checks them at training time.
+The target builder is not part of this repository, and the six files are **not yet** in the private package (version 0.3
+said they were delivered; that was wrong). Their checksums are recorded in the training recipe of every adapter
+(`sft_recipe.json`: `targets_sha256`; full fit `b685a7b3da67822280ca51b8a1cf0c47e7ba41f0d6c561a33a7e7dfb855e35aa`), and a
+rebuild from the frozen inputs was bit-identical. `src/vlm/sft.py` reads and checks them at training time. Adding the six
+files, the list the builder checks against and the builder itself is an open item ([ROADMAP.md](ROADMAP.md)).
 
 **10.2 Adapters and first draw.**
 
@@ -218,7 +236,8 @@ from the frozen inputs was bit-identical). `src/vlm/sft.py` reads and checks the
 | d1 | fold jobs of `m3_pilot_rp`, `m3_f034_rp`; the five fold rankings are combined into the run folder `runs/m3_5f` | greedy, up to 3,200 tokens |
 | d2 | `m3long_rp` (folds 1, 2; combined into `runs/m3long_comb`), `cv01_m3d2_f034` (folds 0, 3, 4) | greedy, up to 5,200 tokens |
 | d3 | `m3d3_oof_rp` (all folds) | sampled: temperature 0.6, top-p 0.95, top-k 20, seed 3; up to 5,200 tokens |
-| d4 (rules only, in no blend) | `m3d4_oof_rp` (all folds) | as d3 with seed 4; used only in the draw swap of the rule of the regex note columns (§13.5) and as a control of the rule of `m3px27` (§13.6) |
+| d4 | `m3d4_oof_rp` (all folds) | as d3 with seed 4; fourth member of the M3 channel of both final submissions (§16), earlier only in the draw swap of the rule of the regex note columns (§13.5) and as a control of the rule of `m3px27` (§13.6) |
+| h (photo at 2,048 px) | `m3ha_oof_rp` (folds 1, 2, 0), `m3hb_oof_rp` (folds 3, 4) | as d4 with seed 5 and `image.max_side = image.min_side = 2048` in generation and ranking (`max_model_len` 20,000); the fold adapters were trained at 1,024 px. Fifth member of the M3 channel of submission A, only on the rows of the list "character height ≤ 20 px" (§16) |
 
 The combined run folders `runs/m3_5f` and `runs/m3long_comb` are delivered frozen; the scripts that combined the fold
 runs are not part of this repository. `eda/a9_m3_draws_oof.py` checks each draw (fold coverage, settings) when it reads
@@ -502,3 +521,75 @@ are marked; their outputs are frozen inputs ([CODEMAP.md](CODEMAP.md#10-steps-wh
 
   A complete retraining of the adapters has not been measured, and the spread of a rerun with all generated texts replaced
   at once is still open ([ROADMAP.md](ROADMAP.md)).
+
+## 16. Final submissions (version 0.4)
+
+Both final submissions keep the channels, the training side and the recipe of the primary candidate of version 0.3
+(`primary_m3px27`, §13.6) and change only the M3 channel and the second stage. Everything below runs on the CPU from frozen
+outputs; the only new GPU work were the draws d4 (OOF and test) and h (OOF and test), with the configurations of §10.3 and
+[INFERENCE.md](INFERENCE.md#61-test-side-steps).
+
+**16.1 Submission B: four M3 draws (`eda/c135_primary_m3x4.py`, build `tools/builds/primary_m3x4.sh`).** The channel
+`m3x4_full` is the mean of the four OOF draws d1, d2, d3, d4 in this fixed order (`eda/a9_m3_draws_oof.py` rule; the first
+three are `m3x3_full` bit for bit); it replaces `m3x3_full` in the recipe of `primary_m3px27`. The second-stage features
+still read d1–d3 (field `draws_first: 3`), as the test side does.
+
+```bash
+python -I eda/c135_primary_m3x4.py oof --save      # artifacts/oof_m3x4_full.npy + meta (the first three draws = m3x3_full)
+python -I eda/c135_primary_m3x4.py stack --save    # blend: θ on LogLoss over all 1,500 rows, β by the rule of the primary line
+python -I eda/c135_primary_m3x4.py fit --save      # the second-stage chain of the primary line with the swapped channel
+python -I eda/c135_primary_m3x4.py copy --keep     # copy null point "d4 removed": blend, chain and files = primary_m3px27
+python -I eda/c135_primary_m3x4.py test-guard      # completeness and settings of the d4 test ranking (aggregates only)
+# evidence of the four-draw rule (pre-registered; computed once, the build path does not need it):
+python -I eda/c135_primary_m3x4.py bank --seeds orig,$(seq -s, 1000 1019) && python -I eda/c135_primary_m3x4.py rule
+```
+
+**16.2 Intermediate form: extra second-stage columns (`src/stage2_sources.py`, `eda/c151_primary_cols.py`, build
+`tools/builds/primary_cols.sh`).** Submission B plus nine columns from eight sources at the end of the main model of the
+second stage; the blend is unchanged. The columns are computed on the CPU from frozen files:
+- the protocol answers of our 27B (training rows `artifacts/runs/pr27_rp`, test rows `pr27te_rp`) and of the 397B (training
+  rows through the hosted sampling API, frozen as `artifacts/runs/q397_tinker/…/proto_labels.jsonl` and
+  `data/derived/open_teacher/qwen35-397b/raw.jsonl`; test rows by our own FP8 run `q397te_rp`, parsed with the parser of the
+  training side);
+- the blend channels and the M3 draws of the line, the taxonomy (sections, default severity) and, for the label-dependent
+  columns, the training labels of the reference rows only (the other folds for a training row; all 1,500 rows for a test
+  row).
+
+```bash
+python -I eda/c151_primary_cols.py test-sources    # completeness, parser cross-check and checksums of the test-side sources
+python -I eda/c151_primary_cols.py fit --save --cols qfp   # second stage with the nine columns -> artifacts/stage2_primary_cols.json
+python -I eda/c151_primary_cols.py copy --cols qfp # copy null point: columns := 0 -> rows and models of submission B
+python -I eda/c151_primary_cols.py measure --cols qfp --seeds orig,4000-4019   # paired measurement over meta-splits (evidence)
+```
+
+The deployment file records the definitions of the columns, the checksums of every source file (training and test side),
+the checksums of the training-side column matrices, the reference values and the rule of the test guard per column and
+source (band ±15 % relative or |z| ≤ 3; valid answers per source ≥ 0.97) and the positive controls.
+
+**16.3 Submission A: fifth M3 draw on the rows with small script (`eda/c166_primary_m3x5h.py`, build
+`tools/builds/primary_m3x5h.sh`).** The channel `m3x5h` is per row the mean of the draws that cover the row: d1–d4 on all
+rows and draw h on the rows of the list "character height ≤ 20 px" (training 1,001 of 1,500 rows, test 2,459 of 3,498;
+`tools/make_charsize_rows.py --max-height 20 --name h20`: the median height of the connected components in the photo at
+long side 1,024 px, a label-free statistic of the image; the threshold is the lower two-thirds quantile of the training
+photos). Outside the list the channel equals `m3x4_full` bit for bit. Blend and second stage are refitted as for
+submission B, and the nine columns of the intermediate form are fitted again on top.
+
+```bash
+python -I eda/c166_primary_m3x5h.py digest --side train   # digest over the 42 files of draw h and the lists (pinned)
+python -I eda/c166_primary_m3x5h.py oof --save       # artifacts/oof_m3x5h.npy + meta (field rank.row_list_draws)
+python -I eda/c166_primary_m3x5h.py stack --save     # blend with m3x5h in place of m3x4_full
+python -I eda/c166_primary_m3x5h.py fit-base --save  # chain of submission B with m3x5h -> artifacts/stage2_primary_m3x5h_base.json
+python -I eda/c166_primary_m3x5h.py fit --save       # plus the nine columns -> artifacts/stage2_primary_m3x5h.json
+python -I eda/c166_primary_m3x5h.py copy --keep      # copy null point "empty list": blend, chain and columns = submission B / intermediate form
+python -I eda/c166_primary_m3x5h.py h-guard --spec <test shards>   # test guard of draw h (aggregates only)
+python -I eda/c166_primary_m3x5h.py measure --seeds orig,11000-11019   # evidence: the five-draw rule over the 20 untouched meta-splits
+```
+
+The build script runs the measurement only on request (`PRIMARY_M3X5H_MEASURE=short` for the original split and two
+meta-splits, `PRIMARY_M3X5H_MEASURE=full` for all 20); the deployment does not depend on it.
+
+**16.4 Checks of the training side.** In each build the nested recomputation of the second stage must reproduce pinned
+values (in sixths of a row; for example the MM rows of submission A 7,584 / 7,542 and with columns 7,583 / 7,564 per fold /
+as one set), the copy null points must reproduce the predecessor's files, and with weight 0 the new columns must leave the
+file without second stage unchanged. The CV evidence of the three steps is in [VALIDATION.md](VALIDATION.md#8-final-submissions-version-04)
+and [RESULTS.md](RESULTS.md).

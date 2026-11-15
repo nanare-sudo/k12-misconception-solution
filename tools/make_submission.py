@@ -51,6 +51,13 @@ adapter without that fold), the ranking of the test rows comes from the final fi
 (rank_only_source_differences against EVERY shard: only model, fold and note source may differ) instead of with
 eda/c95_rank_mean.recipe_differences, and the NOTE GUARD rank_mean.notes (rank_mean_notes_guard) requires the frozen training and test
 notes behind which the rankings were computed. Without the field (all earlier mean channels, e.g. pr27xm) everything stays bit-identical.
+SEPARATE SOURCE OF THE NAMED CODES (field rank_mean.named in meta_<channel>.json, written by an evaluation of a protocol variant that is
+not part of the final candidates; only together with rank_mean.notes): the named codes come from another protocol run than the notes behind
+which the ranking was computed. The note guard (rank_mean.notes) checks ranking and notes as before; in addition rank_mean_named_guard
+checks the source under --proto: rank_mean.proto_sources = [named.train.source] (the OOF artifact named these codes), every test draw is
+listed in named.test.source_runs, table test with all rows, and its fingerprint (proto_source_fingerprint: naming rule, generation recipe
+<tag>_generation.json without GEN_FREE_KEYS, model from summary.json) equals that of the training side (named.train). Only meta, recipe and
+summary files are read. Without the field (all other channels) none of this is computed, and the sources file stays bit-identical.
 
 RANK-ONLY CHANNEL (`--rank-only <channel>=runs/<run>/<job>/<tag>`, M3): a channel that consists ONLY of the exact ranking of
 all codes (probe proto_rank, e.g. the trained 27B in sft mode) — no mean with named codes as with --rank. On the test rows
@@ -73,6 +80,18 @@ mean of the probabilities over the draws with an exact ranking (the same computa
 uniform. The blend file must have been fitted on THIS artifact (rank_only.rank_source, oof_sha256) and only on rows with ALL
 draws (fit_rows ⊆ rank.rows_all_draws_file, checksum; eda/c99_m3_deploy.py --rows). A single source without a comma for a
 channel with one draw runs unchanged as above.
+DRAW WITH ROW LIST (primary submission A; only if meta_<channel>.json carries the field rank.row_list_draws, eda/c166_primary_m3x5h.py —
+without the field every channel runs bit-identically as above): a draw j of the channel counts only on the rows of a list — on the training
+rows the list row_list_draws[].train (file = SHA-256; coverage of draw j in the artifact = exactly these rows), on the test rows the list
+row_list_draws[].test. The test spec of this draw reads `<shard>[+<shard>…]@<test list>` with exactly the file of the meta file (path
+relative to the data folder or absolute; SHA-256 pinned); every shard complete and exact (a8.load_rank, no overlap), its settings of ranking
+AND generation = those of OOF draw j (rank_only_draw_differences per shard: image, seed, temperature, top_p, top_k, tokens, beams, adapter
+type …), and the coverage of the exact ranking is EXACTLY the list (not more, not less) — otherwise abort without a file. Mass and NONE band
+as for every draw, on the list rows. All other draws must cover all training rows; the blend may then be fitted on all training rows (the
+same structure on both sides: list rows with all draws, the other rows without draw j). Per row the same computation as a9 (sum in the
+order of the draws, division by their number). `--rank-only-placeholder <channel>` (ONLY for code checks, --out outside
+artifacts/submissions, never submitted) allows a foreign test ranking for the draw with row list: settings not compared, coverage ⊇ list,
+restricted to the list (stand-in and the copy null point "empty list" of the build path tools/builds/primary_m3x5h.sh).
 
 FOLD SHARDS AS SOURCE (eda/c117_q397m3_deploy.py, channel q397m3): if meta_<channel>.json names as the ranking of the
 training rows ONE draw made of several fold shards joined with + (rank.source without a comma), the settings of the test
@@ -174,6 +193,16 @@ mention rate per row, share of rows in which pr27 mentions the top of the base f
 ±10 % OR |z| ≤ 3) acts ONLY as an abort without a file, like the other guards. Additional positive controls: pr27_shift (pr27 notes
 shifted by one row), pr27_m3d1 (pr27 replaced by the M3 notes d1); truncate also shortens the pr27 notes; exit codes 5/6 as above. All
 other deployment files compute and report unchanged.
+EXTRA COLUMNS (only if the deployment file carries the field extra_columns, e.g. artifacts/stage2_primary_cols.json from
+eda/c151_primary_cols.py fit): the main model of the primary line reads extra columns at the end of main_guard_i1_mm (sources
+extra_columns.names; src/stage2_sources.py) from frozen protocol answers of the test rows (files and SHA-256 in extra_columns.test, check
+mandatory; completeness, parser cross-check against proto_labels.jsonl), from the blend channels and draws of the line and from the table
+and the taxonomy (reference = all 1,500 training rows). Test guard per column and source against extra_columns.guard_reference (rule fixed
+in advance: band ±15 % relative OR |z| ≤ 3; valid answers per source additionally ≥ 0.97) ONLY as an abort without a file, also for the
+null model; statistics in the report (field extra_columns). --stage2-xcontrol <control> (positive control, stage2_sources.CONTROLS:
+q397_drop10, q397_unformed, mech_zero, q397_rotate, fac_flip, chan_rotate, topic_unknown; only with its source in extra_columns.names):
+perturbs the test sources in memory, NEVER writes a file, exit code 5 = the guard fires (passed), 6 = it does not.
+Without the field every deployment file computes and reports bit-identically as before.
 
 Written are artifacts/test_<blend>.npy, artifacts/submissions/sub_<blend>.csv and artifacts/submissions/sub_<blend>.json
 (sources, SHA-256, statistics). Only aggregates over the test rows are printed, plus the same statistics on the OOF rows
@@ -201,6 +230,7 @@ import stage2 as S2  # noqa: E402
 import note_sim as NS  # noqa: E402  (example similarity of the M3 notes, feature set fallback_i1_nd only)
 import note_regex as NR  # noqa: E402  (regex-exact note columns R, feature set fallback_i1_ndr only)
 import answer_match as AM  # noqa: E402  (mechanical comparison final answer = answer key, without eval)
+import stage2_sources as XS  # noqa: E402  (extra second-stage columns from frozen protocol answers, only with the field extra_columns)
 import submission_io  # noqa: E402
 from vlm import common as C  # noqa: E402
 from vlm.engine import probs_from_logp  # noqa: E402
@@ -469,7 +499,7 @@ def rank_only_notes_guard(name: str, spec: str, root: Path, n_test: int, n_train
     rk = meta.get("rank") or {}
     nt = rk.get("notes")
     if not nt:
-        if placeholder:
+        if placeholder and not rk.get("row_list_draws"):  # with a row list the placeholder applies to the draw with the row list
             raise SystemExit(f"--rank-only-placeholder {name}: the channel has no note guard (rank.notes in {meta_file.name}) — nothing to skip")
         return None
     ref_source = str(rk.get("source") or "")
@@ -576,6 +606,99 @@ def rank_mean_notes_guard(name: str, spec: str, root: Path, n_test: int, n_train
     print(f"  channel {name}: note guard of the ranking (rank_mean.notes): training notes {str(out['notes_train_sha256'])[:16]}…, test notes "
           f"{str(out['notes_test_sha256'])[:16]}… from {src} ({tm.get('model')}), character-identical with px27 {px.get('identical_notes')}/{n_test} — held")
     return out
+
+
+PROTO_DEFAULT_RULE = "specific_first"  # = vlm/proto.DEFAULT_RULE (meta files with the default carry no field naming_rule)
+
+
+def proto_source_fingerprint(spec: str) -> dict:
+    """Fingerprint of a source of named codes `runs/<run>/<job>/<tag>[+…]` (job proto_gen; field rank_mean.named, see the header): table
+    and rows (<tag>_meta.json), naming rule (field naming_rule; if absent: the default), generation recipe (<tag>_generation.json: checksum of
+    the content recomputed, = generation_sha256 of the meta file; fingerprint = SHA-256 of the recipe without GEN_FREE_KEYS — table, model
+    path, row set; None = run without a recipe file) and model (summary.json: repo, revision, dtype). Several shards (+) must agree in table,
+    rule, recipe and model. Only meta, recipe and summary files are read (aggregates), never answers.
+    -> {table, rows, naming_rule, generation, model, shards, problems}."""
+    shards, problems = [], []
+    for part in str(spec).split("+"):
+        bits = part.split("/")
+        if len(bits) != 4 or bits[0] != "runs":
+            raise SystemExit(f"{part}: expected runs/<run>/<job>/<tag>")
+        _, run, job, tag = bits
+        d = COMP / "artifacts" / "runs" / run / run / job
+        mf = d / f"{tag}_meta.json"
+        if not mf.is_file():
+            raise SystemExit(f"{part}: {tag}_meta.json missing (run not finished or not fetched)")
+        meta = json.loads(mf.read_text())
+        gen = None
+        gf = d / f"{tag}_generation.json"
+        if gf.is_file():
+            g = json.loads(gf.read_text())
+            rec = g.get("recipe")
+            if not isinstance(rec, dict):
+                problems.append(f"{part}: {gf.name} without a recipe")
+            else:
+                if hashlib.sha256(json.dumps(rec, sort_keys=True).encode()).hexdigest() != g.get("sha256"):
+                    problems.append(f"{part}: {gf.name} — checksum does not match the recipe")
+                if meta.get("generation_sha256") != g.get("sha256"):
+                    problems.append(f"{part}: the meta file names the fingerprint {str(meta.get('generation_sha256'))[:16]}…, {gf.name} {str(g.get('sha256'))[:16]}…")
+                if rec.get("table") != meta.get("table"):
+                    problems.append(f"{part}: recipe for table {rec.get('table')!r}, meta file {meta.get('table')!r}")
+                gen = hashlib.sha256(json.dumps({k: v for k, v in rec.items() if k not in GEN_FREE_KEYS}, sort_keys=True).encode()).hexdigest()
+        elif meta.get("generation_sha256"):
+            problems.append(f"{part}: the meta file names a fingerprint, {gf.name} is missing")
+        sf = d / "summary.json"
+        m = (json.loads(sf.read_text()).get("model") or {}) if sf.is_file() else {}
+        model = {k: m.get(k) for k in ("repo", "revision", "dtype")} if m else None
+        shards.append({"spec": part, "table": meta.get("table"), "rows": int(meta.get("rows") or 0),
+                       "naming_rule": str(meta.get("naming_rule") or PROTO_DEFAULT_RULE), "generation": gen, "model": model})
+    first = shards[0]
+    for s in shards[1:]:
+        for k in ("table", "naming_rule", "generation", "model"):
+            if s[k] != first[k]:
+                problems.append(f"{s['spec']}: {k} differs from the first shard")
+    return {"table": first["table"], "rows": int(sum(s["rows"] for s in shards)), "naming_rule": first["naming_rule"],
+            "generation": first["generation"], "model": first["model"], "shards": shards, "problems": problems}
+
+
+def rank_mean_named_guard(name: str, draws: list[str], rm_def: dict | None, n_test: int) -> dict | None:
+    """Source of the named codes of a mean channel that is separate from the note source of the ranking (field rank_mean.named in
+    meta_<channel>.json). Without the field -> None, nothing checked (all other channels). Checked: the field is complete and stands only
+    next to the note guard (rank_mean.notes); rank_mean.proto_sources = [named.train.source]; every test draw under --proto is listed in
+    named.test.source_runs (none twice) and is table test with all rows; its fingerprint (proto_source_fingerprint: naming rule, generation
+    recipe, model) equals named.train. Violated -> SystemExit. -> sources and fingerprints (aggregates)."""
+    nm = (rm_def or {}).get("named")
+    if not nm:
+        return None
+    tr, te = nm.get("train") or {}, nm.get("test") or {}
+    runs = list(te.get("source_runs") or [])
+    if not tr.get("source") or any(k not in tr for k in ("naming_rule", "generation", "model")) or not runs:
+        raise SystemExit(f"--proto {name}: meta_{name}.json describes the source of the named codes incompletely (rank_mean.named.train/test)")
+    if not (rm_def or {}).get("notes"):
+        raise SystemExit(f"--proto {name}: rank_mean.named is defined only next to the note guard rank_mean.notes")
+    if list(rm_def.get("proto_sources") or []) != [tr["source"]]:
+        raise SystemExit(f"--proto {name}: the OOF artifact named codes from {rm_def.get('proto_sources')}, rank_mean.named.train.source "
+                         f"{tr['source']!r}")
+    problems, out = [], []
+    if len(set(draws)) != len(draws):
+        problems.append("the same source several times under --proto")
+    for d in draws:
+        if d not in runs:
+            problems.append(f"named codes from {d!r}, allowed {runs} (rank_mean.named.test.source_runs)")
+            continue
+        fp = proto_source_fingerprint(d)
+        problems += fp["problems"]
+        if fp["table"] != "test" or fp["rows"] != int(n_test):
+            problems.append(f"{d}: table {fp['table']!r} with {fp['rows']} rows (required: test, {n_test})")
+        for k in ("naming_rule", "generation", "model"):
+            if fp[k] != tr[k]:
+                problems.append(f"{d}: {k} {fp[k]!r} instead of {tr[k]!r} (training side {tr['source']})")
+        out.append({"proto": d, "rows": fp["rows"], "naming_rule": fp["naming_rule"], "generation": fp["generation"], "model": fp["model"]})
+    if problems:
+        raise SystemExit(f"--proto {name}: source of the named codes violated — " + "; ".join(problems))
+    print(f"  channel {name}: source of the named codes separate from the notes (rank_mean.named): {', '.join(x['proto'] for x in out)} — rule "
+          f"{out[0]['naming_rule']}, recipe {str(out[0]['generation'])[:16]}…, model {(out[0]['model'] or {}).get('repo')} as on the training side "
+          f"{tr['source']} — held")
+    return {"train_source": tr["source"], "test": out}
 
 
 def parse_band_for(items: list[str], rank_only: dict) -> dict[str, tuple[float, float]]:
@@ -698,10 +821,129 @@ def rank_only_draw_differences(spec: str, ref_draw: str) -> dict:
     return diff
 
 
-def rank_only_draws_guard(name: str, stack: dict, specs: list[str], root: Path, n_train: int, art_dir: Path | None = None) -> tuple[list[str], dict]:
+def _rows_path(root: Path, f: str) -> Path:
+    return Path(f) if Path(f).is_absolute() else Path(root) / f
+
+
+def rank_only_rowlist_guard(name: str, rk: dict, specs: list[str], root: Path, n_train: int, placeholder: bool = False) -> tuple[dict, list[dict]]:
+    """Additive; only with the field rank.row_list_draws in meta_<channel>.json (eda/c166_primary_m3x5h.py): DRAW WITH ROW LIST (see the
+    header). Per entry: draw j (1-based) with source = OOF draw j; training list = SHA-256 of the file, its rows = coverage of draw j in the
+    artifact (rank.draws[j].rows_sha256); test spec `<shards>@<test list>` with exactly the file of the meta file (SHA-256, number of rows,
+    ascending and unique); all other draws cover all training rows. placeholder: a placeholder of the test ranking is allowed (code checks
+    only). -> ({j: data for rank_only_rowlist_draw}, statistics per entry; only aggregates and checksums)."""
+    refs = str(rk.get("source") or "").split(",")
+    draws = rk.get("draws") or []
+    out: dict[int, dict] = {}
+    info: list[dict] = []
+    for e in rk.get("row_list_draws") or []:
+        j = int(e.get("draw", -1)) if str(e.get("draw", "")).lstrip("-").isdigit() else -1
+        if not 1 <= j <= len(refs) or j in out or str(e.get("source")) != refs[j - 1]:
+            raise SystemExit(f"--rank-only {name}: rank.row_list_draws names draw {e.get('draw')!r} with source {e.get('source')!r} — not a draw of the "
+                             f"artifact, or twice")
+        tr, te = e.get("train") or {}, e.get("test") or {}
+        if not tr.get("file") or not te.get("file") or not tr.get("sha256") or not te.get("sha256"):
+            raise SystemExit(f"--rank-only {name}: draw {j} with row list without file and SHA-256 of the training and test list")
+        ptr = _rows_path(root, tr["file"])
+        if not ptr.is_file() or _file_sha256(ptr) != tr["sha256"]:
+            raise SystemExit(f"--rank-only {name}: training list {tr['file']} of draw {j} missing or different (SHA-256)")
+        rows_tr = np.asarray(np.load(ptr), dtype=np.int64)
+        sha_tr = hashlib.sha256(rows_tr.astype("<i8").tobytes()).hexdigest()
+        dj = draws[j - 1] if j - 1 < len(draws) else {}
+        if sha_tr != tr.get("rows_sha256") or str(dj.get("rows_sha256")) != sha_tr or int(dj.get("rows", -1)) != len(rows_tr):
+            raise SystemExit(f"--rank-only {name}: draw {j} does not cover exactly the training list {tr['file']} in the OOF artifact ({dj.get('rows')} rows)")
+        dspec, sep, rows_file = str(specs[j - 1]).partition("@")
+        if not sep or rows_file != te["file"]:
+            raise SystemExit(f"--rank-only {name}: the test spec of draw {j} must read <shards>@{te['file']} (row list of the meta file), "
+                             f"given {specs[j - 1]!r}")
+        pte = _rows_path(root, rows_file)
+        if not pte.is_file() or _file_sha256(pte) != te["sha256"]:
+            raise SystemExit(f"--rank-only {name}: test list {rows_file} of draw {j} missing or different (SHA-256 pinned in the meta file)")
+        rows_te = np.asarray(np.load(pte), dtype=np.int64)
+        if rows_te.ndim != 1 or len(rows_te) != int(te.get("rows", -1)) or (len(rows_te) and (np.any(np.diff(rows_te) <= 0) or rows_te.min() < 0)):
+            raise SystemExit(f"--rank-only {name}: test list {rows_file} is not an ascending list of unique positions with {te.get('rows')} entries")
+        nb = e.get("none_band")  # malfunction band of the list rows fixed in advance (meta file); without the field the band of the channel
+        if nb is not None and not (isinstance(nb, list) and len(nb) == 2 and all(isinstance(v, (int, float)) for v in nb) and 0.0 <= nb[0] < nb[1] <= 1.0):
+            raise SystemExit(f"--rank-only {name}: row_list_draws[].none_band {nb!r} — expected [lo, hi] with 0 ≤ lo < hi ≤ 1")
+        out[j] = {"spec": dspec, "rows_file": rows_file, "rows": rows_te, "sha256": te["sha256"], "placeholder": bool(placeholder), "ref": refs[j - 1],
+                  "none_band": None if nb is None else (float(nb[0]), float(nb[1]))}
+        info.append({"draw": j, "train_list": tr["file"], "train_list_sha256": tr["sha256"], "train_rows": int(len(rows_tr)), "test_list": rows_file,
+                     "test_list_sha256": te["sha256"], "test_rows": int(len(rows_te)), "placeholder": bool(placeholder),
+                     "none_band": None if nb is None else [float(nb[0]), float(nb[1])]})
+    if not out:
+        raise SystemExit(f"--rank-only {name}: rank.row_list_draws without an entry")
+    for j, s in enumerate(specs, 1):
+        if j not in out and "@" in str(s):
+            raise SystemExit(f"--rank-only {name}: @<rows> only for the draws with a row list (draw {j} has none)")
+        if j not in out and int((draws[j - 1] if j - 1 < len(draws) else {}).get("rows", -1)) != n_train:
+            raise SystemExit(f"--rank-only {name}: draw {j} without a row list does not cover all {n_train} training rows")
+    return out, info
+
+
+def rank_only_rowlist_draw(name: str, rl: dict, n_test: int, seen_cls: np.ndarray, min_mass: float = 0.9,
+                           none_band: tuple[float, float] = (0.30, 0.38)) -> tuple[np.ndarray, np.ndarray, dict]:
+    """Additive: TEST DRAW WITH ROW LIST (rank_only_rowlist_guard). Shards (+) each complete and exact (a8.load_rank without partial state,
+    c95.exact_rank_rows), without overlap; without placeholder the settings per shard = OOF draw (rank_only_draw_differences) and coverage =
+    EXACTLY the list; with placeholder coverage ⊇ list. On the list rows the exact distribution, elsewhere the uniform distribution (the draw
+    does not count there: rows without ranking). Mass (median per shard) and NONE band on the list rows — the band of the entry
+    (row_list_draws[].none_band, fixed in advance in the meta file), otherwise none_band. -> (P, list rows [n_test], statistics)."""
+    if rl.get("none_band") is not None:
+        none_band = tuple(rl["none_band"])
+    rows = np.asarray(rl["rows"], dtype=np.int64)
+    if len(rows) and rows.max() >= n_test:
+        raise SystemExit(f"channel {name}: test list {rl['rows_file']} contains positions outside the test table")
+    want = np.zeros(n_test, bool)
+    want[rows] = True
+    cov, R = np.zeros(n_test, bool), np.zeros((n_test, len(seen_cls)))
+    shards = []
+    for s in str(rl["spec"]).split("+"):
+        missing = c95.rank_files_missing(s)
+        if missing:
+            raise SystemExit(f"channel {name}: ranking {s} — missing {', '.join(missing)} (run not finished or not fetched)")
+        if not rl["placeholder"]:
+            diff = rank_only_draw_differences(s, rl["ref"])
+            if diff:
+                raise SystemExit(f"channel {name}: test shard {s} computed or generated differently from the OOF draw ({rl['ref']}): {diff}")
+        Rs, hs, st = a8.load_rank(s, n_test, seen_cls, table="test", allow_partial=False)
+        hs = hs & c95.exact_rank_rows(s, n_test, seen_cls)
+        if int(hs.sum()) != int(st["rows_probe"]):
+            raise SystemExit(f"channel {name}: test shard {s} — {int(hs.sum())} of {st['rows_probe']} rows of the probe exact")
+        if (cov & hs).any():
+            raise SystemExit(f"channel {name}: test shards overlap ({int((cov & hs).sum())} rows twice)")
+        R[hs] = Rs[hs]
+        cov |= hs
+        shards.append({"spec": s, "rows_probe": st["rows_probe"], "rows_exact": st["rows_exact"], "mass_median": st["mass_median"],
+                       "mass_p05": st["mass_p05"], "idx_sha256": st["idx_sha256"]})
+    outside, lacking = int((cov & ~want).sum()), int((want & ~cov).sum())
+    if lacking or (outside and not rl["placeholder"]):
+        raise SystemExit(f"channel {name}: coverage of the test draw with row list {int(cov.sum())} rows (outside the list {outside}, missing in the "
+                         f"list {lacking}) — required EXACTLY the list {rl['rows_file']} ({int(want.sum())} rows)")
+    hr = want
+    P = np.tile(seen_cls / seen_cls.sum(), (n_test, 1)).astype(float)  # as rank_only_channel: rows without ranking uniform
+    P[hr] = R[hr]
+    none_top = c95.top_none_share(R, hr)
+    info = {"rows_table": int(n_test), "rows_list": int(hr.sum()), "rows_rank": int(hr.sum()), "rows_uniform": int((~hr).sum()),
+            "rows_covered": int(cov.sum()), "rows_covered_outside_list": outside, "share_rank": float(hr.sum() / max(1, n_test)),
+            "list": rl["rows_file"], "list_sha256": rl["sha256"], "none_top_rank": none_top, "shards": shards, "placeholder": bool(rl["placeholder"]),
+            "settings_checked": not rl["placeholder"], "none_band": [float(none_band[0]), float(none_band[1])]}
+    print(f"  channel {name}: DRAW WITH ROW LIST ({rl['spec']} @ {rl['rows_file']}): exact on {info['rows_list']} list rows of {n_test} test rows "
+          f"({len(shards)} shards, coverage = list{' ⊇ (PLACEHOLDER, settings not compared)' if rl['placeholder'] else ''}); "
+          f"{info['rows_uniform']} rows without this draw; NONE at the top on the list {none_top:.3f}")
+    if hr.any():
+        if min(s["mass_median"] for s in shards) < min_mass:
+            raise SystemExit(f"channel {name}: median of the candidate mass below {min_mass:g} in a shard — forced answer start unnatural")
+        if not (none_band[0] <= none_top <= none_band[1]):
+            raise SystemExit(f"channel {name}: share of NONE at the top on the list rows {none_top:.3f} outside the malfunction band fixed in advance "
+                             f"{none_band[0]:.2f}–{none_band[1]:.2f} — check the run, do not deploy")
+    return P, hr, info
+
+
+def rank_only_draws_guard(name: str, stack: dict, specs: list[str], root: Path, n_train: int, art_dir: Path | None = None,
+                          rowlist_placeholder: bool = False) -> tuple[list[str], dict]:
     """Several draws of a rank-only channel (OOF: eda/a9_m3_draws_oof.py): exactly one test draw per OOF draw, in the same
     order; the blend file was fitted on THIS artifact (rank_only.rank_source and oof_sha256) and only on rows with ALL draws
-    (fit_rows ⊆ rank.rows_all_draws_file, checksum). -> (source per OOF draw, statistics)."""
+    (fit_rows ⊆ rank.rows_all_draws_file, checksum). -> (source per OOF draw, statistics).
+    Additive, only with the field rank.row_list_draws: draws with a row list (rank_only_rowlist_guard) — the blend is then fitted on rows
+    with all OTHER draws (all training rows); the data for the test channel are stored under the key _rowlist."""
     art = COMP / "artifacts" if art_dir is None else art_dir
     meta = json.loads((art / f"meta_{name}.json").read_text())
     rk = meta.get("rank") or {}
@@ -732,6 +974,10 @@ def rank_only_draws_guard(name: str, stack: dict, specs: list[str], root: Path, 
         raise SystemExit(f"--rank-only {name}: row list {f} does not match meta_{name}.json (checksum)")
     fit = stack_fit_rows(stack, n_train)
     fit = np.arange(n_train) if fit is None else fit
+    if rk.get("row_list_draws"):  # additive: draws with a row list; all other draws cover all training rows
+        rowlist, rl_info = rank_only_rowlist_guard(name, rk, specs, root, n_train, placeholder=rowlist_placeholder)
+        return refs, {"oof_sha256": sha16, "fit_rows": int(len(fit)), "rows_all_draws": int(len(rows_all)), "rows_all_draws_file": str(f),
+                      "row_list_draws": rl_info, "_rowlist": rowlist}
     outside = ~np.isin(fit, rows_all)
     if outside.any():
         raise SystemExit(f"--rank-only {name}: {int(outside.sum())} fit rows of the blend do not carry all {len(refs)} draws — "
@@ -741,24 +987,29 @@ def rank_only_draws_guard(name: str, stack: dict, specs: list[str], root: Path, 
 
 def rank_only_draws_channel(name: str, specs: list[str], refs: list[str], n_test: int, seen_cls: np.ndarray, rank_partial: bool = False,
                             max_missing: float = 0.02, min_mass: float = 0.9,
-                            none_band: tuple[float, float] = (0.30, 0.38), keep: list | None = None) -> tuple[np.ndarray, np.ndarray, dict]:
+                            none_band: tuple[float, float] = (0.30, 0.38), keep: list | None = None,
+                            rowlist: dict | None = None) -> tuple[np.ndarray, np.ndarray, dict]:
     """Rank-only channel made of SEVERAL draws on the test rows: every test draw as in rank_only_channel (guards: coverage,
     mass, NONE band, partial state) and checked against ITS OOF draw (rank_only_draw_differences); per row the mean over the
     draws with an exact ranking (the same computation as eda/a9_m3_draws_oof.mean_of_draws), rows without any ranking uniform.
-    -> (P, number of draws with a ranking per row, statistics; aggregates only)."""
+    -> (P, number of draws with a ranking per row, statistics; aggregates only).
+    rowlist (additive; from rank_only_draws_guard._rowlist): draws with a row list via rank_only_rowlist_draw; None = as before."""
     if len(specs) != len(refs) or len(specs) < 2:
         raise SystemExit(f"channel {name}: {len(specs)} test draw(s) against {len(refs)} OOF draw(s)")
     S, cnt = np.zeros((n_test, len(seen_cls))), np.zeros(n_test, dtype=np.int64)
     tops, per_draw = [], []
     for j, (spec, ref) in enumerate(zip(specs, refs), 1):
-        missing = c95.rank_files_missing(spec)
-        if missing:
-            raise SystemExit(f"channel {name}, draw {j}: ranking {spec} — missing {', '.join(missing)} (run not finished or not fetched)")
-        diff = rank_only_draw_differences(spec, ref)
-        if diff:
-            raise SystemExit(f"channel {name}, draw {j}: test draw {spec} computed or generated differently from OOF draw {j} ({ref}): {diff}")
-        Pj, hr, info = rank_only_channel(f"{name}[{j}]", spec, n_test, seen_cls, ref_source=None, rank_partial=rank_partial,
-                                         max_missing=max_missing, min_mass=min_mass, none_band=none_band)
+        if rowlist is not None and j in rowlist:  # draw with a row list: shards, coverage = list, settings per shard
+            Pj, hr, info = rank_only_rowlist_draw(f"{name}[{j}]", rowlist[j], n_test, seen_cls, min_mass=min_mass, none_band=none_band)
+        else:
+            missing = c95.rank_files_missing(spec)
+            if missing:
+                raise SystemExit(f"channel {name}, draw {j}: ranking {spec} — missing {', '.join(missing)} (run not finished or not fetched)")
+            diff = rank_only_draw_differences(spec, ref)
+            if diff:
+                raise SystemExit(f"channel {name}, draw {j}: test draw {spec} computed or generated differently from OOF draw {j} ({ref}): {diff}")
+            Pj, hr, info = rank_only_channel(f"{name}[{j}]", spec, n_test, seen_cls, ref_source=None, rank_partial=rank_partial,
+                                             max_missing=max_missing, min_mass=min_mass, none_band=none_band)
         S[hr] += Pj[hr]
         if keep is not None:  # second stage (--stage2): the individual draws as features (rows without a ranking uniform)
             keep.append(Pj.copy())
@@ -992,9 +1243,86 @@ def _test_mech27(s2: dict, test: pd.DataFrame, classes: list[str], root: Path) -
     return mech, minor, info
 
 
+def _stage2_extra_columns(s2: dict, train: pd.DataFrame, test: pd.DataFrame, classes: list[str], root: Path, cand: np.ndarray,
+                          chans: list, draws: list, seen_cls: np.ndarray, xcontrol: str | None = None) -> tuple[np.ndarray, list[str], dict]:
+    """Additive; only with the field extra_columns of the deployment file (e.g. artifacts/stage2_primary_cols.json from
+    eda/c151_primary_cols.py fit): extra second-stage columns for the test rows (src/stage2_sources.py; sources extra_columns.names in this
+    order) — protocol answers pr27/q397 from frozen files (extra_columns.test: files and SHA-256, check mandatory; per run table/rows/model,
+    exactly one first pass per row, parser cross-check against proto_labels.jsonl), pr27 final_answer_correct (the same answer file), blend
+    channels BEFORE the floor in the order of the blend and the draws d1–d3 (as Static of the second stage), table and taxonomy; task
+    knowledge, task row counts and topic sections with reference = ALL training rows (as the task knowledge). Test guard per column and
+    source against extra_columns.guard_reference by the rule fixed in advance stage2_sources.GUARD_RULE (other values in the file are
+    rejected). xcontrol: positive control (stage2_sources.CONTROLS, in memory only). Aggregates only.
+    -> (columns [n_test·K, m], feature names, statistics)."""
+    spec = s2.get("extra_columns") or {}
+    names = list(spec.get("names") or [])
+    if not names or len(set(names)) != len(names) or any(nm not in XS.SOURCE_ORDER for nm in names):
+        raise SystemExit(f"--stage2: extra_columns.names {names} — unknown, duplicate or no sources (known: {list(XS.SOURCE_ORDER)})")
+    if spec.get("module") != "src/stage2_sources.py" or spec.get("version") != XS.VERSION:
+        raise SystemExit(f"--stage2: extra_columns requires src/stage2_sources.py in version {spec.get('version')!r} (code: {XS.VERSION})")
+    if list(spec.get("features") or []) != XS.feature_names(names):
+        raise SystemExit(f"--stage2: extra_columns.features do not match the sources {names}")
+    rule = spec.get("guard_rule") or {}
+    if (float(rule.get("rel", -1)) != XS.GUARD_RULE["rel"] or float(rule.get("z_max", -1)) != XS.GUARD_RULE["z_max"]
+            or rule.get("floors") != XS.GUARD_RULE["floors"]):
+        raise SystemExit(f"--stage2: extra_columns.guard_rule differs from the rule fixed in advance (rel {rule.get('rel')}, z_max {rule.get('z_max')}, "
+                         f"floors {rule.get('floors')}; required {XS.GUARD_RULE['rel']}, {XS.GUARD_RULE['z_max']}, {XS.GUARD_RULE['floors']})")
+    if xcontrol is not None and XS.CONTROL_NEEDS[xcontrol] not in names:
+        raise SystemExit(f"--stage2-xcontrol {xcontrol}: the source {XS.CONTROL_NEEDS[xcontrol]} is not in extra_columns.names")
+    side = spec.get("test") or {}
+    try:
+        P, sinfo = XS.load_side(side.get("spec") or {}, "test", COMP, root, classes, [str(k) for k in test["correct_answer"].tolist()],
+                                want_sha=side.get("files_sha256") or {})
+    except (XS.SourceError, KeyError, FileNotFoundError) as exc:
+        raise SystemExit(f"--stage2: extra columns: {exc}") from None
+    tax = pd.read_csv(root / "competition_data" / "taxonomy_v1.csv", dtype=str, keep_default_na=False)
+    minor = XS.minor_vector(classes, dict(zip(tax["id"], tax["default_severity"])))
+    codes = [c for c, v in zip(classes, minor) if v]
+    if codes != list(spec.get("minor_codes") or []):
+        raise SystemExit(f"--stage2: minor codes of the taxonomy {codes} != extra_columns.minor_codes {spec.get('minor_codes')}")
+    if "oth_novelty" in names and (spec.get("channels") != s2.get("channels") or len(chans) != len(spec.get("channels") or [])):
+        raise SystemExit(f"--stage2: blend channels of the novelty quantities {spec.get('channels')} != channels of the deployment file {s2.get('channels')}")
+    inp = {"classes": classes, "P": P, "minor": minor, "row_keys": S2.task_keys(test["question_id"].to_numpy(), test["topic_name"].to_numpy()),
+           "ref_keys": S2.task_keys(train["question_id"].to_numpy(), train["topic_name"].to_numpy()), "ref_y": labels.encode(train["root_code"], classes),
+           "fac": XS.fac_rows([COMP / r for r in (side.get("spec") or {})["pr27"]["raw"]], len(test)) if "fac27_rule" in names else None,
+           "sev_minor": XS.sev_minor_raw(classes, tax["id"].tolist(), tax["default_severity"].tolist()), "chans": chans, "draws": draws, "seen": seen_cls,
+           "row_topics": test["topic_name"].to_numpy().astype(str), "ref_topics": train["topic_name"].to_numpy().astype(str),
+           "sections": XS.class_sections(classes, tax["id"].tolist(), tax["section"].tolist())}
+    if xcontrol is not None:
+        inp = XS.apply_control(inp, xcontrol)
+    cols = XS.build_columns(names, inp)
+    rows, ref_all = np.arange(len(test)), np.arange(len(train))
+    E = cols.cols(rows, cand, ref_all)
+    stats = XS.guard_stats(cols, E, cand, inp, rows, ref_all)
+    guard = XS.guard_check(spec["guard_reference"], stats, XS.GUARD_RULE["rel"], XS.GUARD_RULE["z_max"], XS.GUARD_RULE["floors"])
+    info = {"names": names, "features": cols.features, "version": XS.VERSION, "files": sinfo["files"], "control": xcontrol,
+            "sources": {s: {k: v for k, v in d.items() if v is not None} for s, d in sinfo["sources"].items()}, "test": stats, "guard": guard}
+    print(f"    SECOND STAGE, extra columns (frozen sources{', CONTROL ' + xcontrol if xcontrol else ''}): {len(names)} sources, {len(cols.features)} columns "
+          f"(answers from {len(sinfo['files'])} frozen files, SHA-256 checked); test guard per column and source "
+          f"{'held' if guard['ok'] else 'VIOLATED'} ({len(guard['checks']) - len(guard['failed'])}/{len(guard['checks'])} statistics; band "
+          f"±{XS.GUARD_RULE['rel']:g} relative or |z| ≤ {XS.GUARD_RULE['z_max']:g}, valid answers ≥ {XS.GUARD_RULE['floors']['share_valid']:g}; aggregates only)")
+    for c in guard["failed"]:
+        print(f"    test guard of the extra columns violated: {c['scope']} {c['stat']} test {c['test']:.5f} against training {c['train']:.5f}, z {c['z']:+.2f}")
+    return E, cols.features, info
+
+
+def stage2_draws_first(s2: dict, draws: list, specs: list[str]) -> tuple[list, list[str]]:
+    """Additive (eda/c135_primary_m3x4.py): if the deployment file names `draws_first` (= number of draws of the second stage, d1–d3), the
+    second-stage features read only the FIRST draws_first test draws of the channel draws_channel — the channel itself averages more draws
+    (m3x4_full = mean of d1..d4), the features stay, as on the training rows, from d1–d3. Without the field (all deployment files up to the
+    v0.3 candidates) unchanged. -> (matrices, test rankings) for the check against test_notes."""
+    if "draws_first" not in s2:
+        return draws, specs
+    k = s2["draws_first"]
+    if not isinstance(k, int) or isinstance(k, bool) or k != len(S2.DRAWS) or len(draws) < k or len(specs) < k:
+        raise SystemExit(f"--stage2: draws_first {k!r} requires {len(S2.DRAWS)} and at least as many test draws of the channel "
+                         f"{s2.get('draws_channel')} ({len(draws)} matrices, {len(specs)} test rankings)")
+    return list(draws[:k]), list(specs[:k])
+
+
 def apply_stage2(path: Path, stack_file: Path, stack: dict, Q: np.ndarray, P_pre: np.ndarray, raw_chans: dict, draw_keep: dict, rank_only: dict,
                  train: pd.DataFrame, test: pd.DataFrame, classes: list[str], seen_cls: np.ndarray, root: Path,
-                 report_path: Path | None = None) -> tuple[np.ndarray, dict]:
+                 report_path: Path | None = None, xcontrol: str | None = None) -> tuple[np.ndarray, dict]:
     """SECOND STAGE (see the module docstring): conditional logit over the first K candidates of the aligned test blend Q.
     P_pre = blend before the alignment. Guards (a)–(c), aggregates only. -> (Q with a new order of the first K, statistics)."""
     s2 = json.loads(Path(path).read_text())
@@ -1011,6 +1339,7 @@ def apply_stage2(path: Path, stack_file: Path, stack: dict, Q: np.ndarray, P_pre
     draws = draw_keep.get(dch) or []
     notes_cfg = s2.get("test_notes") or []
     specs = (rank_only.get(dch) or "").split(",")
+    draws, specs = stage2_draws_first(s2, draws, specs)  # only with the field draws_first (otherwise unchanged)
     if len(draws) != len(S2.DRAWS) or len(notes_cfg) != len(S2.DRAWS) or specs != [c["rank"] for c in notes_cfg]:
         problems.append(f"M3 test draws of channel {dch}: {len(draws)} matrices, test rankings {specs} against the deployment file "
                         f"{[c.get('rank') for c in notes_cfg]}")
@@ -1059,6 +1388,22 @@ def apply_stage2(path: Path, stack_file: Path, stack: dict, Q: np.ndarray, P_pre
         S2.attach_mech(st, mech, minor)
     rows = np.arange(n_test)
     X, cand, names = S2.pair_features(st, rows, Q, P_pre, kn, fs_feat)
+    x_info = None
+    if "extra_columns" in s2:  # additive: extra columns at the end of the main model; without the field everything unchanged
+        Ex, x_names, x_info = _stage2_extra_columns(s2, train, test, classes, root, cand, [raw_chans[nm] for nm in stack["channels"]],
+                                                    draws, seen_cls, xcontrol)
+        if xcontrol is not None:  # positive control: never a file; exit code 5 = the test guard fires (passed), 6 = it does not
+            if report_path is not None:
+                report_path.parent.mkdir(parents=True, exist_ok=True)
+                report_path.write_text(json.dumps({"control": xcontrol, "extra_columns": x_info}, indent=1, ensure_ascii=False, default=float) + "\n")
+            print(f"  CONTROL {xcontrol}: {'the test guard fires — control passed' if not x_info['guard']['ok'] else 'the test guard does NOT fire — control FAILED'}; "
+                  "no file")
+            raise SystemExit(5 if not x_info["guard"]["ok"] else 6)
+        if fs == "main":
+            X = np.concatenate([X, Ex], 1)
+            names = names + x_names
+    elif xcontrol is not None:
+        raise SystemExit("--stage2-xcontrol only with a deployment file that carries the field extra_columns")
     if names != model["features"] or not np.array_equal(cand, cand0):
         raise SystemExit(f"--stage2: features of the test side ({len(names)}) do not match the deployment file ({len(model['features'])})")
     top = S2.reorder(cand, S2.scores(model, X))
@@ -1086,6 +1431,8 @@ def apply_stage2(path: Path, stack_file: Path, stack: dict, Q: np.ndarray, P_pre
         info.update({"model_feature_set": fs_feat, "protect_none": protect, "rows_protected": n_protected})
     if mm_info is not None:  # only with main_guard_i1_mm
         info["mech27"] = mm_info
+    if x_info is not None:  # only with the field extra_columns
+        info["extra_columns"] = {**x_info, "used_by_model": fs == "main"}
     if widened_args:  # only with the widened rule: rule and sample sizes in the statistics (otherwise the statistics file stays unchanged)
         info["guard_notes"].update({"rule": str(rule.get("rule", "widened")), **widened_args})
     print(f"  SECOND STAGE ({Path(path).name}{', NULL MODEL' if null else ''}): note guard{' (widened rule: band or |z| ≤ ' + format(widened_args['share_z_max'], 'g') + ')' if widened_args else ''} {'passed' if ga['ok'] else 'FAILED'} -> feature set {fs} "
@@ -1105,6 +1452,9 @@ def apply_stage2(path: Path, stack_file: Path, stack: dict, Q: np.ndarray, P_pre
     if report_path is not None:
         report_path.parent.mkdir(parents=True, exist_ok=True)
         report_path.write_text(json.dumps(info, indent=1, ensure_ascii=False, default=float) + "\n")
+    if x_info is not None and not x_info["guard"]["ok"]:  # test guard per column — abort without a file (also for the null model), no dropping
+        raise SystemExit(f"--stage2: test guard of the extra columns violated in {len(x_info['guard']['failed'])} statistics "
+                         f"({', '.join(c['scope'] + ' ' + c['stat'] for c in x_info['guard']['failed'][:6])}); no file written")
     if not null and not gc_ok:
         raise SystemExit(f"--stage2: guard (c) violated — new top code in {changed:.4f} of the test rows, required {lo_f * oof_share:.4f}…{hi_f * oof_share:.4f} "
                          f"(OOF {oof_share:.4f}); no file written")
@@ -1150,9 +1500,23 @@ def _train_notes_texts(root: Path, rel_file: str, want_sha: str, n_train: int) -
     return [texts[i] for i in range(n_train)], {"file": rel_file, "sha256": sha}
 
 
-STAGE2_CONTROLS = ("copy", "permute", "truncate", "pr27_shift", "pr27_m3d1")
+STAGE2_CONTROLS = ("copy", "permute", "truncate", "pr27_shift", "pr27_m3d1", "mech_flip")
 M3_CONTROLS = ("copy", "permute", "truncate")  # change the M3 test notes
 R_CONTROLS = ("pr27_shift", "pr27_m3d1")  # change only the pr27 test notes (feature set fallback_i1_ndr only)
+MECH_CONTROLS = ("mech_flip",)  # inverts mech27 of the test rows (feature set fallback_i1_ndr_mmid only; notes unchanged)
+MECH_RULE = {"mech_rule": "mech27 guard", "mech_rel": 0.10, "mech_z_max": 3.0}  # guard of mech27: band ±10 % OR |z| ≤ 3 (as the widened rule), abort only
+
+
+def mech_guard(train_share: float, n_train: int, test_share: float, n_test: int, rel: float = 0.10, z_max: float = 3.0) -> dict:
+    """Share "mechanically correct" (mech27) of the test rows against that of the training rows (pure pr27 reading, 0.290): passes inside the
+    band ±rel relative OR at |z| ≤ z_max (two-sided two-sample binomial test, stage2.share_z) — like the widened rule, widening only.
+    Aggregates only."""
+    lo, hi = float(train_share) * (1.0 - rel), float(train_share) * (1.0 + rel)
+    z = S2.share_z(float(train_share), int(n_train), float(test_share), int(n_test))
+    ok_band, ok_z = bool(lo <= test_share <= hi), bool(abs(z) <= z_max)
+    return {"stat": "share_mech", "test": float(test_share), "ref": float(train_share), "lo": lo, "hi": hi, "z": z, "ok_band": ok_band, "ok_z": ok_z,
+            "ok": bool(ok_band or ok_z), "passed_by": "band" if ok_band else ("z" if ok_z else None), "rel": rel, "z_max": z_max,
+            "n_ref": int(n_train), "n_test": int(n_test)}
 
 
 def _control_texts(texts: list[list[str]], control: str) -> list[list[str]]:
@@ -1178,7 +1542,7 @@ def _control_pr27(pr_texts: list[str], m3_texts: list[list[str]], control: str) 
         return list(m3_texts[0])
     if control == "truncate":
         return [(x or "")[:300] for x in pr_texts]
-    if control in ("copy", "permute"):
+    if control in ("copy", "permute", "mech_flip"):  # mech_flip changes only mech27
         return list(pr_texts)
     raise SystemExit(f"--stage2-control {control!r}")
 
@@ -1259,22 +1623,30 @@ def apply_stage2_safe(path: Path, stack_file: Path, stack: dict, Q: np.ndarray, 
         problems.append("channels or β of the deployment file do not match the blend file")
     if int(s2.get("K", -1)) != S2.K_CAND or float(s2.get("lambda", -1)) != S2.LAMBDA:
         problems.append(f"K {s2.get('K')} / λ {s2.get('lambda')} instead of {S2.K_CAND} / {S2.LAMBDA}")
-    if fs not in ("fallback", S2.FB_I1_SET, S2.ND_SET, S2.NDR_SET):  # fallback_i1 = fallback + interactions I1 (without notes); + ND; + R
-        problems.append(f"feature set {fs!r}: the safety line only knows \"fallback\", \"fallback_i1\", \"fallback_i1_nd\" and \"fallback_i1_ndr\"")
-    nd = fs in (S2.ND_SET, S2.NDR_SET)  # fallback_i1_ndr computes the path of fallback_i1_nd and in addition the columns R
-    ndr = fs == S2.NDR_SET
+    if fs not in ("fallback", S2.FB_I1_SET, S2.ND_SET, S2.NDR_SET, S2.NDR_MMID_SET):  # fallback_i1 = fallback + interactions I1 (without notes); + ND; + R; + mm + identifiers
+        problems.append(f"feature set {fs!r}: the safety line only knows \"fallback\", \"fallback_i1\", \"fallback_i1_nd\", \"fallback_i1_ndr\" and "
+                        f"\"fallback_i1_ndr_mmid\"")
+    mmid = fs == S2.NDR_MMID_SET  # computes the path of fallback_i1_ndr and in addition minor_x_mech27 + identifiers of the general codes
+    nd = fs in (S2.ND_SET, S2.NDR_SET, S2.NDR_MMID_SET)  # fallback_i1_ndr computes the path of fallback_i1_nd and in addition the columns R
+    ndr = fs in (S2.NDR_SET, S2.NDR_MMID_SET)
     if nd and mode != "set":
         problems.append(f"feature set {fs} only with align_mode \"set\"")
     if control is not None and not nd:
         problems.append(f"--stage2-control only with the feature set {S2.ND_SET}")
     elif control in R_CONTROLS and not ndr:
         problems.append(f"--stage2-control {control} only with the feature set {S2.NDR_SET}")
+    elif control in MECH_CONTROLS and not mmid:
+        problems.append(f"--stage2-control {control} only with the feature set {S2.NDR_MMID_SET}")
     if not isinstance(protect, bool) or (protect and classes[0] != "NONE"):
         problems.append(f"protect_none {protect!r} (boolean; the guard requires NONE as class 0)")
     dch = s2.get("draws_channel")
     draws = draw_keep.get(dch) or []
     specs = (rank_only.get(dch) or "").split(",")
-    if len(draws) != len(S2.DRAWS) or specs != list(s2.get("test_draws") or []):
+    if "draws_first" in s2:  # channel made of more draws (m3x4_full = d1..d4), second-stage features from d1–d3 (without the field unchanged)
+        if specs != list(s2.get("test_draws") or []):
+            problems.append(f"M3 test draws of channel {dch}: test rankings {specs} against the deployment file {s2.get('test_draws')}")
+        draws, specs = stage2_draws_first(s2, draws, specs)
+    elif len(draws) != len(S2.DRAWS) or specs != list(s2.get("test_draws") or []):
         problems.append(f"M3 test draws of channel {dch}: {len(draws)} matrices, test rankings {specs} against the deployment file {s2.get('test_draws')}")
     missing = [nm for nm in stack["channels"] if nm not in raw_chans]
     if missing:
@@ -1305,6 +1677,8 @@ def apply_stage2_safe(path: Path, stack_file: Path, stack: dict, Q: np.ndarray, 
                     or not s2.get("r_reference") or rcfg.get("extractor") != NR.VERSION or tuple(rcfg.get("features") or ()) != S2.R_FEATS):
             raise SystemExit(f"--stage2 ({lab}): guard_rule, r_reference or r_notes differ from the rule of the feature set (guard of the columns R "
                              f"{NR.REL:g} / {NR.Z_MAX:g}, extractor {NR.VERSION}, columns {', '.join(S2.R_FEATS)})")
+        if mmid and ({k: rule.get(k) for k in MECH_RULE} != MECH_RULE or (s2.get("mech27") or {}).get("train_share_mech") is None):
+            raise SystemExit(f"--stage2 ({lab}): guard_rule or mech27 differ from the rule of the feature set (guard of mech27 {MECH_RULE}, train_share_mech)")
         texts, notes_src = [], []
         for c in notes_cfg:
             tx, src = _test_notes_texts(root, c["file"], c["rank"], n_test)
@@ -1337,11 +1711,21 @@ def apply_stage2_safe(path: Path, stack_file: Path, stack: dict, Q: np.ndarray, 
             R_test = NR.r_features(m3_st, pr_st)
             rstats = NR.guard_stats(m3_st, pr_st, cand0)
             rg = {**NR.guard(s2["r_reference"], rstats, NR.REL, NR.Z_MAX), "test": rstats, "reference": s2["r_reference"], "enforced": not null}
+        mg, mech_test, mm_info = None, None, None
+        if mmid:  # mech27 of the test rows (frozen pr27 test answers, pure pr27 reading) and its guard (aggregates only, abort only)
+            mech_test, minor_cls, mm_info = _test_mech27(s2, test, classes, root)
+            if control == "mech_flip":
+                mech_test = 1.0 - mech_test
+            mg = {**mech_guard(float(s2["mech27"]["train_share_mech"]), len(train), float(mech_test.mean()), n_test, MECH_RULE["mech_rel"],
+                               MECH_RULE["mech_z_max"]), "enforced": not null}
+            mm_info["guard"] = mg
         nd_info = {"guard_notes": {"ok": ga["ok"], "rule": "widened", "test": tstats, "reference": s2["guard_reference"], "checks": ga["checks"],
                                    "enforced": not null},
                    "guard_sim": {**sg, "enforced": not null}, "test_notes": notes_src, "train_notes": tr_src, "control": control}
         if ndr:
             nd_info.update({"guard_r": rg, "r_notes": pr_src})
+        if mmid:
+            nd_info["guard_mech"] = mg
         bad = [c for c in ga["checks"] if not c["ok"]]
         print(f"  SECOND STAGE, SAFETY LINE (note features{', CONTROL ' + control if control else ''}): note guard (widened rule) {'held' if ga['ok'] else 'FAILED'}"
               f" ({len(ga['checks']) - len(bad)}/{len(ga['checks'])}); similarity guard top similarity test {sg['test']['mean']:.4f} against training "
@@ -1358,7 +1742,11 @@ def apply_stage2_safe(path: Path, stack_file: Path, stack: dict, Q: np.ndarray, 
             for c in rbad:
                 print(f"    guard R failed: {c['stat']} test {c['test']:.4f} outside [{c['lo']:.4f}, {c['hi']:.4f}], |z| {abs(c['z']):.2f} > {NR.Z_MAX:g} "
                       f"(training value {c['ref']:.4f})")
-        fired = not (ga["ok"] and sg["ok"] and (rg is None or rg["ok"]))
+        if mmid:
+            print(f"  SECOND STAGE, SAFETY LINE (mech27 guard{', CONTROL ' + control if control else ''}): guard of mech27 "
+                  f"{'held' if mg['ok'] else 'FAILED'} — share test {mg['test']:.4f} against training {mg['ref']:.4f} (band {mg['lo']:.4f}…{mg['hi']:.4f}, "
+                  f"z {mg['z']:+.2f}, {mg['passed_by'] or 'FAILED'}) (aggregates only)")
+        fired = not (ga["ok"] and sg["ok"] and (rg is None or rg["ok"]) and (mg is None or mg["ok"]))
         if control is not None:  # positive control: never a file; exit code 5 = a guard fires (passed), 6 = none fires
             if report_path is not None:
                 report_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1369,12 +1757,16 @@ def apply_stage2_safe(path: Path, stack_file: Path, stack: dict, Q: np.ndarray, 
             if report_path is not None:
                 report_path.parent.mkdir(parents=True, exist_ok=True)
                 report_path.write_text(json.dumps(nd_info, indent=1, ensure_ascii=False, default=float) + "\n")
+            if mmid:
+                raise SystemExit(f"--stage2 ({lab}): note, similarity, R or mech27 guard failed (abort only) — no file written")
             if ndr:
                 raise SystemExit(f"--stage2 ({lab}): note, similarity or R guard failed (abort only) — no file written")
             raise SystemExit(f"--stage2 ({lab}): note or similarity guard failed (abort only) — no file written")
     st = S2.Static(stack["channels"], raw_chans, draws, test["grade"].to_numpy().astype(float), seen_cls, classes, notes)
     if ndr:  # columns R per (test row, class)
         S2.attach_r(st, R_test)
+    if mmid:  # row feature mech27 and class mask minor (the identifiers of the general codes are in Static)
+        S2.attach_mech(st, mech_test, minor_cls)
     X, cand, names = S2.pair_features(st, np.arange(n_test), Q, P_pre, kn, fs)
     if names != model.get("features") or not np.array_equal(cand, cand0):
         raise SystemExit(f"--stage2 ({lab}): features of the test side ({len(names)}) do not match the deployment file ({len(model.get('features') or [])})")
@@ -1401,8 +1793,10 @@ def apply_stage2_safe(path: Path, stack_file: Path, stack: dict, Q: np.ndarray, 
                      "train_notes": nd_info["train_notes"], "fallback": False})
     if ndr:  # only with fallback_i1_ndr (otherwise the report stays byte-identical)
         info.update({"guard_r": nd_info["guard_r"], "r_notes": nd_info["r_notes"]})
+    if mmid:  # only with fallback_i1_ndr_mmid (otherwise the report stays byte-identical)
+        info.update({"guard_mech": nd_info["guard_mech"], "mech27": mm_info})
     print(f"  SECOND STAGE, SAFETY LINE ({Path(path).name}{', NULL MODEL' if null else ''}): feature set {fs} ({len(names)}), "
-          f"{('notes d1–d3 + example similarity' + (' + columns R (M3 d1–d3, pr27)' if ndr else '')) if nd else 'no notes'}; "
+          f"{('notes d1–d3 + example similarity' + (' + columns R (M3 d1–d3, pr27)' if ndr else '') + (' + minor_x_mech27 + identifiers' if mmid else '')) if nd else 'no notes'}; "
           f"NONE guard {'on' if protect else 'off'} ({n_protected} test rows keep the base order); new top code in {changed:.4f} of the test rows "
           f"(OOF {oof_share:.4f}, band ×{lo_f:g}…×{hi_f:g} -> {'ok' if gc_ok else 'VIOLATED'}); first three changed {info['share_top3_changed']:.4f} "
           f"(OOF {float(info['share_top3_changed_oof'] or 0.0):.4f}); \"novel for the task\" among the first 5: test {novel:.4f}, OOF {info['guard_novel_task_top5']['oof']:.4f}")
@@ -1460,6 +1854,8 @@ def main() -> int:
                     "pr27_m3d1 only fallback_i1_ndr): change the test notes in memory; never writes a file, exit code 5 = a guard fires "
                     "(passed), 6 = none fires")
     ap.add_argument("--stage2-report", help="file for the guard statistics of the second stage (aggregates only; e.g. artifacts/eda/private/stage2/guards.json)")
+    ap.add_argument("--stage2-xcontrol", choices=XS.CONTROLS, help="positive control of the test guard of the extra columns (only with a deployment file with "
+                    "the field extra_columns): perturb the test sources in memory; never writes a file, exit code 5 = the guard fires (passed), 6 = it does not")
     a = ap.parse_args()
     if a.align < 0 or a.align_inductive < 0:
         raise SystemExit("--align / --align-inductive: the strength must not be negative")
@@ -1469,6 +1865,8 @@ def main() -> int:
         raise SystemExit("--stage2-report only with --stage2")
     if a.stage2_control and not a.stage2:
         raise SystemExit("--stage2-control only with --stage2")
+    if a.stage2_xcontrol and not a.stage2:
+        raise SystemExit("--stage2-xcontrol only with --stage2")
     if a.stage2:  # the second stage was fitted on the alignment over the whole set: the same strength and class limit are required
         s2j = json.loads(Path(a.stage2).read_text())
         if s2j.get("align_mode") == "inductive":  # inductive line: inductive alignment as in the fit (per fold)
@@ -1501,6 +1899,7 @@ def main() -> int:
     rank_ref = {}
     rank_cmp: dict[str, str] = {}  # comparison form of the ranking (rank_mean.rank_compare); without the field empty = as before
     rank_notes: dict[str, dict] = {}  # note guard of the mean channel (rank_mean.notes); without the field empty = as before
+    rank_named: dict[str, dict] = {}  # separate source of the named codes (rank_mean.named); without the field empty = as before
     for k in proto:
         rm_def = rank_mean_guard(k, stack, rank.get(k), len(proto[k].split(",")))
         if rm_def:
@@ -1514,6 +1913,9 @@ def main() -> int:
             ninfo = rank_mean_notes_guard(k, rank[k], root, n_test, len(train), rm_def)
             if ninfo is not None:
                 rank_notes[k] = ninfo
+            named_info = rank_mean_named_guard(k, proto[k].split(","), rm_def, n_test)
+            if named_info is not None:
+                rank_named[k] = named_info
     for k, v in fill.items():
         if k not in stack["channels"] or (v not in given and v != "prior"):
             raise SystemExit(f"--fill {k}={v}: {k} must be a channel of the blend, {v} needs its own entry under --test")
@@ -1528,7 +1930,9 @@ def main() -> int:
     rank_only_draws = {}  # several draws (eda/a9_m3_draws_oof.py): a comma in the test spec or in the source of the OOF artifact
     for k in rank_only:
         if "," in rank_only[k] or "," in rank_only_ref[k]:
-            rank_only_draws[k] = rank_only_draws_guard(k, stack, rank_only[k].split(","), root, len(train))
+            rank_only_draws[k] = rank_only_draws_guard(k, stack, rank_only[k].split(","), root, len(train),
+                                                       rowlist_placeholder=k in set(a.rank_only_placeholder))
+    rank_only_rowlists = {k: gi.pop("_rowlist") for k, (_, gi) in rank_only_draws.items() if "_rowlist" in gi}  # draws with a row list; otherwise empty
     placeholder = sorted(set(a.rank_only_placeholder))
     for k in placeholder:
         if k not in rank_only:
@@ -1572,6 +1976,8 @@ def main() -> int:
                 sources[name].append({"rank": rank[name], "definition": c95.DEFINITION, **rinfo})
             if name in rank_notes:  # only with rank_mean.notes; without the field the record of the sources stays unchanged
                 sources[name].append({"rank_compare": rank_cmp.get(name, "c95"), "notes": rank_notes[name]})
+            if name in rank_named:  # only with rank_mean.named; without the field the sources file stays unchanged
+                sources[name].append({"named": rank_named[name]})
             meta_file = COMP / "artifacts" / f"meta_{name}.json"
             ch_meta = json.loads(meta_file.read_text()) if meta_file.is_file() else {}
             if ch_meta.get("class_weights") is not None:  # inductive debiasing: the same weights as for the channel's OOF artifact
@@ -1587,7 +1993,8 @@ def main() -> int:
             refs_d, ginfo = rank_only_draws[name]
             P, _, rinfo = rank_only_draws_channel(name, rank_only[name].split(","), refs_d, n_test, seen_cls, rank_partial=a.rank_partial,
                                                   max_missing=a.rank_max_missing, min_mass=a.rank_min_mass,
-                                                  none_band=band_for.get(name, tuple(a.rank_none_band)), keep=draw_keep[name])
+                                                  none_band=band_for.get(name, tuple(a.rank_none_band)), keep=draw_keep[name],
+                                                  rowlist=rank_only_rowlists.get(name))
             sources[name] = [{"rank_only": rank_only[name], "definition": RANK_ONLY_DRAWS_DEFINITION, "train_rank": rank_only_ref[name], **ginfo, **rinfo,
                               **({"none_band": list(band_for[name])} if name in band_for else {})}]
         elif name in rank_only:  # rank-only channel (M3, eda/c99_m3_deploy.py): exact distribution, rows without a ranking uniform
@@ -1713,6 +2120,10 @@ def main() -> int:
         if a.stage2_control and apply_fn is not apply_stage2_safe:
             raise SystemExit("--stage2-control only with a deployment file of the safety line")
         extra = {"control": a.stage2_control} if a.stage2_control else {}
+        if a.stage2_xcontrol:  # only on the path of the primary line with the field extra_columns
+            if apply_fn is not apply_stage2 or "extra_columns" not in s2j:
+                raise SystemExit("--stage2-xcontrol only with a deployment file of the primary line with the field extra_columns")
+            extra["xcontrol"] = a.stage2_xcontrol
         P, stage2_info = apply_fn(Path(a.stage2), COMP / "artifacts" / f"stack_{a.name}.json", stack, P, P_pre_align, raw_chans, draw_keep,
                                       rank_only, train, test, classes, seen_cls, root, Path(a.stage2_report) if a.stage2_report else None, **extra)
     blank_info = None

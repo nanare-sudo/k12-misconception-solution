@@ -1,0 +1,14 @@
+# Variant of q397p_rp.yaml for 8x H100 80 GB (tensor parallelism 8) — otherwise identical (fidelity check of the 397B
+# protocol on 64 training rows). NEVER RUN: the reference run used 4x H200 (q397p_rp.yaml); this file documents the
+# alternative hardware class and is not part of the evidence.
+run: q397p8_rp
+models:
+  q397: {repo: Qwen/Qwen3.5-397B-A17B-FP8, revision: ea5b4f81096f3901c91dea97f81324302495781d, download_workers: 32}
+workers:
+- gpu: "0,1,2,3,4,5,6,7"
+  jobs:
+  - {name: proto_p, kind: proto_gen, model: q397, split: train, rows: {only: derived/open_teacher/rows_parity64_397b.npy}, order_seed: 0, tag: proto, must_pass: true,
+     image: {max_side: 1024, question_max_side: 448}, max_tokens: 2500, finish_tokens: 1500, note_chars: 16000,
+     concurrency: 64, guard_rows: 24, guard_min_valid: 0.5, request_timeout_s: 1200,
+     server: {dtype: auto, max_model_len: 16000, gpu_memory_utilization: 0.92, max_num_seqs: 64, startup_s: 3600, env: {VLLM_USE_DEEP_GEMM: "0", VLLM_MOE_USE_DEEP_GEMM: "0", VLLM_ALLREDUCE_USE_FLASHINFER: "0"}, bin_on_path: true, pip: "vllm==0.31.0 transformers==5.17.0",
+              extra_args: ["--tensor-parallel-size", "8", "--disable-custom-all-reduce"]}}

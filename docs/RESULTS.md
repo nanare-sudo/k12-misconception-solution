@@ -1,6 +1,6 @@
 # Results
 
-*Status: 2026-11-08 (version 0.3). Cross-validated (CV) values are out-of-fold MAP@3 on the 1,500 labelled rows; "±" is
+*Status: 2026-11-15 (version 0.4). Cross-validated (CV) values are out-of-fold MAP@3 on the 1,500 labelled rows; "±" is
 the standard error of a paired difference from a bootstrap over questions. The measurement forms (per fold, without the
 last step, as one set) are defined in [VALIDATION.md](VALIDATION.md#4-three-measurement-forms). Public leaderboard values
 come from 1,000 test rows and are reported as observations only; the private leaderboard (2,498 rows) decides the
@@ -21,7 +21,10 @@ competition. Final scores will be added after the competition closes.*
 
 | Line and form | CV per fold | CV without last step | CV as one set | Public LB |
 |---|---:|---:|---:|---:|
-| **Primary line, final form with the M3 ranking behind the protocol notes (`m3px27xm`)** (current primary candidate) | 0.84256 | 0.83456 | 0.83822 | 0.84116 |
+| **Primary submission A** (`primary_m3x5h`): five M3 draws, the fifth with the photo at 2,048 px on the rows with small script, and nine extra second-stage columns ⁵ | 0.84256 | — | 0.84044 | 0.84266 |
+| Intermediate form (`primary_cols`): four M3 draws and the nine extra columns ⁵ | 0.84411 | — | 0.84067 | 0.84283 |
+| **Primary submission B** (`primary_m3x4`): four M3 draws | 0.84356 | 0.83633 | 0.83800 | 0.84450 |
+| Primary line, final form with the M3 ranking behind the protocol notes (`m3px27xm`) (primary candidate of version 0.3) | 0.84256 | 0.83456 | 0.83822 | 0.84116 |
 | Primary line, final form with `pr27xm`: I1 form with the minor-code × mechanical-match column | 0.84089 | 0.83433 | 0.83978 | 0.84100 |
 | Primary line, I1 form: guard form with row × candidate interactions | 0.84078 | 0.83322 | 0.83867 | 0.84150 |
 | Primary line, guard form: reranker main form with NONE guard and general-code identifiers | 0.83889 | 0.83522 | 0.83767 | 0.84200 |
@@ -51,6 +54,16 @@ two forms were decided by the mean of the per-fold and the as-one-set difference
 computed. As one set with the gate the predecessor (variant b) reaches 0.82167 because its gate abstains in one fold; forced it
 reaches 0.82433.
 
+⁵ On the original meta-split; the steps were decided over 20 untouched meta-splits each (below and
+[VALIDATION.md](VALIDATION.md#8-final-submissions-version-04)), on which their gains are positive although the original split
+shows a small loss for the fifth draw. The single values of the original split differ by less than their noise.
+
+- **Final submissions (paired, ½(F+M) unless stated).** Four M3 draws over three (submission B over the version-0.3
+  candidate), fair-bank design over 20 meta-splits: +0.00109 ± 0.00015 (20 of 20 positive), copy null point −0.00036; on 20
+  further meta-splits +0.00137. Nine extra columns over submission B: +0.00169 ± 0.00015, +0.00177 ± 0.00025 and
+  +0.00178 ± 0.00025 on three disjoint sets of 20 meta-splits; original split +0.0016 (as one set +0.0027). Fifth draw with
+  the large photo on the listed rows over the intermediate form: +0.00083 ± 0.00017, as one set +0.00108 ± 0.00030 over 20
+  meta-splits; original split −0.0009 (as one set −0.0002); best copy null point (d3 twice) +0.0009.
 - **M3 ranking behind the protocol notes** (`m3px27xm` instead of `pr27xm`) over the final form with `pr27xm`: ½(F+M) +0.00006
   (per fold +0.0017, as one set −0.0016); over 20 new meta-splits +0.00013 ± 0.00018, above the mean of four controls of the
   same role (−0.00045). Without the 397B channel: ½(F+M) +0.0019, over 20 new meta-splits +0.0010 ± 0.0002. The channel alone
@@ -171,6 +184,9 @@ Not every submission is listed. Dates are UTC.
 | 11-07 | safety | + note mentions and example similarity in the second stage | 0.83111 (per fold) / 0.82744 (as one set) | 0.83750 |
 | 11-07 | safety | + regex-exact columns of the M3 and protocol notes | 0.83156 (per fold) / 0.82844 (as one set) | 0.83716 |
 | 11-08 | primary | M3 ranking behind the protocol notes in the mean channel; blend and second stage refitted | 0.84256 (per fold) / 0.83822 (as one set) | 0.84116 |
+| 11-08 | primary (**final submission B**) | Fourth M3 draw in the M3 channel; blend and second stage refitted | 0.84356 (per fold) / 0.83800 (as one set); fair bank +0.0011 | 0.84450 |
+| 11-13 | primary | + nine extra second-stage columns from frozen protocol answers (bundle test) | 0.84411 (per fold) / 0.84067 (as one set); +0.0017 to +0.0018 over three sets of meta-splits | 0.84283 |
+| 11-14 | primary (**final submission A**) | Fifth M3 draw with the photo at 2,048 px on the rows with small script; blend and second stage refitted | 0.84256 (per fold) / 0.84044 (as one set); +0.0008 / +0.0011 over 20 meta-splits | 0.84266 |
 
 Other calibration points: the 27B model fine-tuned code-first scored 0.71716 on the public leaderboard with the task block
 and 0.69916 without it. The channels of the inductive line combined with the transductive alignment scored 0.82750.
@@ -183,8 +199,10 @@ leaderboard, against CV expectations of about +0.0010, +0.0013 to +0.0016 and +0
 6 rows) and +0.0033 (safety line with alignment over the test set; 70 rows), against CV expectations of about +0.001,
 +0.0005 and +0.003 (the last from the better-calibrated test-side class masses). The three files of 2026-11-07/08 differed by
 +0.0023 (note mentions and example similarity; 70 rows), −0.0003 (regex columns; 38 rows) and +0.0002 (M3 ranking behind the
-protocol notes; 52 rows), against CV expectations of about +0.003, +0.0006 and +0.0001. None of these differences is
-interpreted. No variant was chosen by its public score.
+protocol notes; 52 rows), against CV expectations of about +0.003, +0.0006 and +0.0001. The three files of 2026-11-08/14
+differed by +0.0033 (fourth M3 draw; 74 rows), −0.0017 (extra columns; about 60 rows) and −0.0002 (fifth draw; 47 rows),
+against CV expectations of about +0.001, +0.002 and +0.001. None of these differences is interpreted. No variant was chosen
+by its public score; the two final submissions were chosen by cross-validation, with submission B kept as the second slot.
 
 ## 4. Single channels and their contribution
 

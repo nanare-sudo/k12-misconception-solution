@@ -197,6 +197,8 @@ I1 = COMP / "artifacts" / "stage2_primary_i1.json"
 MMF = COMP / "artifacts" / "stage2_primary_final.json"
 OOF = PRIV / "c124_mm_oof.json"
 needs_oof = pytest.mark.skipif(not OOF.is_file(), reason="c124 oof not computed yet")
+needs_c118_oof = pytest.mark.skipif(not (COMP / "artifacts" / "eda" / "private" / "stage2" / "c118_oof.json").is_file(),
+                                    reason="report c118_oof.json missing (written by the build path, not part of the frozen package)")
 needs_mm = pytest.mark.skipif(not (MMF.is_file() and I1.is_file()), reason="stage2_primary_final.json missing (only after the pre-registered rule is met)")
 
 
@@ -224,6 +226,7 @@ def test_stage2_primary_final_equals_primary_i1_except_main():
 
 
 @needs_mm
+@needs_c118_oof
 def test_c124_fit_verify_reproduces_primary_final():
     r = subprocess.run(PY + ["eda/c124_stage2_mm.py", "fit", "--verify"], cwd=COMP, env=ENV, capture_output=True, text=True, timeout=1200)
     assert r.returncode == 0, r.stderr[-2000:]

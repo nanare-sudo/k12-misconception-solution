@@ -1,6 +1,6 @@
 # Third-party components
 
-*Status: 2026-11-08 (version 0.3).*
+*Status: 2026-11-15 (version 0.4).*
 
 Our own code and documentation are licensed under the Apache License 2.0 ([LICENSE](LICENSE)). The components below
 belong to third parties and keep their own licences. Model licences were read from the licence files at the pinned
@@ -14,8 +14,8 @@ revisions unless stated otherwise. Package licences follow the projects' publish
 |---|---|---|---|---|
 | Qwen3.5-9B | `Qwen/Qwen3.5-9B` @ `c202236235762e1c871ad0ccb60c8ee5ba337b9a` | Base model of the 9B fine-tuned scorer (our LoRA adapter `v1_full`) | Apache 2.0 | yes |
 | Qwen3.8-27B | `Qwen/Qwen3.8-27B` @ `1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0` | Zero-shot scorers, reason-then-name channel, protocol channel; base model of M3 (our LoRA adapter `m3_full`) | Apache 2.0 | yes |
-| Qwen3.5-397B-A17B-FP8 | `Qwen/Qwen3.5-397B-A17B-FP8` @ `ea5b4f81096f3901c91dea97f81324302495781d` | 397B notes on the test side (primary line only) | Apache 2.0 | yes (primary line) |
-| Qwen3.5-397B-A17B | Served by the Tinker sampling API | 397B outputs on training rows (primary line only) | Apache 2.0 according to the model card; the licence file of the served revision is still to be confirmed | no |
+| Qwen3.5-397B-A17B-FP8 | `Qwen/Qwen3.5-397B-A17B-FP8` @ `ea5b4f81096f3901c91dea97f81324302495781d` | 397B notes and protocol answers on the test side (both final submissions; in submission A also a source of extra second-stage columns) | Apache 2.0 | yes |
+| Qwen3.5-397B-A17B | Served by the Tinker sampling API (base repository `Qwen/Qwen3.5-397B-A17B`; revision and number format of the provider not recorded) | 397B outputs on training rows: blend weight of the 397B channel; in submission A the training side of six extra second-stage columns | Apache 2.0 according to the model card; the licence file of the served revision is still to be confirmed | no (training side only) |
 | Qwen3.5-0.8B | `Qwen/Qwen3.5-0.8B` @ `2fc06364715b967f1860aea9cf38778875588b17` | CPU smoke tests of the runner and tests that need a real model | Apache 2.0 | no |
 | Claude Haiku 5.5 (Anthropic) | Anthropic Messages API | Development-time teacher: pseudo-labels for the unlabelled pool (frozen) | Provider's commercial terms | no |
 
@@ -55,6 +55,7 @@ pinned versions (see also [docs/INFERENCE.md](docs/INFERENCE.md#4-environments))
 | flash-linear-attention, fla-core | 0.5.2 (GPU base) | MIT |
 | Triton | 3.4.0 (GPU base), 3.7.1 (vLLM), 3.6.0 (CPU) | MIT |
 | vLLM | 0.31.0 (vLLM) | Apache-2.0 |
+| OpenAI Python client (`openai`, a dependency of vLLM; not used by the jobs) | 3.41.0 in the lock file; 3.42.0 resolved in the 397B test run | Apache-2.0 |
 | FlashInfer (`flashinfer-python`) | 0.7.0.post1 (vLLM) | Apache-2.0 |
 | Tokenizers | 0.22.2 (GPU base, CPU), 0.23.3 (vLLM) | Apache-2.0 |
 | Safetensors | 0.8.0 | Apache-2.0 |

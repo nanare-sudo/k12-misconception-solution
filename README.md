@@ -1,7 +1,19 @@
 # Misconception Detection in K-12 Student Math Workings: Solution
 
-> **Status:** 2026-11-08 · version 0.3, pre-final. This is a living document. The final private-leaderboard result will
-> be added after the competition closes (2026-11-17 00:00 UTC). Open work is listed in [docs/ROADMAP.md](docs/ROADMAP.md).
+> **Status:** 2026-11-15 · version 0.4, final submissions selected. This is a living document. The final private-leaderboard
+> result will be added after the competition closes (2026-11-17 00:00 UTC). Open work is listed in
+> [docs/ROADMAP.md](docs/ROADMAP.md).
+
+**Final submissions** (both from the primary line; chosen by cross-validation, public scores observed afterwards):
+
+| Submission | What it is | Build script | SHA-256 of the file | CV per fold / as one set | Public LB |
+|---|---|---|---|---:|---:|
+| **Primary submission A** | Five M3 draws (the fifth reads the photo at 2,048 px, only on rows with small script) and nine extra second-stage columns from frozen protocol answers | `tools/builds/primary_m3x5h.sh` | `4505c159…797354e7` | 0.8426 / 0.8404 | 0.84266 |
+| **Primary submission B** | Four M3 draws; the fallback of A without its two last components | `tools/builds/primary_m3x4.sh` | `76da786d…a3565f9973` | 0.8436 / 0.8380 | 0.84450 |
+
+The single values are those of the original meta-split; each step was decided over 20 untouched meta-splits (A against
+its predecessor with the columns +0.0008 in the mean of both forms, +0.0011 as one set; the columns +0.0017 to +0.0018 on
+three sets; the fourth draw +0.0011). Full checksums: [docs/INFERENCE.md](docs/INFERENCE.md#2-lines-and-expected-checksums).
 
 This repository contains the code and documentation of our solution to the Kaggle competition
 [Misconception Detection in K-12 Student Math Workings](https://www.kaggle.com/competitions/misconception-detection-in-k-12-student-math-workings),
@@ -18,7 +30,8 @@ error. Up to three codes per row are submitted in order of confidence, and the s
 - **The strongest channels reason before they name a code.** An open 27B model (Qwen3.8-27B) first writes a diagnosis in
   thinking mode; all codes are then scored behind that text. Our best single model, **M3**, is the same 27B fine-tuned with
   LoRA to write such a diagnosis, followed by the root finding and the code. The mean of three of its generations reaches
-  **0.802 MAP@3** out of fold.
+  **0.802 MAP@3** out of fold, of four 0.804. The final submissions average four draws, and submission A adds a fifth draw
+  that reads the photo at twice the resolution on the rows with small handwriting, where the reading loses most.
 - **Channels differ on purpose in what they know.** Some see labelled workings of other students for the same question.
   Others see no labelled row at all and follow a fixed marking protocol. Their errors differ, and the blend gains from
   both kinds.
@@ -31,15 +44,20 @@ error. Up to three codes per row are submitted in order of confidence, and the s
   mentioned there, and how similar the notes are to notes of real assignments of that code in other questions.
 - **M3 also names behind the protocol notes.** In the primary candidate the protocol channel's mean channel takes its
   ranking from M3 behind the frozen notes of the protocol answers instead of from the untrained 27B.
-- **Two lines.** The **primary line** maximises cross-validated MAP@3. The **safety line** uses no input derived from the
-  development-time teacher model, no output of an external API and no 397B channel; its final candidate uses the
-  alignment over the test set, and its strictly inductive form stays the fallback. The two final submissions are drawn
-  from these two lines.
+- **Extra second-stage columns.** In submission A the reranker also reads nine columns computed on the CPU from the
+  frozen protocol answers of our 27B and of the 397B (votes, last-mentioned code, major findings, formed verdicts, the
+  mechanical answer check, the answer's own verdict on the final answer) and from the taxonomy sections already seen per
+  topic. They were tested together as one bundle against a placebo bundle; a test-side guard per column stops the build if
+  a column does not transfer.
+- **Two lines, one choice.** The **primary line** maximises cross-validated MAP@3. The **safety line** (no teacher-derived
+  input, no API output, no 397B) was kept as a second design until the host confirmed that those techniques are allowed;
+  both final submissions now come from the primary line ([docs/DATA_AND_COMPLIANCE.md](docs/DATA_AND_COMPLIANCE.md#6-the-two-lines-and-the-techniques-that-rest-on-interpretation)).
 - **Reproducible on the CPU.** Every candidate file is rebuilt byte for byte on the CPU from frozen channel outputs and
-  the stored blend and second-stage files; this is verified on fresh copies of the repository with the frozen inputs.
-  The private copies of these inputs are being brought to the state of this version ([docs/ROADMAP.md](docs/ROADMAP.md),
-  step 5). The rotation correction of the 9B channel uses the list of the released, seeded orientation network, whose
-  weights are stored with the solution.
+  the stored blend and second-stage files. For the files up to version 0.3 this is verified on fresh copies of this
+  repository; both final submissions were rebuilt byte for byte on a CPU without network access with the internal code
+  version from which version 0.4 was translated, and the same rebuild with this repository is the first open step of
+  [docs/ROADMAP.md](docs/ROADMAP.md). The rotation correction of the 9B channel uses the list of the released, seeded
+  orientation network, whose weights are stored with the solution.
 
 ## How it works
 
@@ -50,12 +68,12 @@ flowchart TD
     C2["27B zero-shot scorer, topic block plus task block in the primary line"]
     C3["27B reason-then-name"]
     C4["27B protocol channel"]
-    C5["M3: fine-tuned 27B reasoner, mean of 3 draws; in the primary line also behind the protocol notes"]
+    C5["M3: fine-tuned 27B reasoner, mean of 4 draws (A: plus a 2,048-px draw on small script); also behind the protocol notes"]
     C6["397B notes named by M3, primary line only"]
     FL["Probability floors"]
     BL["Log-linear blend with arithmetic share, weights fitted on LogLoss"]
     AL["Class-marginal alignment over the test set; inductive in the strictly inductive fallback"]
-    RR["Conditional-logit reranker over the top 5 candidates, with row x candidate interactions and note features"]
+    RR["Conditional-logit reranker over the top 5 candidates, with row x candidate interactions, note features and (A) extra columns"]
     NG["NONE guard: a NONE top from the blend stays first"]
     BK["Blank photo: REL-01 at rank 1"]
     OUT["Top-3 codes per row"]
@@ -88,8 +106,12 @@ flowchart TD
 | 27B reason-then-name, teacher-free | `think18sb` | Qwen3.8-27B | no | 0.7516 | safety |
 | 27B protocol channel | `pr27xm` | Qwen3.8-27B | no | 0.7459 | safety; primary fallbacks |
 | Protocol channel with the M3 ranking behind its notes | `m3px27xm` | Qwen3.8-27B; Qwen3.8-27B + LoRA (M3) | M3 only | 0.7551 | primary |
-| M3: fine-tuned 27B reasoner, mean of 3 draws | `m3x3_full` | Qwen3.8-27B + LoRA | yes | 0.8020 | both |
+| M3: fine-tuned 27B reasoner, mean of 3 draws | `m3x3_full` | Qwen3.8-27B + LoRA | yes | 0.8020 | both (version 0.3) |
+| M3, mean of 4 draws | `m3x4_full` | Qwen3.8-27B + LoRA | yes | 0.804 | final submission B |
+| M3, 4 draws plus a draw at 2,048 px on the rows with small script | `m3x5h` | Qwen3.8-27B + LoRA | yes | — ⁶ | final submission A |
 | 397B notes, named by M3 | `q397m3` | Qwen3.5-397B-A17B + M3 | M3 only | 0.7442 | primary |
+
+⁶ Per row the mean of the draws that cover the row; the fifth draw alone reaches 0.777, the best single draw.
 
 All models in the inference path are open-weight models under the Apache 2.0 licence. A closed model served through a
 commercial API acted only as a development-time teacher: it pseudo-labelled the unlabelled pool, never a test row.
@@ -104,7 +126,10 @@ the test set is processed by the final candidates of both lines. Definitions and
 
 | Line and form | Channels | Last steps | CV per fold | CV as one set | Public LB |
 |---|---|---|---:|---:|---:|
-| **Primary line, final form with the M3 ranking behind the protocol notes** (current primary candidate; submitted 2026-11-08) | 6 | alignment over the test set, reranker (64 features), NONE guard | 0.8426 | 0.8382 | 0.84116 |
+| **Primary submission A**: five M3 draws (fifth at 2,048 px on small script), extra columns (submitted 2026-11-14) | 6 | alignment over the test set, reranker (73 features), NONE guard | 0.8426 | 0.8404 | 0.84266 |
+| Intermediate form: four M3 draws, extra columns (submitted 2026-11-13; not a final submission) | 6 | alignment over the test set, reranker (73 features), NONE guard | 0.8441 | 0.8407 | 0.84283 |
+| **Primary submission B**: four M3 draws (submitted 2026-11-08) | 6 | alignment over the test set, reranker (64 features), NONE guard | 0.8436 | 0.8380 | 0.84450 |
+| Primary line, final form with the M3 ranking behind the protocol notes (candidate of version 0.3; submitted 2026-11-08) | 6 | alignment over the test set, reranker (64 features), NONE guard | 0.8426 | 0.8382 | 0.84116 |
 | Primary line, final form: interactions and minor-code × mechanical-match column (fallback; submitted 2026-11-06) | 6 | alignment over the test set, reranker (64 features), NONE guard | 0.8409 | 0.8398 | 0.84100 |
 | Primary line, I1 form: guard form with row × candidate interactions (submitted 2026-11-06) | 6 | alignment over the test set, reranker (63 features), NONE guard | 0.8408 | 0.8387 | 0.84150 |
 | Primary line, guard form: reranker main form with NONE guard and general-code identifiers (submitted 2026-11-01) | 6 | alignment over the test set, reranker (48 features), NONE guard | 0.8389 | 0.8377 | 0.84200 |
@@ -123,6 +148,13 @@ gate does not abstain. The single model has no last step.
 
 - **Paired differences** (standard error from a bootstrap over questions; ½(F+M) is the mean of the per-fold and the
   as-one-set difference):
+  - fifth M3 draw (photo at 2,048 px, rows with character height ≤ 20 px) over the intermediate form: over 20 untouched
+    meta-splits ½(F+M) +0.00083 ± 0.00017, as one set +0.00108 ± 0.00030; original meta-split −0.0009 / −0.0002; the best
+    copy null point (one 1,024-px draw twice) reaches +0.0009, so the gain is that of one more useful draw;
+  - nine extra second-stage columns over submission B: ½(F+M) +0.00169 ± 0.00015, +0.00177 ± 0.00025 and +0.00178 ± 0.00025
+    on three disjoint sets of 20 untouched meta-splits (placebo bundle −0.00044); original +0.0016 (as one set +0.0027);
+  - fourth M3 draw over three (submission B over the version-0.3 candidate): fair bank over 20 meta-splits +0.00109 ±
+    0.00015 (20 of 20 positive), copy null point −0.00036; on 20 further meta-splits +0.00137;
   - M3 ranking behind the protocol notes in the mean channel, over the final form with `pr27xm`: ½(F+M) +0.0001 on the
     original meta-split (per fold +0.0017, as one set −0.0016); over 20 new meta-splits +0.0001 ± 0.0002, above the mean of
     four controls of the same role (−0.0005); without the 397B channel +0.0019, over 20 new meta-splits +0.0010 ± 0.0002;
@@ -183,8 +215,9 @@ kept privately and referenced by path and, where pinned, by SHA-256
 (see [docs/DATA_AND_COMPLIANCE.md](docs/DATA_AND_COMPLIANCE.md)).
 [docs/CODEMAP.md](docs/CODEMAP.md) maps every script to its role. Some file and script names carry historical build
 labels such as `s029`, `s030n`, `s034` or `s035`; they are kept because the frozen artifacts and their checksums refer to
-them. The build scripts added in versions 0.2 and 0.3, their deployment files and output files are named by role:
-`primary_i1`, `primary_final`, `safety_final` (version 0.2) and `safety_nd`, `safety_ndr`, `primary_m3px27` (version 0.3).
+them. The build scripts added in versions 0.2–0.4, their deployment files and output files are named by role:
+`primary_i1`, `primary_final`, `safety_final` (version 0.2), `safety_nd`, `safety_ndr`, `primary_m3px27` (version 0.3) and
+`primary_m3x4` (submission B), `primary_cols` (intermediate form), `primary_m3x5h` (submission A) (version 0.4).
 
 ## Quick start
 
@@ -201,7 +234,7 @@ host for verification but are not public, go under `data/derived/` (frozen deriv
 lists and notes) and under `artifacts/` (frozen channel outputs, OOF matrices, blend and second-stage files, the
 description of the orientation network, and earlier submission files that the build scripts use as references); see
 [docs/INFERENCE.md](docs/INFERENCE.md#3-data-layout). The private copies of these inputs are being brought to the state
-of this version ([docs/ROADMAP.md](docs/ROADMAP.md), step 5). Then:
+of this version ([docs/ROADMAP.md](docs/ROADMAP.md), step 3). Then:
 
 ```bash
 # Python 3.13 with the CPU versions listed in docs/INFERENCE.md (section 4)
@@ -210,9 +243,16 @@ python -I tools/make_folds.py                              # artifacts/folds.npy
 ORIENT=legacy bash tools/builds/s029_m3x3.sh safe          # earlier files with the first-version rotation list,
 ORIENT=legacy bash tools/builds/s034_stage2_main.sh best   #   used as references by the builds below
 bash tools/builds/safety_ndr.sh       # safety line, final candidate (runs safety_nd.sh, which runs safety_final.sh and primary_final.sh first)
-bash tools/builds/primary_m3px27.sh   # primary line, final candidate (runs primary_final.sh first)
-sha256sum artifacts/submissions/sub_primary_m3px27.csv artifacts/submissions/sub_safety_ndr.csv
+bash tools/builds/primary_m3px27.sh   # primary candidate of version 0.3 (runs primary_final.sh first)
+bash tools/builds/primary_m3x5h.sh    # the two final submissions: runs primary_cols.sh, which runs primary_m3x4.sh
+sha256sum artifacts/submissions/sub_primary_m3x5h.csv artifacts/submissions/sub_primary_m3x4.csv
+#   4505c15950167650…  sub_primary_m3x5h.csv  (primary submission A)
+#   76da786dfdbe6a6d…  sub_primary_m3x4.csv   (primary submission B)
 ```
+
+On the first run with the code of this version the three new build scripts print the checksums of the JSON files they
+write themselves ("FIRST BUILD"); the checksums of the CSV files and test matrices are checked on every run
+([docs/INFERENCE.md](docs/INFERENCE.md#2-lines-and-expected-checksums)).
 
 The expected checksums of these files and of their fallbacks are in [docs/INFERENCE.md](docs/INFERENCE.md#2-lines-and-expected-checksums).
 The build scripts use the rotation list of the released orientation network by default (`ORIENT=repro`); `ORIENT=legacy`
@@ -228,15 +268,13 @@ Training of every component is described in [docs/TRAINING.md](docs/TRAINING.md)
 
 ## Status and next steps
 
-- Both final candidates, their fallbacks and the historical files are rebuilt byte for byte from the frozen inputs in
-  fresh copies of the repository. With the development version of the code, the assembly of the safety candidate and of
-  its fallbacks was also repeated on a Kaggle CPU without network access, byte for byte; for the primary candidate this
-  check is running, and the same check with this repository is planned.
-- Open before the final selection (by 2026-11-15): smoke tests without network access for the model steps, including
-  the 397B path, which decides whether the 397B channel stays in the primary file; the remaining second-hardware checks
-  of the M3 draws; an estimate of the rerun variance of the generated texts; the private copies of the frozen inputs in
-  the state of this version.
-- Details and dates: [docs/ROADMAP.md](docs/ROADMAP.md).
+- The two final submissions are selected (2026-11-15). Both were rebuilt byte for byte on a Kaggle CPU without network
+  access from the frozen inputs, with the internal code version from which this repository was translated.
+- Open: the first build of both files with the code of this repository (it learns the checksums of the regenerated JSON
+  files; the CSV checksums are pinned); smoke tests without network access for the GPU model steps, including the 397B
+  path; private copies of the inputs in the state of this version, including the M3 training targets; an estimate of the
+  rerun variance of the generated texts.
+- Details: [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Documentation
 
@@ -246,10 +284,12 @@ Training of every component is described in [docs/TRAINING.md](docs/TRAINING.md)
 | [docs/VALIDATION.md](docs/VALIDATION.md) | Folds, measurement forms, paired uncertainty, decision rules, controls, checks of the second-stage components, risk rule of the inductive line, checks before a submission |
 | [docs/RESULTS.md](docs/RESULTS.md) | Progression, submissions, single-channel values, ablations and null results, error analysis, compute |
 | [docs/TRAINING.md](docs/TRAINING.md) | Every trained or fitted component: inputs and their provenance, command, hardware, duration, expected checks; what a retraining gives |
-| [docs/INFERENCE.md](docs/INFERENCE.md) | The modes `assemble`, `rescore` and `full`: commands, hardware, run times, expected checksums; running on a new test set |
-| [docs/DATA_AND_COMPLIANCE.md](docs/DATA_AND_COMPLIANCE.md) | What data lives where, API use, offline inference, test-data policy, licences |
+| [docs/INFERENCE.md](docs/INFERENCE.md) | The modes `assemble`, `rescore` and `full`: commands, hardware, run times, expected checksums; running on a new test set; recomputing the 397B channel |
+| [docs/DATA_AND_COMPLIANCE.md](docs/DATA_AND_COMPLIANCE.md) | What data lives where, API use, host statements, offline inference, test-data policy, licences |
+| [docs/PROVENANCE.md](docs/PROVENANCE.md) | Every frozen input of the two final submissions: producer, configuration, network status, determinism; the training chain |
+| [docs/MODEL_SIZES.md](docs/MODEL_SIZES.md), [docs/weights_manifest.json](docs/weights_manifest.json) | Parameters and bytes of every model against the host's limits; file list with checksums of the base models and our weights |
 | [docs/CODEMAP.md](docs/CODEMAP.md) | Index of scripts and modules, channel names, data formats |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | Current status and remaining steps up to the final submission |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | Current status and open steps |
 | [THIRD_PARTY.md](THIRD_PARTY.md) | Models, services and packages with licences |
 | [CHANGELOG.md](CHANGELOG.md) | Versions of this repository |
 

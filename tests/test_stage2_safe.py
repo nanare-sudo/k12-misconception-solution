@@ -196,7 +196,8 @@ def test_stage2_s036_file_fields_and_null_model(tmp_path):
     assert nul["align_mode"] == "inductive" and nul["test_draws"] == s2["test_draws"]
 
 
-@pytest.mark.skipif(not BUILD.is_file() or not STAGE2_FILE.is_file(), reason="build script or deployment file missing")
+@pytest.mark.skipif(not BUILD.is_file() or not STAGE2_FILE.is_file() or not (COMP / "artifacts" / "submissions" / "sub_s030n_safe.csv").is_file(),
+                    reason="build script, deployment file or predecessor file (written by the build path) missing")
 def test_build_script_s036_fixed_checksums_match_files():
     txt = BUILD.read_text()
     pins = {"STAGE2_SHA": STAGE2_FILE, "STACK_SHA": COMP / "artifacts" / "stack_v1r_zs27t_think18sb_pr27xm_m3x3_full_ar.json",

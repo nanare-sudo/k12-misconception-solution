@@ -1,0 +1,196 @@
+# M3 with the student photo at long side 2,048 px (draw h, seed 5) on the training rows of folds 1, 2 and 0 (out of fold): the
+# fold adapters of M3 (m3_pilot_rp/m3_train_f1, m3_train_f2; m3_f034_rp/m3_train_f0), generation and exact ranking both with
+# image.max_side = image.min_side = 2048 (M3 was trained at 1,024 px), max_model_len 20,000, sampled with the settings of the
+# model card (temperature 0.6, top_p 0.95, top_k 20), 5,200 tokens. The only change against the draw d4 (m3d4_oof_rp.yaml) is the
+# image size and the seed. Folds 3 and 4: m3hb_oof_rp.yaml (the same file except for the folds).
+# Inputs: the three fold adapters under the same output root.
+# Use: fifth member of the M3 mean of primary submission A, only on the rows of the list "character height <= 20 px"
+# (tools/make_charsize_rows.py); out-of-fold evaluation of this role in docs/VALIDATION.md.
+# Hardware: one RTX PRO 6000 (96 GB, 200 GB disk); about 9 s per row for the generation and 5 s for the ranking, about 4 h.
+run: m3ha_oof_rp
+models:
+  q38_27b:
+    repo: Qwen/Qwen3.8-27B
+    revision: 1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0
+    dtype: bf16
+    max_beam_tokens: 600000
+  m3h_f1:
+    merged: m3h_f1_merged
+    dtype: bf16
+    max_beam_tokens: 600000
+  m3h_f2:
+    merged: m3h_f2_merged
+    dtype: bf16
+    max_beam_tokens: 600000
+  m3h_f0:
+    merged: m3h_f0_merged
+    dtype: bf16
+    max_beam_tokens: 600000
+workers:
+- gpu: 0
+  jobs:
+  - name: m3h_merge_f1
+    kind: merge
+    model: q38_27b
+    adapter_from: ../m3_pilot_rp/m3_train_f1
+    out_model: m3h_f1_merged
+  - name: m3h_gen_f1
+    kind: sft_gen
+    model: m3h_f1
+    split: train
+    rows:
+      folds:
+      - 1
+    order_seed: 0
+    image:
+      max_side: 2048
+      min_side: 2048
+      question_max_side: 448
+    max_tokens: 5200
+    temperature: 0.6
+    top_p: 0.95
+    top_k: 20
+    seed: 5
+    concurrency: 64
+    guard_rows: 24
+    guard_min_complete: 0.25
+    max_failed: 0.05
+    request_timeout_s: 1200
+    tag: gen
+    server:
+      max_model_len: 20000
+      gpu_memory_utilization: 0.9
+      max_num_seqs: 64
+      startup_s: 900
+      pip: vllm==0.31.0 transformers==5.17.0
+  - name: m3h_rank_f1
+    kind: bench
+    model: m3h_f1
+    rows:
+      folds:
+      - 1
+    sft_from: m3h_gen_f1/gen
+    probes:
+    - proto_rank
+    image:
+      max_side: 2048
+      min_side: 2048
+      question_max_side: 448
+    batch: 6
+    beams: 74
+    finish_tokens: 320
+    prefix_cache_tol: 0.12
+    prefix_cache_same_top: false
+    prefix_cache_check_rows: 4
+    save_every: 25
+    drop_model: true
+  - name: m3h_merge_f2
+    kind: merge
+    model: q38_27b
+    adapter_from: ../m3_pilot_rp/m3_train_f2
+    out_model: m3h_f2_merged
+  - name: m3h_gen_f2
+    kind: sft_gen
+    model: m3h_f2
+    split: train
+    rows:
+      folds:
+      - 2
+    order_seed: 0
+    image:
+      max_side: 2048
+      min_side: 2048
+      question_max_side: 448
+    max_tokens: 5200
+    temperature: 0.6
+    top_p: 0.95
+    top_k: 20
+    seed: 5
+    concurrency: 64
+    guard_rows: 24
+    guard_min_complete: 0.25
+    max_failed: 0.05
+    request_timeout_s: 1200
+    tag: gen
+    server:
+      max_model_len: 20000
+      gpu_memory_utilization: 0.9
+      max_num_seqs: 64
+      startup_s: 900
+      pip: vllm==0.31.0 transformers==5.17.0
+  - name: m3h_rank_f2
+    kind: bench
+    model: m3h_f2
+    rows:
+      folds:
+      - 2
+    sft_from: m3h_gen_f2/gen
+    probes:
+    - proto_rank
+    image:
+      max_side: 2048
+      min_side: 2048
+      question_max_side: 448
+    batch: 6
+    beams: 74
+    finish_tokens: 320
+    prefix_cache_tol: 0.12
+    prefix_cache_same_top: false
+    prefix_cache_check_rows: 4
+    save_every: 25
+    drop_model: true
+  - name: m3h_merge_f0
+    kind: merge
+    model: q38_27b
+    adapter_from: ../m3_f034_rp/m3_train_f0
+    out_model: m3h_f0_merged
+  - name: m3h_gen_f0
+    kind: sft_gen
+    model: m3h_f0
+    split: train
+    rows:
+      folds:
+      - 0
+    order_seed: 0
+    image:
+      max_side: 2048
+      min_side: 2048
+      question_max_side: 448
+    max_tokens: 5200
+    temperature: 0.6
+    top_p: 0.95
+    top_k: 20
+    seed: 5
+    concurrency: 64
+    guard_rows: 24
+    guard_min_complete: 0.25
+    max_failed: 0.05
+    request_timeout_s: 1200
+    tag: gen
+    server:
+      max_model_len: 20000
+      gpu_memory_utilization: 0.9
+      max_num_seqs: 64
+      startup_s: 900
+      pip: vllm==0.31.0 transformers==5.17.0
+  - name: m3h_rank_f0
+    kind: bench
+    model: m3h_f0
+    rows:
+      folds:
+      - 0
+    sft_from: m3h_gen_f0/gen
+    probes:
+    - proto_rank
+    image:
+      max_side: 2048
+      min_side: 2048
+      question_max_side: 448
+    batch: 6
+    beams: 74
+    finish_tokens: 320
+    prefix_cache_tol: 0.12
+    prefix_cache_same_top: false
+    prefix_cache_check_rows: 4
+    save_every: 25
+    drop_model: true

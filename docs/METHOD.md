@@ -1,6 +1,6 @@
 # Method
 
-*Status: 2026-11-08 (version 0.3). Numbers are out-of-fold (OOF) MAP@3 on the 1,500 labelled training rows unless stated
+*Status: 2026-11-15 (version 0.4). Numbers are out-of-fold (OOF) MAP@3 on the 1,500 labelled training rows unless stated
 otherwise. "±" is the standard error from a bootstrap over questions; see [VALIDATION.md](VALIDATION.md).*
 
 **Contents:**
@@ -343,6 +343,64 @@ then name the code.
   the same top code as the untrained test ranking in 82.3 % of the rows. Against the final form with `pr27xm` the top code
   changes in 52 test rows (1.5 %).
 - **Cost.** About 4.7 USD for the training side and about 12 USD for the test side on an RTX PRO 6000.
+
+### 4.8 M3 with four and five draws (final submissions)
+
+Both final submissions keep the channels of `primary_m3px27` (§4.7) and change only the M3 channel.
+
+**Four draws (`m3x4_full`, submission B).** The fourth draw d4 is sampled like d3 with seed 4 (training side
+`m3d4_oof_rp`, test side `m3d4te_rp`; MAP@3 of d4 alone 0.750). The channel is the mean of d1, d2, d3, d4 in this fixed
+order; the second-stage features keep reading d1–d3 (field `draws_first`), so on both sides the features are those the
+reranker was fitted with.
+- **Why a fair bank.** Comparing "three draws plus the new one" with "the three draws the recipe was tuned on" is biased
+  against the new draw: the recipe (blend weights, second stage) was selected while d1–d3 were known. The pre-registered
+  rule therefore compares like with like. For each of the four triples T_j of {d1, d2, d3, d4} it computes R3_j (channel =
+  mean of T_j, features from T_j) and R4_j (channel = mean of all four, features from T_j), and G = mean_j R4_j − mean_j R3_j.
+  The copy null point K_{j,k} uses one member of T_j twice as the fourth member; G_copy = mean_{j,k} K_{j,k} − mean_j R3_j
+  measures what "one more member" is worth without new information. Every value is the mean of the per-fold and the
+  as-one-set form, ½(F+M), computed exactly in sixths of a row.
+- **Rule** (fixed before the test side was computed): deploy if, over the 20 meta-splits 1000–1019, mean G > 0 and mean G >
+  mean G_copy, and if on the original meta-split R4_0 − R3_0 exceeds its copy null point; in addition the test-side copy null
+  point (d4 removed) must rebuild the predecessor byte for byte.
+- **Result.** G = +0.00109 ± 0.00015 over the 20 meta-splits (20 of 20 positive), against a copy null point of −0.00036; on
+  20 further meta-splits 2000–2019 (final check, not used for the choice) +0.00137 (19 of 20). The earlier form "new draw
+  against the tuned set" gave about 0. Test side: 3,498 of 3,498 rows ranked exactly, settings equal those of the OOF draw,
+  share of `NONE` at the top inside the band of d1–d3. Against `primary_m3px27` the top code changes in 74 test rows.
+
+**Fifth draw with the large photo on the rows with small script (`m3x5h`, submission A).**
+- **Finding.** Among 164 label-free image statistics, the only robust driver of the loss is the character height: the
+  photos are resized to a long side of 1,024 px (one image token per 32 × 32 px), the median character height is about
+  17 px, and MAP@3 of the line by thirds of the character height was 0.805 / 0.850 / 0.867. Photometric normalisation of the
+  photo made no difference. A larger input (long side 2,048 px) lifts the untrained exact-scoring channel by +0.029 ± 0.006
+  and the protocol channel by +0.020 ± 0.007 as single channels — but neither gain reaches the line, neither as a
+  replacement of a member nor as extra second-stage columns (as a column −0.0018 ± 0.0003: where the new reader contradicts
+  the line, the line is mostly right).
+- **Draw h.** M3 with the photo at long side 2,048 px (`image.max_side = image.min_side = 2048` in generation and ranking;
+  seed 5; the adapters were trained at 1,024 px). Training side `m3ha_oof_rp`/`m3hb_oof_rp` with the fold adapters, test side
+  `m3hte_a_rp`/`m3hte_b_rp` with the full fit. Alone it is the best single draw (MAP@3 0.777 against 0.750–0.770 for d1–d4;
+  +0.02 on rows with small and medium script, 0 on large script).
+- **Role.** Draw h joins the M3 mean only on the rows of the list "character height ≤ 20 px" (`tools/make_charsize_rows.py`:
+  median height of the connected components of the photo at long side 1,024 px; the threshold is the lower two-thirds
+  quantile of the training photos; 1,001 of 1,500 training rows and 2,459 of 3,498 test rows). Per row the channel is the
+  mean of the draws that cover the row (five on the list, four elsewhere); outside the list it is `m3x4_full` bit for bit.
+  Blend and second stage (with the nine extra columns of §9.12) are refitted.
+- **Rule** (pre-registered): deploy the best of the roles "fifth member of the mean", "replacement of a 1,024-px member",
+  "own channel" — each also restricted to the rows with small script — only if, over 20 untouched meta-splits, it is above 0
+  in the as-one-set form and in ½(F+M) and above the same role filled with a 1,024-px draw (copy null point: one of the four
+  draws twice). Result (meta-splits 11000–11019, against the intermediate form): fifth member on the listed rows +0.00083 ±
+  0.00017 in ½(F+M) and +0.00108 ± 0.00030 as one set (positive in 85 % and 75 % of the meta-splits); on all rows +0.0007;
+  as replacement or with half weight negative. On the original meta-split ½(F+M) −0.0009, as one set −0.0002.
+- **Limits.** The best copy null point (d3 twice) reaches +0.0009, so the gain cannot be told apart from "one more useful
+  draw"; it does not extrapolate to more 2,048-px draws: a line with only draw h is 0.0023 below a line with only one
+  1,024-px draw. A pilot that retrained the M3 adapter of fold 1 at 2,048 px gave no better channel than the existing
+  draws (+0.004 ± 0.014 against d1–d4 on the 300 rows of the fold) and was not continued.
+- **Test-side guard of draw h** (fixed in advance): on the listed test rows the shares of answered rows, of complete texts,
+  of `NONE` and of the general codes at the top, the mean agreement of the top code with d1–d4, the mean note length and
+  the mean top probability must each lie within ±10 % of the training-side value (listed training rows) or within |z| ≤ 3;
+  answered rows ≥ 97 %; the exact ranking must cover exactly the list, with the settings of the OOF draw and the adapter of
+  the full fit. Three positive controls (rows shifted, a uniform draw, cut notes; in memory) must each trigger it. The share
+  of `NONE` at the top of draw h on the list must also lie in the fault band 0.27–0.42, fixed before any output of the test
+  draw was read.
 
 ## 5. Teacher pseudo-labels for the unlabelled pool
 
@@ -731,6 +789,43 @@ Only aggregates are used; see [VALIDATION.md](VALIDATION.md#6-checks-before-a-su
   band, guard (c) 0.0400 (OOF 0.0407), class masses L1 0.0282. Another top code than `safety_nd` in 38 test rows (1.1 %);
   the share of `NONE` at the top is unchanged.
 
+### 9.12 Extra columns from frozen protocol answers (intermediate form and submission A)
+
+- **Idea.** Signals that each looked too small to keep on their own (+0.0002 to +0.0008) were collected as columns and
+  tested **together**, as a bundle against a placebo bundle of the same size, on meta-splits that no earlier decision had
+  seen. The bundle of nine columns from eight sources is appended at the end of the main model `main_guard_i1_mm`
+  (`src/stage2_sources.py`; 64 + 9 = 73 features); the blend is unchanged.
+- **Sources** (per candidate code of a row; the label-dependent ones read labels of the reference rows only):
+
+  | Source | Columns | Definition |
+  |---|---:|---|
+  | `c_vote[pr27+q397]` | 1 | number of the two protocol answers (our 27B, the 397B) whose root code is the candidate |
+  | `b_last[pr27+q397]` | 1 | number of answers whose first-pass notes name the candidate as the last code |
+  | `a_major[pr27+q397]` | 1 | number of finding lists that carry the candidate as a major finding |
+  | `c_formed[pr27+q397]` | 1 | votes only of answers that reached a formed verdict |
+  | `d_minor[pr27+q397]` | 1 | −minor(candidate) × number of answers whose read final answer matches the key mechanically |
+  | `k_nov_single[q397]` | 1 | top code of the 397B answer × "the code was never the root for this question among the reference rows" (`NONE` never novel) |
+  | `fac27_rule` | 2 | the 27B answer's own verdict "final answer correct" × {candidate has default severity minor, candidate is `ANS-01`} |
+  | `psy_adm_sec` | 1 | 1 if the taxonomy section of the candidate occurred as root in the row's topic among the reference rows (four broad sections always 1) |
+
+  Reference rows: the other folds for a training row (inside a training block of the nested evaluation also without the outer
+  fold), all 1,500 training rows for a test row. A ninth source (novelty of `OTH-00` with a count of reference rows per task)
+  was part of the measured bundle but failed the test guard — the count is not transferable, because training rows count
+  reference rows of four folds and test rows of five — and is not deployed.
+- **Transfer risk of the 397B.** The training side of the 397B columns comes from the hosted API, the test side from our own
+  FP8 run with the parser of the training side. A test guard per column and source (fixed in advance: band ±15 % relative
+  or |z| ≤ 3 against the training statistics, valid answers per source ≥ 0.97) runs in every assembly and aborts without a
+  file. Positive controls change the test sources in memory (10 % of the 397B answers dropped, 397B verdicts unformed or
+  rotated by one row, the mechanical match zeroed, the 27B verdict flipped, topics unknown; one more control applies only
+  to the dropped ninth source); each applicable control must trigger the guard. All 43 statistics held on the test side
+  (largest |z| 2.31).
+- **Effect** (paired against submission B, ½(F+M)): +0.00169 ± 0.00015 over meta-splits 4000–4019 (20 of 20 positive),
+  +0.00177 ± 0.00025 over 5000–5019 (placebo bundle −0.00044), +0.00178 ± 0.00025 over 6000–6019; original meta-split
+  +0.0016 (as one set +0.0027). Against submission B the top code changes in about 60 test rows; the share of changed top
+  codes on the test side (0.038) lies inside the band of guard (c) (OOF 0.050).
+- **Copy null point.** With the columns set to zero in the fit, rows, models and files of submission B are reproduced; the
+  test side through the new path rebuilds submission B byte for byte.
+
 ## 10. Blank photos
 
 A black or empty photo shows no working. The only such training row carries the meta code `REL-01` (upload does not
@@ -739,6 +834,13 @@ of the single image; the list is delivered frozen, its script is not part of thi
 the order of the other candidates is kept. This applies to 1 training row and 6 test photos and is worth about +0.001.
 
 ## 11. The two lines
+
+**Final selection (version 0.4).** Both final submissions come from the primary line: primary submission A (five M3 draws
+with the large photo on the rows with small script, extra columns; §4.8, §9.12) and primary submission B (four M3 draws;
+§4.8). The host confirmed in the forum that the techniques that separate the primary from the safety line — pseudo-labels
+from a paid API on unlabelled and labelled rows, models up to the size of Nemotron 550B with a combined weight of about
+512 GB, and the hosted API that the host recommended — are allowed ([DATA_AND_COMPLIANCE.md](DATA_AND_COMPLIANCE.md)). The
+safety line stays documented below as the earlier design.
 
 Some techniques rest on an interpretation of the rules; the transductive alignment is one. Others are explicitly allowed
 but depend on external services during development: the teacher pseudo-labels and the API-generated 397B outputs on

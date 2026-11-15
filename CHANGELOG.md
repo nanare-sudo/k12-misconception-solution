@@ -3,6 +3,95 @@
 This file records notable changes to the solution repository. Dates are UTC. The repository is a living document until
 the final solution package is delivered.
 
+## v0.4 — 2026-11-15
+
+Fifth version: the two final submissions, both from the primary line.
+
+### Added
+
+- **Primary submission B** (`primary_m3x4`): the version-0.3 primary candidate with a fourth M3 draw in the M3 channel
+  (`m3x4_full`; second-stage features still from d1–d3, field `draws_first`). Deployment path `eda/c135_primary_m3x4.py`
+  (`oof`, `stack`, `fit`, `copy`, `clean-copy`, `test-guard`, `null`; evidence of the four-draw rule `bank`, `final`,
+  `placebo`, `rule`), build script `tools/builds/primary_m3x4.sh`, tests `tests/test_primary_m3x4.py`, test-side configuration
+  `configs/vlm/m3d4te_rp.yaml`.
+- **Intermediate form** (`primary_cols`; built on the way to submission A): nine extra second-stage columns from eight sources
+  computed on the CPU from frozen protocol answers of our 27B and of the 397B, the blend channels, the taxonomy and the
+  training labels of the reference rows (`src/stage2_sources.py`), with a test guard per column and source and positive
+  controls. Deployment path `eda/c151_primary_cols.py` (`test-sources`, `fit`, `copy`, `measure`, `null`, `test-guard`,
+  `controls`), build script `tools/builds/primary_cols.sh`, tests `tests/test_primary_cols.py`.
+- **Primary submission A** (`primary_m3x5h`): the intermediate form with a fifth M3 draw that reads the photo at long side
+  2,048 px, counted only on the rows whose median character height is at most 20 px (channel `m3x5h`; a "draw with row
+  list"). Row-list tool `tools/make_charsize_rows.py`; deployment path `eda/c166_primary_m3x5h.py` (`digest`, `oof`, `stack`,
+  `fit-base`, `fit`, `copy`, `clean-copy`, `h-guard`, `h-controls`, `null`, `measure`), build script
+  `tools/builds/primary_m3x5h.sh`, tests `tests/test_primary_m3x5h.py`, configurations `configs/vlm/m3ha_oof_rp.yaml`,
+  `m3hb_oof_rp.yaml`, `m3hte_a_rp.yaml`, `m3hte_b_rp.yaml`.
+- `docs/PROVENANCE.md` (every frozen input of the two final submissions: producer, configuration, network status,
+  determinism; the training chain and its open items), `docs/MODEL_SIZES.md` (parameters and bytes against the host's limits
+  in two readings) and `docs/weights_manifest.json` (file list with checksums of the three base-model revisions and of our
+  weights).
+- `docs/INFERENCE.md` §10: recomputing the 397B channel on the test rows (hardware, environment, server switches, order of
+  the steps for a run without network access, fidelity check, open points). Configurations `configs/vlm/q397te8_rp.yaml`,
+  `q397p8_rp.yaml` (8×H100 variant, never run).
+
+### Changed
+
+- `tools/make_submission.py`: the complete internal delta since version 0.3 — draws with a row list (meta field
+  `rank.row_list_draws`, `--rank-only-placeholder` for the stand-in and the copy null point), extra second-stage columns (field
+  `extra_columns` of a deployment file, `--stage2-xcontrol`), `draws_first`, and two inert additions for candidates outside the
+  final slots (a separate source of named codes, field `rank_mean.named`; the safety-line feature set `fallback_i1_ndr_mmid`
+  with its mech27 guard and control `mech_flip`). Without these fields every earlier deployment file computes and reports
+  byte-identically.
+- `src/stage2.py`: the feature set `fallback_i1_ndr_mmid` (inert for the final submissions).
+- Tests `tests/test_stage2_guard.py`, `test_stage2_i1.py`, `test_stage2_mm.py`, `test_stage2_safe.py`: four tests that read
+  report files written by the build paths (not part of the frozen package) now skip when these files are absent, as the
+  other package-dependent tests do.
+- Documentation: README (final submissions, channels, results, quick start), METHOD §4.8 and §9.12 and §11 (final
+  selection), VALIDATION §8, RESULTS, TRAINING §10.1 (the M3 training targets are **not** in the private package — version 0.3
+  said they were), §10.3 and §16, INFERENCE §2/§3/§5/§6.1/§7/§9, DATA_AND_COMPLIANCE (host statements of 2026-10-26 and
+  2026-11-10, sizes, both slots from the primary line), CODEMAP, ROADMAP, THIRD_PARTY.
+
+### Verification of this version
+
+- The new modules and build scripts are translations of the internal code that built the submitted files (internal
+  commit of 2026-11-14; unchanged since). Their structure was compared with the internal code by masked syntax-tree
+  comparison (strings masked, identifiers mapped by the rename table); every difference is a declared change (removed
+  comparisons with internal measurement files that are not part of this repository, removed candidate outside the final
+  slots, pins of regenerated JSON files emptied). Build scripts: heredocs compared as Python, shell lines normalised;
+  configurations: parsed content equal.
+- **Not run in this version:** a build of the new paths. The checksums of the JSON files that this code regenerates are
+  learned on the first build in the package ([docs/INFERENCE.md](docs/INFERENCE.md#2-lines-and-expected-checksums)); the CSV
+  and test-matrix checksums of both final submissions are pinned. Both final files were rebuilt byte for byte on a Kaggle
+  CPU without network access with the internal code version.
+- Training side of submission B rerun with the code of this repository (a scratch tree with only training-side files):
+  the M3 channel file `oof_m3x4_full.npy` is byte-identical to its pinned checksum, the blend refit shows no numeric
+  difference, and the fair-bank record of the original meta-split and the verdict of the four-draw rule equal the internal
+  records. `src/stage2_sources.py` was checked against the internal module on synthetic inputs: columns, test guards, all
+  seven controls and the checksums of the column matrices are identical.
+- Tests: 605 passed and 42 skipped with a copy of the private package (no file written into the package); 560 passed and
+  87 skipped with the repository files only.
+
+### State of the solution
+
+| Line and form | Status | CV MAP@3 (per fold / as one set) | Public LB |
+|---|---|---|---:|
+| **Primary submission A**: five M3 draws (the fifth at 2,048 px on the rows with small script) and nine extra second-stage columns | final submission; submitted 2026-11-14 | 0.8426 / 0.8404 | 0.84266 |
+| Intermediate form: four M3 draws and the nine extra columns | step 0 of A; submitted 2026-11-13; not a final submission | 0.8441 / 0.8407 | 0.84283 |
+| **Primary submission B**: four M3 draws | final submission; submitted 2026-11-08 | 0.8436 / 0.8380 | 0.84450 |
+
+The gains that decided the forms were measured as paired differences over untouched meta-splits, not on the original
+meta-split shown here ([docs/RESULTS.md](docs/RESULTS.md), [docs/VALIDATION.md](docs/VALIDATION.md#8-final-submissions-version-04)).
+
+### Known gaps
+
+The following items are tracked in [docs/ROADMAP.md](docs/ROADMAP.md#2-open-steps):
+- the first build with the code of this repository (checksums of the regenerated JSON files);
+- smoke tests without network access for the model steps of both final submissions, including the 397B path;
+- the private copies of the frozen inputs, deployment files and M3 training targets in the state of this version;
+- lock files, wheelhouse and a single entry point per line;
+- a mode that re-records the checksums of newly computed test-side files;
+- the scripts that are not yet exported (listed in [docs/PROVENANCE.md](docs/PROVENANCE.md#9-open-items-of-this-list));
+- an estimate of the rerun variance of the generated texts.
+
 ## v0.3 — 2026-11-08
 
 Fourth pre-final version: new final candidates of both lines.

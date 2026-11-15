@@ -1,6 +1,6 @@
 # Code map
 
-*Status: 2026-11-08 (version 0.3). Every script and module of this repository with its role. How to run the steps is in
+*Status: 2026-11-15 (version 0.4). Every script and module of this repository with its role. How to run the steps is in
 [TRAINING.md](TRAINING.md) and [INFERENCE.md](INFERENCE.md); the method is in [METHOD.md](METHOD.md).*
 
 **Contents:**
@@ -50,9 +50,10 @@
 | `src/metric.py` | MAP@3 (`map3`, `map3_from_proba`, `top3_indices`), bootstrap and paired bootstrap |
 | `src/submission_io.py` | Building, strictly checking and writing a submission (format traps of this competition) |
 | `src/transcription.py` | Reading the annotators' transcriptions and removing label leaks (training side only) |
-| `src/stage2.py` | Second stage: candidate set, pair features (sets `main`, `fallback`, `main_guard`, `main_guard_i1`, `main_guard_i1_mm`, `fallback_i1`, `fallback_i1_nd`, `fallback_i1_ndr`), row × candidate interactions (`i1_interactions`), the mechanical-match row feature (`attach_mech`), the regex note columns (`attach_r`), conditional logit, abstention gate, NONE guard (`protect_none`), notes statistics and their guard |
+| `src/stage2.py` | Second stage: candidate set, pair features (sets `main`, `fallback`, `main_guard`, `main_guard_i1`, `main_guard_i1_mm`, `fallback_i1`, `fallback_i1_nd`, `fallback_i1_ndr`, `fallback_i1_ndr_mmid`), row × candidate interactions (`i1_interactions`), the mechanical-match row feature (`attach_mech`), the regex note columns (`attach_r`), conditional logit, abstention gate, NONE guard (`protect_none`), notes statistics and their guard |
 | `src/note_sim.py` | Example similarity of the M3 notes for the safety line: TF-IDF per draw fitted on the training notes only, similarity to notes of real assignments of a code from other questions (`demo_sim`), similarity guard |
 | `src/note_regex.py` | Versioned extractor of the regex-exact note columns R (mentions in the M3 notes and in the protocol-channel note) and their guard |
+| `src/stage2_sources.py` | Extra second-stage columns of the final submission A and the intermediate form: readers of the frozen protocol answers of our 27B and of the 397B (training and test side, parser cross-check, checksums), the nine column sources (`SOURCE_ORDER`, variants `VARIANTS`), their test guard per column and source (`GUARD_RULE`, `guard_stats`, `guard_check`) and the positive controls (`CONTROLS`) |
 | `src/answer_match.py` | Mechanical comparison of a final answer with the answer key without `eval` (AST evaluator, Indonesian number format, LaTeX), reader of the frozen protocol answers, minor-code mask |
 | `src/orient.py` | Orientation network: ink maps, training with fixed seeds, inference, rotation lists |
 | `kaggle_core/__init__.py`, `src/vlm/__init__.py` | Package markers |
@@ -96,6 +97,9 @@
 | `c129_safety_nd.py` | Note mentions and example similarity in the second stage of the safety line: frozen training notes of the M3 draws (`export-notes`), nested reproduction with copy null point and placebos (`oof`), new meta-splits (`splits`), rule with the risk rule (`rule`), deployment file `stage2_safety_nd.json` (`fit`), null model (`null`), copy null point with the weights of the predecessor (`b-zero`) |
 | `c130_safety_ndr.py` | Regex-exact note columns in the second stage of the safety line: re-export check of the frozen protocol notes (`export-notes`), nested reproduction (`oof`), full draw swap over four M3 draws (`swap`), new meta-splits (`splits`), rule with the risk rule (`rule`), deployment file `stage2_safety_ndr.json` (`fit`), `null`, `b-zero` |
 | `c132_m3px27_eval.py` | Evaluation of the channel `m3px27` (M3 ranking behind the protocol notes) by its pre-registered rule with controls of the same role; channel artifact `oof_m3px27` (`--oof-save`, `--oof-verify`); the build script reads its stored verdict |
+| `c135_primary_m3x4.py` | Final submission B: the four-draw M3 channel `m3x4_full` (`oof`), blend (`stack`), the second-stage chain with the swapped channel (`fit`), copy null point "d4 removed" (`copy`, `clean-copy`), guard of the d4 test side (`test-guard`), null model (`null`); evidence of the four-draw rule (`bank`, `final`, `placebo`, `rule`) |
+| `c151_primary_cols.py` | Intermediate form: second stage with the extra columns of `src/stage2_sources.py` (`test-sources`, `fit`, `copy`, `null`), the paired measurement over meta-splits (`measure`), the test guard from a report of `make_submission` (`test-guard`) and its positive controls (`controls`) |
+| `c166_primary_m3x5h.py` | Final submission A: digests of the files of draw h (`digest`), the five-draw channel `m3x5h` with the row list (`oof`), blend (`stack`), second stage without and with the extra columns (`fit-base`, `fit`), copy null point "empty list" (`copy`, `clean-copy`), test guard of draw h and its positive controls (`h-guard`, `h-controls`), null model (`null`) |
 | `c133_primary_m3px27.py` | Deployment path of the primary candidate with the mean channel `m3px27xm`: channel artifact (`oof`), blend file (`stack`), the second-stage chain refitted with the swapped channel (`fit`), copy null point of the training side (`copy`, `clean-copy`), guard of the test side (`test-guard`), null model (`null`) |
 | `risk_rule.py` | Risk rule of the safety-line second stages: empirical-Bayes prior from earlier measurements of the same class and the posterior with selection correction |
 | `i5_01_image_stats.py`, `i5_common.py` | Ink maps and image statistics used as input of the orientation network |
@@ -112,6 +116,7 @@
 | `tools/freeze_m3_texts.py` | Freezes M3 notes and findings so that a second machine scores the same texts |
 | `tools/make_q397m3_notes.py` | Notes of the 397B channel in the format of the frozen M3 notes (input of the `q397m3` ranking) |
 | `tools/make_m3px27_notes.py` | Notes of the protocol channel in the format of the frozen M3 notes (input of the `m3px27` ranking) |
+| `tools/make_charsize_rows.py` | Row lists of the character-height rule (`--max-height 20 --name h20`: training and test rows whose median character height in the photo at long side 1,024 px is at most 20 px), from the stored image statistics of `eda/i5_01_image_stats.py`; label-free |
 | `tools/export_proto_notes.py` | Export of the first-pass reasoning of the protocol answers into one note file per table (`data/derived/proto_notes/`, `proto_notes_test/`); recorded state labels |
 | `tools/replay/gates.py` | Regenerates the gate lists of the reasoning channels (`data/derived/think_rows/`) and checks them against the frozen lists |
 | `tools/teacher_api.py` | **Development only.** Teacher pseudo-labels for training and pool rows through the Anthropic API (never test rows; key from the environment; spending cap) |
@@ -141,7 +146,10 @@ blend and second-stage files, runs `tools/make_submission.py` and checks the out
 | `safety_final.sh` | `sub_safety_final.csv` | Safety line, alignment over the test set, second stage with interactions and NONE guard; needs `OVERRIDE_CV_II=override_cv_condition_ii` (`SAFETY_FINAL_PROBE=1`, `SAFETY_FINAL_VARIANT=a\|b`, `SAFETY_FINAL_SPLITS=1`) |
 | `safety_nd.sh` | `sub_safety_nd.csv` | Safety line: the second stage of `safety_final` with the note mentions and the example similarity (`SAFETY_ND_SPLITS=1` recomputes the meta-splits; `SAFETY_ND_NO_REGRESSION=1` skips step 0, for debugging only) |
 | `safety_ndr.sh` | `sub_safety_ndr.csv` | Safety line, final candidate: `safety_nd` with the six regex-exact note columns (`SAFETY_NDR_RECOMPUTE=1` recomputes the draw swap and the meta-splits; `SAFETY_NDR_NO_REGRESSION=1`) |
-| `primary_m3px27.sh` | `sub_primary_m3px27.csv` | Primary line, final candidate: the final form of `primary_final` with the mean channel `m3px27xm` instead of `pr27xm` (`PRIMARY_M3PX27_REGRESSION=primary_final\|full\|0`) |
+| `primary_m3px27.sh` | `sub_primary_m3px27.csv` | Primary line, candidate of version 0.3: the final form of `primary_final` with the mean channel `m3px27xm` instead of `pr27xm` (`PRIMARY_M3PX27_REGRESSION=primary_final\|full\|0`) |
+| `primary_m3x4.sh` | `sub_primary_m3x4.csv` | **Final submission B**: `primary_m3px27` with the four-draw M3 channel `m3x4_full`; step 0 runs `primary_m3px27.sh` |
+| `primary_cols.sh` | `sub_primary_cols.csv` | Intermediate form: submission B with the nine extra second-stage columns; step 0 runs `primary_m3x4.sh` |
+| `primary_m3x5h.sh` | `sub_primary_m3x5h.csv` | **Final submission A**: the intermediate form with the M3 channel `m3x5h` (fifth draw at 2,048 px on the listed rows); step 0 runs `primary_cols.sh` |
 
 The scripts are chained: the main-form script first runs the fallback-form script, which first runs the script without
 second stage; `s035` runs `s034n_stage2_main.sh` and `s036` runs `s030n_safe.sh`; `primary_final.sh` runs
@@ -162,8 +170,8 @@ output with the legacy-list file of the same line, so the legacy-list files must
 | reasoning channel, draw n | `zs27v_n_rp`, `zs27v_n3_rp` | `zs27v_n3_rp` |
 | `pr27` / `pr27xm` (teacher protocol) | `pr27_rp`, `px27_rp`; second draw of the answers `pr27s2_rp`, `pr27s3_rp` (sensitivity check of the safety line only) | `pr27te_rp`, `n1_rp` (`rank_test`) |
 | `m3px27` / `m3px27xm` (M3 behind the protocol notes) | `m3px27_oof_rp` | `m3px27te_rp` |
-| M3 | `m3_pilot_rp`, `m3_f034_rp`, `m3long_rp`, `cv01_m3d2_f034`, `m3d3_oof_rp`, `m3_full_rp`; fourth draw `m3d4_oof_rp` (draw swap and controls only) | `m3_fullte_rp` (d1), `m3d2te_rp` (d2), `m3d3te_rp` (d3) |
-| `q397` / `q397m3` | `q397p_rp` (fidelity check), `q397m3_oof_rp` | `q397te_rp`, `q397m3te_rp` |
+| M3 | `m3_pilot_rp`, `m3_f034_rp`, `m3long_rp`, `cv01_m3d2_f034`, `m3d3_oof_rp`, `m3_full_rp`; fourth draw `m3d4_oof_rp`; draw h at 2,048 px `m3ha_oof_rp`, `m3hb_oof_rp` | `m3_fullte_rp` (d1), `m3d2te_rp` (d2), `m3d3te_rp` (d3), `m3d4te_rp` (d4), `m3hte_a_rp`, `m3hte_b_rp` (h, listed rows) |
+| `q397` / `q397m3` | `q397p_rp` (fidelity check), `q397m3_oof_rp`; never run: `q397p8_rp` | `q397te_rp`, `q397m3te_rp`; never run: `q397te8_rp` (8×H100 variant) |
 | CPU smoke tests | `local_cpu_test`, `local_m3_test`, `local_proto_rank` | — |
 
 Some scripts and comments name runs of variants that are not part of the delivered lines; their configurations are not
@@ -191,6 +199,9 @@ adopted), and `pool_ans_t4` (an early run on pool photos whose row order the tea
 | `test_safety_nd.py` | Feature set `fallback_i1_nd`, example similarity and its guard, positive controls of `apply_stage2_safe`, `c129` checks, checksums of `safety_nd.sh` |
 | `test_safety_ndr.py` | Extractor of the regex note columns and their guard, feature set `fallback_i1_ndr`, controls of the protocol notes, rule logic of `c130`, checksums of `safety_ndr.sh` |
 | `test_m3px27.py` | Notes converter `tools/make_m3px27_notes.py`, the evaluation `c132` (technical checks, early stop, rule, controls) |
+| `test_primary_m3x4.py` | `c135`: four-draw channel, bank and rule computations, copy null point, `make_submission.stage2_draws_first`, pins of `primary_m3x4.sh` |
+| `test_primary_cols.py` | `src/stage2_sources.py` (column definitions, parser cross-check, guard, controls), `c151` checks, the extra-column path of `make_submission`, pins of `primary_cols.sh` |
+| `test_primary_m3x5h.py` | `c166`: five-draw channel with row list, guards and controls of draw h, the row-list draw of `make_submission`, pins of `primary_m3x5h.sh` |
 | `test_primary_m3px27.py` | Note guard and comparison form of the mean channel in `make_submission`, `c118.build_stage2` with a given deployment form, `c133` checks, checksums of `primary_m3px27.sh` |
 | `test_answer_match.py` | Mechanical answer comparison (number formats, fractions, LaTeX, units, no `eval`) |
 | `test_orient_list.py` | Choice and checks of the rotation list (`orient_list.sh`, `tools/orient_list.py`) |
@@ -242,3 +253,5 @@ still write the files that were delivered.
 | Combination of fold runs of M3 draws d1 and d2 | `artifacts/runs/m3_5f/`, `artifacts/runs/m3long_comb/` | `eda/a9_m3_draws_oof.py` |
 | 397B fidelity check on 64 training rows | `artifacts/eda/private/q397_deploy/c109_parity.json` | the build scripts of the primary line (stored verdict) |
 | Posterior step of the M3 decision rule | `artifacts/eda/private/m3_draws_eval/c108_m3_three_draws.json` | the build scripts (stored verdict) |
+| Bundle test of the extra columns and fidelity check of the column sources | measurement files under `artifacts/eda/private/` (reported in [VALIDATION.md](VALIDATION.md#8-final-submissions-version-04)) | not read by the build scripts of this repository; `c151` pins the resulting values |
+| Evaluation of the five-draw rule (draw h) | evaluation files under `artifacts/eda/private/` | not read by the build scripts of this repository; `c166` pins the resulting values |

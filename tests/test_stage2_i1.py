@@ -249,6 +249,8 @@ I1 = COMP / "artifacts" / "stage2_primary_i1.json"
 IOOF = COMP / "artifacts" / "eda" / "private" / "stage2_i1" / "c121_i1_oof.json"
 ISPL = COMP / "artifacts" / "eda" / "private" / "stage2_i1" / "c121_i1_splits.json"
 needs_ioof = pytest.mark.skipif(not IOOF.is_file(), reason="c121 oof not computed yet")
+needs_c118_oof = pytest.mark.skipif(not (COMP / "artifacts" / "eda" / "private" / "stage2" / "c118_oof.json").is_file(),
+                                    reason="report c118_oof.json missing (written by the build path, not part of the frozen package)")
 needs_i1 = pytest.mark.skipif(not (I1.is_file() and GUARD.is_file()), reason="stage2_primary_i1.json missing (only after the pre-registered rule is met)")
 
 
@@ -268,6 +270,7 @@ def test_c121_oof_null_point_and_reference():
 
 
 @needs_i1
+@needs_ioof
 def test_stage2_primary_i1_equals_guard_form_except_main():
     a, b = json.loads(GUARD.read_text()), json.loads(I1.read_text())
     assert [k for k in b if k not in ("i1_build", "derived_from")] == [k for k in a if k != "derived_from"]
@@ -284,6 +287,7 @@ def test_stage2_primary_i1_equals_guard_form_except_main():
 
 
 @needs_i1
+@needs_c118_oof
 def test_c121_fit_verify_reproduces_primary_i1():
     r = subprocess.run(PY + ["eda/c121_stage2_i1.py", "fit", "--stack", "s032_stage2", "--verify"], cwd=COMP, env=ENV, capture_output=True,
                        text=True, timeout=1200)

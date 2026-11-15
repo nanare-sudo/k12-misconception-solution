@@ -43,6 +43,9 @@ Form (fixed before the evaluation; it comes from the reranker family of the mode
   * Feature set "fallback_i1_ndr" (64; safety line with set alignment): "fallback_i1_nd" (58, bit-identical) + the six regex-exact
     note columns R_FEATS at the end (src/note_regex.py: mentions in the M3 notes d1–d3 and in the pr27 note; row-local and
     label-free, therefore in Static: the caller attaches the matrix [rows, classes, 6] with attach_r). Not in FEATURE_SETS.
+  * Feature set "fallback_i1_ndr_mmid" (70 with five channels; safety line, candidate outside the final slots): "fallback_i1_ndr"
+    (bit-identical) + minor_x_mech27 (as main_guard_i1_mm: default severity "minor" of the candidate · mech27 of the row, attach_mech) +
+    the identifiers of the five general codes (id_<code>, as main_guard), both at the end in this order. Not in FEATURE_SETS.
 
 KNOWLEDGE FEATURES: for training rows ONLY from reference rows of other folds — knowledge_other_folds; the row itself and
 its fold never count. For test rows from all training rows.
@@ -84,6 +87,8 @@ ND_SET = "fallback_i1_nd"  # fallback_i1 + note mentions + example similarity (s
 ND_FEATS = ("m3_men", "m3_last", "demo_sim")
 NDR_SET = "fallback_i1_ndr"  # fallback_i1_nd + six regex-exact note columns R (safety line)
 R_FEATS = ("t_m3_logcnt", "t_m3_first", "t_m3_lastpos", "t_pr_men", "t_pr_last", "t_pr_logcnt")  # definition: src/note_regex.py
+NDR_MMID_SET = "fallback_i1_ndr_mmid"  # fallback_i1_ndr + minor_x_mech27 + identifiers of the five general codes (safety line)
+NDR_MMID_FEATS = MM_FEATS + GENERAL_ID_FEATS
 
 
 # ------------------------------------------------------------------------------------------------ building blocks
@@ -115,6 +120,8 @@ def feature_names(chan_names: Sequence[str], feature_set: str = "main") -> list[
         return feature_names(chan_names, FB_I1_SET) + list(ND_FEATS)
     if feature_set == NDR_SET:  # fallback_i1_nd unchanged + the six columns R at the end
         return feature_names(chan_names, ND_SET) + list(R_FEATS)
+    if feature_set == NDR_MMID_SET:  # fallback_i1_ndr unchanged + minor_x_mech27 + identifiers at the end
+        return feature_names(chan_names, NDR_SET) + list(NDR_MMID_FEATS)
     if feature_set not in FEATURE_SETS and feature_set != GUARD_SET:
         raise ValueError(f"unknown feature set {feature_set!r}")
     out = ["f_logp", "f_rank", "f_gap", "f_p", "p_logp", "p_rank"]
@@ -133,7 +140,7 @@ def feature_names(chan_names: Sequence[str], feature_set: str = "main") -> list[
 def uses_notes(feature_set: str) -> bool:
     """Whether a feature set reads the M3 notes (main, main_guard, main_guard_i1, main_guard_i1_mm, fallback_i1_nd, fallback_i1_ndr) — a
     fallback model of the primary line must never do that."""
-    return feature_set in ("main", GUARD_SET, I1_SET, MM_SET, ND_SET, NDR_SET)
+    return feature_set in ("main", GUARD_SET, I1_SET, MM_SET, ND_SET, NDR_SET, NDR_MMID_SET)
 
 
 def attach_mech(st: "Static", mech27: np.ndarray, minor: np.ndarray) -> None:
@@ -306,6 +313,19 @@ def pair_features(st: Static, rows: np.ndarray, FM: np.ndarray, PM: np.ndarray, 
     """Features per (row, candidate) -> X [len(rows)·Kc, f], candidates [len(rows), Kc], names.
     rows: positions of the rows in `st` (table); FM/PM: base form and blend before the last step of EXACTLY these rows;
     kn: knowledge(...) of EXACTLY these rows."""
+    if feature_set == NDR_MMID_SET:  # fallback_i1_ndr bit-identical + minor_x_mech27 + identifiers of the general codes at the end
+        mech27, minor = getattr(st, "mech27", None), getattr(st, "minor", None)
+        if mech27 is None or minor is None:
+            raise ValueError(f"feature set {NDR_MMID_SET} requires attach_mech (mech27 per row, minor per class)")
+        X, cand, names = pair_features(st, rows, FM, PM, kn, NDR_SET, Kc)
+        rows = np.asarray(rows)
+        gi, cc = rows[np.repeat(np.arange(len(rows)), Kc)], cand.reshape(-1)
+        cols = [mech27[gi] * minor[cc]] + [(cc == g).astype(float) for g in st.general_idx]
+        out_names = names + list(NDR_MMID_FEATS)
+        want = feature_names(st.chan_names, NDR_MMID_SET)
+        if out_names != want:
+            raise AssertionError(f"feature order {out_names} != {want}")
+        return np.concatenate([X, np.stack(cols, 1)], 1), cand, out_names
     if feature_set == NDR_SET:  # fallback_i1_nd bit-identical + the six columns R at the end (matrix via attach_r)
         R = getattr(st, "r_feats", None)
         if R is None:

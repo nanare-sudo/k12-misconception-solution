@@ -212,6 +212,8 @@ MAIN_FORM_FILE = COMP / "artifacts" / "stage2_s034.json"
 GUARD_FORM_FILE = COMP / "artifacts" / "stage2_s035.json"
 GOOF = COMP / "artifacts" / "eda" / "private" / "stage2_guard" / "c118_guard_oof.json"
 needs_goof = pytest.mark.skipif(not GOOF.is_file(), reason="c118 guard-oof not computed yet")
+needs_c118_oof = pytest.mark.skipif(not (COMP / "artifacts" / "eda" / "private" / "stage2" / "c118_oof.json").is_file(),
+                                    reason="report c118_oof.json missing (written by the build path, not part of the frozen package)")
 needs_guard_form = pytest.mark.skipif(not (GUARD_FORM_FILE.is_file() and MAIN_FORM_FILE.is_file()), reason="stage2_s035.json missing (built by tools/builds/s035_stage2_guard.sh)")
 
 
@@ -228,6 +230,7 @@ def test_guard_oof_null_point_and_main_reproduction():
 
 
 @needs_guard_form
+@needs_goof
 def test_stage2_s035_equals_s034_except_main():
     a, b = json.loads(MAIN_FORM_FILE.read_text()), json.loads(GUARD_FORM_FILE.read_text())
     assert [k for k in b if k not in ("guard_build", "derived_from")] == [k for k in a if k != "derived_from"]
@@ -243,6 +246,8 @@ def test_stage2_s035_equals_s034_except_main():
 
 
 @needs_guard_form
+@needs_goof
+@needs_c118_oof
 def test_c118_guard_fit_verify_reproduces_s035():
     r = subprocess.run(PY + ["eda/c118_stage2.py", "guard-fit", "--stack", "s032_stage2", "--verify"], cwd=COMP, env=ENV, capture_output=True,
                        text=True, timeout=900)

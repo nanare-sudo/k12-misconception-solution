@@ -1,6 +1,6 @@
 # Inference
 
-*Status: 2026-11-08 (version 0.3). Planned items are marked **Planned** and listed in [ROADMAP.md](ROADMAP.md).*
+*Status: 2026-11-15 (version 0.4). Planned items are marked **Planned** and listed in [ROADMAP.md](ROADMAP.md).*
 
 The final solution is built to run **without network access and without any human step**. No external API is called at
 inference time, and all models in the inference path are open-weight models whose weights, including our trained
@@ -17,6 +17,7 @@ adapters, are part of the delivered package. Smoke tests without network access 
 7. [Run times, cost and package size](#7-run-times-cost-and-package-size)
 8. [Operating rules](#8-operating-rules)
 9. [Running on a new test set](#9-running-on-a-new-test-set)
+10. [Recomputing the 397B channel on the test rows](#10-recomputing-the-397b-channel-on-the-test-rows)
 
 ---
 
@@ -35,9 +36,37 @@ only 84 % of rows, because the server batches requests differently. The texts ar
 
 ## 2. Lines and expected checksums
 
-The current candidates for the two final submissions are the first two rows; the next rows are their fallbacks and the
-files of versions 0.2 and 0.1. All of them use the rotation list of the released orientation network (`ORIENT=repro`, the
-default of the build scripts; see below).
+**The two final submissions (version 0.4).** Both come from the primary line. Each build script runs the build of its
+predecessor as its step 0 and checks that predecessor's files byte for byte, so `primary_m3x5h.sh` builds all three files
+below and the whole earlier chain.
+
+| Submission | Build script | Output file in `artifacts/submissions/` | Bytes | SHA-256 of the file | SHA-256 of the test matrix |
+|---|---|---|---:|---|---|
+| **Primary submission A**: five M3 draws (draw h with the photo at 2,048 px on the rows with small script), nine extra second-stage columns | `bash tools/builds/primary_m3x5h.sh` | `sub_primary_m3x5h.csv` | 115,293 | `4505c15950167650a66cdc60eb9c153eebfb9ed6192277bd283045f3797354e7` | `artifacts/test_primary_m3x5h_m3x5h.npy`: `12c72dccc5995a90f6f406355ec7526a87a8c742dd5402945f003a69c073424a` |
+| Intermediate form (submitted, not a final slot): four M3 draws, nine extra second-stage columns | `bash tools/builds/primary_cols.sh` | `sub_primary_cols.csv` | 115,268 | `53ec296976834959caea500217aa8e01904fbdc8be40a0542f63a462e4251926` | `artifacts/test_primary_m3x4_cols.npy`: `84cf58aac011166aa5c242f94d1b6c19a5e7f7d6892d60157185cdfb1148ec95` |
+| **Primary submission B**: four M3 draws, no extra columns | `bash tools/builds/primary_m3x4.sh` | `sub_primary_m3x4.csv` | 115,259 | `76da786dfdbe6a6ddcbcc93070f385e18870cb5cdaea895d92104aa3565f9973` | `artifacts/test_primary_m3x4_m3x4.npy`: `30f74c8f72746f34cc423df7218bed60e7cf9b121b504a27e34606dbb3c97504` |
+
+**Chain.** `primary_m3x5h.sh` → step 0 `primary_cols.sh` → step 0 `primary_m3x4.sh` → step 0 `primary_m3px27.sh` (the
+candidate of version 0.3) → `primary_final.sh` → `primary_i1.sh` → `s035_stage2_guard.sh` → `s034n_stage2_main.sh` →
+`s034_stage2_main.sh best` → `s032_stage2.sh best` → `s029_q397m3.sh best`. The environment variables
+`PRIMARY_M3X5H_REGRESSION=0`, `PRIMARY_COLS_REGRESSION=0` and `PRIMARY_M3X4_REGRESSION=0` skip the step 0 of the respective
+script and only check the checksums of the predecessor's files (for debugging; a deployment build runs step 0).
+
+**What is pinned in version 0.4.** The three output files and their test matrices are pinned to the values of the
+submitted files above, as are all content files the scripts read: the frozen channel outputs, the row lists, the digests
+over the frozen column sources and over the files of draw h, and the OOF matrices `oof_m3x4_full.npy` and `oof_m3x5h.npy`.
+Not yet pinned are the JSON files that the version-0.4 code writes itself — the channel metadata `meta_m3x4_full.json` and
+`meta_m3x5h.json`, the blend files `stack_primary_m3x4.json` and `stack_primary_m3x5h.json`, the second-stage files
+`stage2_primary_m3x4.json`, `stage2_primary_cols.json`, `stage2_primary_m3x5h_base.json` and `stage2_primary_m3x5h.json`,
+and their reports. These files carry English descriptive fields and the renamed keys of this repository; their numbers
+are those of the files from which the submitted files were built, their checksums are not. On the first build in the
+package the scripts print each such checksum as "FIRST BUILD — checksum …" and continue; the CSV and test-matrix pins
+still decide whether the build reproduces the submitted file. The printed values are then entered into the scripts, and a
+second build must reproduce everything byte for byte (the procedure of the earlier versions). This first build with the
+code of this repository has not been run yet ([ROADMAP.md](ROADMAP.md)).
+
+**Earlier candidates and fallbacks** (versions 0.1–0.3). All of them use the rotation list of the released orientation
+network (`ORIENT=repro`, the default of the build scripts; see below).
 
 | Line and form | Build script | Output file in `artifacts/submissions/` | Bytes | SHA-256 |
 |---|---|---|---:|---|
@@ -53,6 +82,11 @@ default of the build scripts; see below).
 | Strictly inductive line without second stage | `bash tools/builds/s030n_safe.sh` | `sub_s030n_safe.csv` | 115,238 | `8cca7bbfe9b8c9dce47d6153d59712575bb7b8ad6dea8a286f7ef530df448b67` |
 | Primary line, reranker fallback form | `bash tools/builds/s033n_stage2.sh` | `sub_s033n_stage2.csv` | 115,498 | `76aba64fbc431b9ad403a5dec9fb2cefdb7fe2e76260149c96176459c4cd8dfe` |
 | Primary line without second stage (intermediate file) | built by `s033n_stage2.sh` | `sub_s032n_q397m3.csv` | 115,404 | `d1667f6d2fb118844b72ecd8abd85220754a709d468519b7a047a893bbea12f1` |
+
+**Names of the files of version 0.4.** Role names as before: `primary_m3x4` (submission B: the four-draw M3 channel
+`m3x4_full`), `primary_cols` (the intermediate form with the extra columns) and `primary_m3x5h` (submission A: the M3
+channel `m3x5h` with the fifth draw on the listed rows); report folders `artifacts/eda/private/primary_m3x4/`,
+`primary_cols/` and `primary_m3x5h/`. Channel and run names are unchanged.
 
 **Names of the files of versions 0.2 and 0.3.** The build scripts added in these versions, their deployment files
 (`artifacts/stage2_<name>.json`), their output files (`sub_<name>.csv`) and their report folders are named by role:
@@ -182,6 +216,19 @@ and the final candidate with the alignment over the test set); they read the sam
 | Earlier files as references (`submissions/`): `sub_v1r_zs27t_think18sb_pr27xm_m3x2_ar_ia_t4.csv` | yes | — |
 | Earlier files as references (`submissions/`): `sub_s029_best_m3x3.csv`, `sub_v1r_zs27q_think18nb_pr27xm_m3x3_full_w14_ar_ra_t4.csv` | — | yes |
 
+**Additional inputs of the final submissions (version 0.4)**, on top of the primary line above (complete per-file list with
+size, SHA-256, producer and network status: [PROVENANCE.md](PROVENANCE.md); 494 files, 2.66 GB for both submissions):
+
+| Input | Submission B (`primary_m3x4`) | Intermediate (`primary_cols`) | Submission A (`primary_m3x5h`) |
+|---|---|---|---|
+| Fourth M3 draw: `artifacts/runs/m3d4_oof_rp/` (training rows, five folds), `artifacts/runs/m3d4te_rp/` (test rows), frozen test texts `data/derived/sft_k2/m3_d4_test_frozen_notes.jsonl` | yes | yes | yes |
+| `data/derived/m3x3_full_rows.npy` (rows with all M3 draws; all 1,500) | yes | yes | yes |
+| Column sources (training side): protocol answers `artifacts/runs/pr27_rp/pr27_rp/proto_a/`, `proto_b/` (`proto_raw.jsonl`, `proto_labels.jsonl`, `proto_meta.json`), 397B answers through the hosted API `artifacts/runs/q397_tinker/q397_tinker/proto_t/proto_labels.jsonl` and `data/derived/open_teacher/qwen35-397b/raw.jsonl`, the frozen notes `data/derived/proto_notes/train_pr27.jsonl`, `data/derived/sft_q397m3/q397m3_train_notes.jsonl` and their meta files | — | yes | yes |
+| Column sources (test side, pinned by SHA-256 in the deployment file): `artifacts/runs/pr27te_rp/pr27te_rp/proto_te/` and `artifacts/runs/q397te_rp/q397te_rp/proto_te/` (answers and parsed answers), `data/derived/proto_notes_test/test_pr27.jsonl`, `data/derived/sft/q397m3_test_notes.jsonl` and their meta files | — | yes | yes |
+| Draw h (photo at 2,048 px): `artifacts/runs/m3ha_oof_rp/`, `m3hb_oof_rp/` (training rows), `artifacts/runs/m3hte_a_rp/`, `m3hte_b_rp/` (test rows, two shards) | — | — | yes |
+| Row lists "character height ≤ 20 px": `data/derived/charsize/train_h20_rows.npy`, `test_h20_rows.npy`, `charsize_h20.meta.json` (`tools/make_charsize_rows.py`) | — | — | yes |
+| Files of the predecessor (CSV, test matrix, blend and second-stage file; checked by checksum) | `primary_m3px27` | `primary_m3x4` | `primary_cols`, `primary_m3x4` |
+
 The files that the build scripts write and pin themselves are not listed: blend and second-stage files, the meta-split
 files and the probe files of the safety line. The private package contains them, so that the scripts verify them instead
 of recomputing them; without them the scripts recompute them and require the pinned checksums
@@ -244,7 +291,19 @@ bash tools/builds/safety_ndr.sh       # safety line; builds sub_s030n_safe, sub_
                                       #   sub_primary_final, and sub_safety_nd on the way
 bash tools/builds/primary_m3px27.sh   # primary line; runs primary_final.sh again and checks the files of the safety chain
 sha256sum artifacts/submissions/sub_primary_m3px27.csv artifacts/submissions/sub_safety_ndr.csv
+
+# 5. The two final submissions (version 0.4); primary_m3x5h.sh runs primary_cols.sh, which runs primary_m3x4.sh,
+#    which runs primary_m3px27.sh (step 4 is therefore contained in this step)
+bash tools/builds/primary_m3x5h.sh
+sha256sum artifacts/submissions/sub_primary_m3x5h.csv artifacts/submissions/sub_primary_m3x4.csv
+#   expected: 4505c15950167650…  sub_primary_m3x5h.csv (primary submission A)
+#             76da786dfdbe6a6d…  sub_primary_m3x4.csv  (primary submission B)
 ```
+
+Step 5 alone needs the safety chain only through the checksums of its files (`primary_m3px27.sh` checks them); in a
+package without these files run step 4 first, or run steps 3–5 in this order. On the first build with the code of this
+repository the scripts print the checksums of the JSON files they write ("FIRST BUILD", section 2) and end with a note to
+pin them; the CSV and test-matrix checksums above are checked on every build.
 
 Each build script first verifies the checksums of its pinned inputs and recomputes (or verifies) its blend and
 second-stage files from the OOF artifacts. It then calls `tools/make_submission.py`, which:
@@ -306,6 +365,44 @@ python -I tools/make_submission.py --name primary_m3px27 \
   --stage2 artifacts/stage2_primary_m3px27.json --stage2-report artifacts/eda/private/primary_m3px27/guards_primary_m3px27.json
 ```
 
+```bash
+# Primary submission B (primary_m3x4.sh, step 9)
+python -I tools/make_submission.py --name primary_m3x4 \
+  --test v1r=v1rot_t4/rot_test/test@derived/orient_repro/test_c80_rows.npy --fill v1r=v1 \
+  --test v1=v1te_a_t4/v1_test_a/test+v1te_b_t4/v1_test_b/test \
+  --test zs27q=zs27q_test0_rp/zs27q_test0/test+zs27q_test1_rp/zs27q_test1/test \
+  --fill think18nb=zs27q \
+  --test think18nb=zs27v_te_rp/think_te/test/think@derived/think_rows/test.npy,zs27v_n3_rp/think_nte/test/think@derived/think_rows/test_tb_q.npy \
+  --proto m3px27xm=runs/pr27te_rp/proto_te/proto --rank m3px27xm=runs/m3px27te_rp/m3px27_test_rank/test \
+  --rank-only m3x4_full=runs/m3_fullte_rp/m3_test_rank/test,runs/m3d2te_rp/m3d2_test_rank/test,runs/m3d3te_rp/m3d3_test_rank/test,runs/m3d4te_rp/m3d4_test_rank/test \
+  --rank-only q397m3=runs/q397m3te_rp/q397m3_test_rank/test --rank-none-band-for q397m3=0.27,0.35 \
+  --align 0.75 --align-min 3 --blank-rows derived/blank/test_rows.npy \
+  --out artifacts/submissions/sub_primary_m3x4.csv --suffix _m3x4 \
+  --stage2 artifacts/stage2_primary_m3x4.json --stage2-report artifacts/eda/private/primary_m3x4/guards_primary_m3x4.json
+
+# Primary submission A (primary_m3x5h.sh, step 14): the M3 channel m3x5h has five draws; the fifth consists of two shards
+# and counts only on the rows of the test list (draw with row list, field rank.row_list_draws of meta_m3x5h.json)
+python -I tools/make_submission.py --name primary_m3x5h \
+  --test v1r=v1rot_t4/rot_test/test@derived/orient_repro/test_c80_rows.npy --fill v1r=v1 \
+  --test v1=v1te_a_t4/v1_test_a/test+v1te_b_t4/v1_test_b/test \
+  --test zs27q=zs27q_test0_rp/zs27q_test0/test+zs27q_test1_rp/zs27q_test1/test \
+  --fill think18nb=zs27q \
+  --test think18nb=zs27v_te_rp/think_te/test/think@derived/think_rows/test.npy,zs27v_n3_rp/think_nte/test/think@derived/think_rows/test_tb_q.npy \
+  --proto m3px27xm=runs/pr27te_rp/proto_te/proto --rank m3px27xm=runs/m3px27te_rp/m3px27_test_rank/test \
+  --rank-only m3x5h=runs/m3_fullte_rp/m3_test_rank/test,runs/m3d2te_rp/m3d2_test_rank/test,runs/m3d3te_rp/m3d3_test_rank/test,runs/m3d4te_rp/m3d4_test_rank/test,runs/m3hte_a_rp/m3h_test_rank/test+runs/m3hte_b_rp/m3h_test_rank/test@derived/charsize/test_h20_rows.npy \
+  --rank-only q397m3=runs/q397m3te_rp/q397m3_test_rank/test --rank-none-band-for q397m3=0.27,0.35 \
+  --align 0.75 --align-min 3 --blank-rows derived/blank/test_rows.npy \
+  --out artifacts/submissions/sub_primary_m3x5h.csv --suffix _m3x5h \
+  --stage2 artifacts/stage2_primary_m3x5h.json --stage2-report artifacts/eda/private/primary_m3x5h/guards_primary_m3x5h.json
+```
+
+The intermediate form uses the arguments of submission B with `--stage2 artifacts/stage2_primary_cols.json` (`--out
+…/sub_primary_cols.csv --suffix _cols`, report `artifacts/eda/private/primary_cols/guards_primary_cols.json`). Its second
+stage and that of submission A carry the field `extra_columns`: `make_submission` then reads the frozen test-side column
+sources named there (files pinned by SHA-256), computes the nine columns and the test guard per column and source, and
+writes no file if the guard fails. The second stages of both final submissions carry `draws_first: 3`: their features
+read the first three M3 draws (d1–d3) as on the training rows, while the channel averages four or five draws.
+
 - **Fallback forms.** The final form of the primary line with `pr27xm` uses `--name s032_stage2`, `--proto
   pr27xm=runs/pr27te_rp/proto_te/proto --rank pr27xm=runs/n1_rp/rank_test/test` instead of the two `m3px27xm` arguments and
   `--stage2 artifacts/stage2_primary_final.json` (`--out …/sub_primary_final.csv --suffix _primary_final`). The form of the
@@ -364,6 +461,9 @@ texts, notes and gate lists. In `full` the generation jobs run as well.
 | M3 behind the protocol notes | `m3px27xm` | `m3px27te_rp` (full-fit adapter of M3) | RTX PRO 6000 96 GB | primary |
 | M3 merge and draw d1 | `m3x3_full` | `m3_fullte_rp` | RTX PRO 6000 96 GB | both |
 | M3 draws d2 and d3 | `m3x3_full` | `m3d2te_rp`, `m3d3te_rp` | RTX PRO 6000 96 GB | both |
+| M3 draw d4 | `m3x4_full`, `m3x5h` | `m3d4te_rp` | RTX PRO 6000 96 GB | final submissions |
+| Row list "character height ≤ 20 px" | `m3x5h` | `python -I tools/make_charsize_rows.py --max-height 20 --name h20` (stored per-image statistics of `eda/i5_01_image_stats.py`; no photo is read by this step) | CPU | submission A |
+| M3 draw h (photo at 2,048 px, listed rows only) | `m3x5h` | `m3hte_a_rp`, `m3hte_b_rp` (two halves of the list) | RTX PRO 6000 96 GB | submission A |
 | Frozen M3 texts | `m3x3_full`, second stage | `tools/freeze_m3_texts.py` (test rows); the frozen training notes of the safety candidate's similarity reference are part of the training side (`eda/c129_safety_nd.py export-notes`) | CPU | both |
 | 397B protocol notes | `q397m3` | `q397te_rp` (`proto_te`) | 4×H200, tensor parallel 4, FP8 | primary |
 | 397B parity check (64 training rows) | `q397m3` | `q397p_rp`; the stored verdict `eda/private/q397_deploy/c109_parity.json` is read by the build scripts | 4×H200 | primary |
@@ -390,7 +490,7 @@ texts, notes and gate lists. In `full` the generation jobs run as well.
 | S3 | Fast channels: 9B, rotation-corrected 9B, `zs27q` or `zs27t` | Byte-identical on the reference hardware |
 | S4 | Gates | Byte-identical if S3 was |
 | S5 | M3 adapter merge, once for all draws | Checksums of the merged shards |
-| S6 | Texts: reasoning draws g and n, protocol answers, M3 draws d1–d3, 397B notes | Only aggregates against the reference (`full` only) |
+| S6 | Texts: reasoning draws g and n, protocol answers, M3 draws d1–d4 (and draw h on the listed rows for submission A), 397B notes | Only aggregates against the reference (`full` only) |
 | S7 | Export of the protocol notes and M3 texts | Byte-identical in `rescore` |
 | S8 | Exact rankings | Reference hardware: identical |
 | S9 | Assembly | `assemble`: checksum equals the submitted file |
@@ -463,9 +563,19 @@ second stages were added and will be updated.
 - `full` of both lines: about 29.7 h on an RTX PRO 6000, 3.5 h on an A40 and 25 T4 hours, about 76–79 USD.
 - The 397B steps add about 27–42 USD.
 
-**Package size.** About 84–87 GB without the 397B; about 490 GB with it. The 397B FP8 weights alone take about 406 GB
-(378 GiB). The base models are referenced by pinned revision and file checksums; M3 is shipped as an adapter (300.5 MB)
-and merged at run time.
+**Final submissions (version 0.4).** The CPU build of submission A including its whole chain took about 45 minutes on the
+development machine (two BLAS threads; about 15 minutes without step 0) and 3,987 s in the netless Kaggle CPU rebuild of
+both submissions from the frozen inputs (internal code version, see [PROVENANCE.md](PROVENANCE.md)). Test side of the new draws: M3
+draw d4 about 7.4 h on an RTX PRO 6000 (about 17 USD); draw h on the 2,459 listed test rows in two halves of about 4 h each
+(generation about 5.8 s, ranking about 4.8 s per row; about 21.5 USD together).
+
+**Weights.** Counted as deployed (each base model once, adapters as adapters): **481.53 GB** (448.46 GiB), 30.5 GB below
+512 GB; counted at 8 bit per stored value: **440.94 GB**; parameters: 397 B nominal (403.4 B stored values) for the largest
+model, 434.4 B (440.9 B) for all models together, below 550 B. Details, the counting rule and the risks of other counts:
+[MODEL_SIZES.md](MODEL_SIZES.md); file list with checksums: [weights_manifest.json](weights_manifest.json). The 397B FP8
+weights alone take 406.20 GB (378.30 GiB; the runner's log prints GiB as "GB"). The base models are referenced by pinned
+revision and file checksums; M3 is shipped as an adapter (300.5 MB) and merged at run time. The frozen inputs of both
+submissions take 2.66 GB ([PROVENANCE.md](PROVENANCE.md)).
 
 ## 8. Operating rules
 
@@ -507,7 +617,15 @@ fitted on the 1,500 training rows stays as delivered, and only the test side is 
    the test rows) and the test-note fields of `meta_m3px27xm.json` (the notes behind which both rankings of the mean channel
    were computed). They tie these candidates to the test files on which they were checked; on any other test set they stop
    the assembly with an error, independently of the guards. Rewriting them for a new set has not been done or tested. The
-   calls below read none of them.
+   calls below read none of them. **The two final submissions carry more such records:** besides `mech27.test` (both), the
+   second stage of submission A pins the SHA-256 of every test-side column source in `extra_columns.test.files_sha256`
+   (protocol answers of the 27B and of the 397B, their parsed answers and notes; a check that cannot be skipped), and its
+   channel metadata `meta_m3x5h.json` pins the test list of draw h (`rank.row_list_draws[].test`). A rebuild of the two
+   final files is therefore possible only from the frozen test-side outputs (mode `assemble`). A mode that refits nothing
+   but re-records the checksums of newly computed test-side files (a copy of each deployment file with the new test-side
+   checksums, the training side unchanged, and a regression check that the frozen path stays byte-identical) is not built.
+   On a new test set the row list of draw h is made anew with `tools/make_charsize_rows.py` from the image statistics of
+   the new photos (the threshold of 20 px is fixed).
 5. **Guards.** The second stages compare aggregates of the test rows with values from the training rows
    ([METHOD.md](METHOD.md#92-test-side-guards), §9.10 and §9.11). They are meant to stop on a set that does not look like
    the training rows:
@@ -573,3 +691,240 @@ On the competition test set (checked in a fresh copy of the repository with the 
 | Primary line without second stage | `sub_primary_base.csv`, byte-identical to `sub_s032n_q397m3.csv` | `d1667f6d2fb118844b72ecd8abd85220754a709d468519b7a047a893bbea12f1` |
 | Safety line without second stage | `sub_safety_base.csv`, the copy null point of the safety builds | `91a14773ac7ec367b1385f1d304b3b8a74b3d9598aecfd91fee49f62ee4e4bb2` |
 | Strictly inductive line without second stage | `sub_inductive_base.csv`, byte-identical to `sub_s030n_safe.csv` | `8cca7bbfe9b8c9dce47d6153d59712575bb7b8ad6dea8a286f7ef530df448b67` |
+
+
+## 10. Recomputing the 397B channel on the test rows
+
+Applies to both final submissions of the primary line. Every figure below is taken from the configuration files, the
+code or the logs of the reference run; items that have not been verified are listed in
+[section 10.12](#1012-open-points) and are not claimed elsewhere in this section.
+
+### 10.1 What the channel computes
+
+The open model **Qwen3.5-397B-A17B** (official FP8 release) diagnoses every test row once, in the fixed marking protocol
+that our own protocol channel uses. The prompt contains no labelled row.
+
+| Part | Content |
+|---|---|
+| System text | Marking instructions and the full taxonomy (`src/vlm/proto.py`, `system_text`; default naming rule) |
+| User message | Grade, topic and question text; the question diagram if there is one; the answer key; the photo of the working (`proto.user_parts`) |
+| Images | Photo with its long side resized to at most 1,024 px, diagram to at most 448 px (Lanczos), sent losslessly as PNG (`vlm.common.open_image`, `proto.to_messages`) |
+| First request | Thinking mode on (`chat_template_kwargs: {"enable_thinking": true}`), greedy (`temperature` 0, no seed), at most 2,500 new tokens for thinking and answer together. The answer is one JSON object with three codes and their probabilities |
+| Completion request | Only for rows whose first answer is not a valid JSON object: thinking off, at most 1,500 new tokens; the prompt repeats the question with the last 16,000 characters of the model's own first-pass notes (`proto.FINISH_TEXT`) |
+| Concurrency and order | 64 parallel requests; rows in a fixed shuffled order (`order_seed: 0`); an interrupted run resumes from its output files |
+| Guards | Abort if fewer than half of the first 24 rows give a valid answer; the job fails if more than 10 % of rows stay without an answer after three attempts each |
+
+Code: job kind `proto_gen` of the runner (`src/vlm/runner.py` → `src/vlm/proto.py`, `generate`), local vLLM server
+(`src/vlm/think_vllm.py`, `start_server`). Configuration of the test side: `configs/vlm/q397te_rp.yaml`; parity probe on
+64 training rows: `configs/vlm/q397p_rp.yaml`.
+
+Where the outputs go:
+- **Both submissions:** the first-pass thinking of each row is exported as a note (`tools/make_q397m3_notes.py`), and M3
+  (the fine-tuned 27B) writes its finding behind that note and scores all 74 codes (channel `q397m3`, configuration
+  `configs/vlm/q397m3te_rp.yaml`, one RTX PRO 6000).
+- **Submission A (and the intermediate form) only:** the parsed answers (`proto_raw.jsonl`, parsed with the parser of the
+  training-side measurement, checked against `proto_labels.jsonl`) also feed six columns of the second stage
+  (`src/stage2_sources.py`).
+
+The training side of the channel (the same protocol on the 1,500 training rows) was computed through a hosted sampling
+API with the same open model; see [PROVENANCE.md](PROVENANCE.md). No API ever processed a test row.
+
+### 10.2 Hardware
+
+**Reference run:** one machine with **4 × NVIDIA H200** (141 GB each; 139.8 GiB visible to CUDA), tensor parallelism 4,
+rented from RunPod Secure Cloud.
+
+| Resource | Measured or configured in the reference run |
+|---|---|
+| GPU memory per card after loading | 93.35 GiB weights; 94.89 GiB consumed in total before the KV cache |
+| KV cache per card | 32.57 GiB (memory utilisation 0.92 = 128.62 GiB of 139.8 GiB); 1,568,000 tokens in total, i.e. 98 concurrent requests of the maximal length 16,000 |
+| Host memory | 304 GiB available when the weights were loaded |
+| Disk | 600 GB container disk, no network volume; the weights take 406.2 GB |
+| Base image | `runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404` (Ubuntu 24.04, Python 3.12.3, CUDA 12.8 toolkit) |
+| Driver | must run the CUDA 13 user-space libraries of the vLLM environment (section 4); the exact driver version of the reference machine was not recorded |
+| GPU interconnect | vLLM's custom all-reduce failed in this container (most likely no GPU peer-to-peer access); all-reduce over NCCL works |
+
+Other hardware has **not** been run (section 10.12).
+
+### 10.3 Model
+
+| | |
+|---|---|
+| Repository | `Qwen/Qwen3.5-397B-A17B-FP8` (Hugging Face) |
+| Revision | `ea5b4f81096f3901c91dea97f81324302495781d` |
+| Files | 107 files, 406,198,638,888 bytes (406.20 GB = 378.30 GiB); of these 94 `*.safetensors` shards with 406,151,669,464 bytes |
+| Stored tensors | 403,397,928,944 values: 400,719,609,856 in FP8 (E4M3), 2,678,310,448 in BF16, 8,640 in F32 (safetensors metadata of the revision) |
+| Architecture | `Qwen3_5MoeForConditionalGeneration` (mixture of experts, image and text input) |
+| Licence | Apache License 2.0 (licence file read at this revision) |
+| File checksums | [weights_manifest.json](weights_manifest.json): every file with size and LFS SHA-256 (or git blob id for small files) |
+
+The runner downloads the full snapshot of the revision into `$K12_MODELS/Qwen3.5-397B-A17B-FP8/` if it is missing; with
+`HF_HUB_OFFLINE=1` it never downloads and stops if the folder is missing (`src/vlm/runner.py`, `fetch_model`). Its log
+line reports the size in GiB although it writes "GB" (`378.3 GB` = 378.3 GiB = 406.2 GB).
+
+### 10.4 Software environment
+
+Two Python environments on the same machine:
+
+| Environment | Content in the reference run |
+|---|---|
+| Runner (base) | The image's Python 3.12.3 with `transformers==5.15.1 peft==0.21.2 accelerate==1.15.0 flash-linear-attention==0.5.2` and the unpinned `bitsandbytes pyarrow pandas pyyaml pillow` (resolved: bitsandbytes 0.50.2, pyarrow 26.0.0, pandas 3.1.0, PyYAML 6.0.3, Pillow 11.0.0; torch 2.8.0+cu128 from the image). The recorded package list is identical to the source of the base lock file |
+| vLLM server | Virtual environment `/workspace/vllm_env`, created with `uv venv --python <base interpreter>` and `uv pip install vllm==0.31.0 transformers==5.17.0` (`runner.ensure_vllm_env`). Resolved to 199 packages, among them vllm 0.31.0, torch 2.13.0, transformers 5.17.0, flashinfer-python 0.7.0.post1, triton 3.7.1, nvidia-nccl-cu13 2.29.7, cuda-toolkit 13.0.3.0, ninja 1.13.2, tokenizers 0.23.3, numpy 2.3.5, Pillow 13.0.0 |
+
+**Lock files.** A lock file of the vLLM environment pins the same 199 packages (it is kept with the private package and
+is not yet part of this repository). The package list of the reference run differs from it in one package:
+`openai==3.42.0` (lock: 3.41.0; a dependency of vLLM, not used by the job). The lock carries hashes for 130 of its pins;
+the remaining hashes and an offline wheelhouse are still to be produced (section 10.12).
+
+### 10.5 Server start
+
+The runner starts the server itself (`think_vllm.start_server`) from the `server` block of the job. Reconstructed from the
+code and the configuration, and confirmed by the non-default arguments in the server log of the reference run:
+
+```bash
+env HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+    VLLM_USE_DEEP_GEMM=0 VLLM_MOE_USE_DEEP_GEMM=0 VLLM_ALLREDUCE_USE_FLASHINFER=0 \
+    PATH=/workspace/vllm_env/bin:$PATH \
+  /workspace/vllm_env/bin/python -m vllm.entrypoints.openai.api_server \
+    --model /workspace/models/Qwen3.5-397B-A17B-FP8 --served-model-name k12 \
+    --host 127.0.0.1 --port 8000 --dtype auto --max-model-len 16000 \
+    --gpu-memory-utilization 0.92 --limit-mm-per-prompt '{"image": 2}' --max-num-seqs 64 \
+    --tensor-parallel-size 4 --disable-custom-all-reduce
+```
+
+| Setting | Why |
+|---|---|
+| `--tensor-parallel-size 4` | the FP8 weights need 93.35 GiB per card on four cards |
+| `--disable-custom-all-reduce` | vLLM's custom all-reduce failed during CUDA-graph capture with "invalid argument" (it needs GPU peer-to-peer access, which the container most likely did not allow); all-reduce then runs over NCCL |
+| `VLLM_ALLREDUCE_USE_FLASHINFER=0` | FlashInfer's all-reduce kernel is compiled at start-up and failed to build without `ninja` on the path |
+| `VLLM_USE_DEEP_GEMM=0`, `VLLM_MOE_USE_DEEP_GEMM=0` | DeepGEMM compiles its FP8 kernels with `nvcc` ≥ 12.9; the image has 12.8. Cutlass (linear layers) and Triton (experts) kernels are used instead |
+| `bin_on_path: true` (config) | puts the vLLM environment's `bin/` (with `ninja`) first on `PATH`, because FlashInfer still compiles its gated-delta-net prefill and sampling kernels at start-up |
+| `--max-model-len 16000`, `--max-num-seqs 64`, `--limit-mm-per-prompt '{"image": 2}'` | longest prompt plus completion; 64 parallel requests; photo and diagram |
+| `--host 127.0.0.1` | the server is reachable only from the same machine |
+
+Effective engine settings reported in the log: activation type bfloat16, FP8 quantisation from the checkpoint, prefix
+caching and chunked prefill on (8,192 batched tokens), engine seed 0, CUDA graphs in mode FULL_AND_PIECEWISE,
+FlashAttention 3, Triton FP8 expert kernels, Cutlass block-scaled FP8 linear kernels.
+
+**Required in addition for a run without network access** (not set in the reference run, which kept vLLM's usage
+reporting on): `VLLM_NO_USAGE_STATS=1` and `DO_NOT_TRACK=1`.
+
+### 10.6 Data and job
+
+The runner needs a data folder (`K12_DATA`) with `train.csv`, `test.csv` (the root CSV files of the competition),
+`competition_data/taxonomy_v1.csv`, `competition_data/images/test/` and `competition_data/images/questions/`. It checks the
+row order of `test.csv` against a pinned digest before it starts (`vlm.common.load_table`). The parity probe also needs
+`competition_data/images/train/` and the row list `data/derived/open_teacher/rows_parity64_397b.npy` (64 training rows,
+seed 20261030; SHA-256 `7212015c96374a461b50a0206701eaff1e9dd179713f3799fc398fde05b1f97b`).
+
+```bash
+cd src
+K12_DATA=/workspace/k12/data K12_MODELS=/workspace/models PYTHONPATH="$PWD:$PWD/.." \
+  HF_HUB_DISABLE_PROGRESS_BARS=1 TOKENIZERS_PARALLELISM=false \
+  python -u -m vlm.runner --config ../configs/vlm/q397p_rp.yaml  --out /workspace/out   # parity probe, 64 training rows
+  python -u -m vlm.runner --config ../configs/vlm/q397te_rp.yaml --out /workspace/out   # test side, 3,498 rows
+```
+
+Job settings (`q397te_rp.yaml`, job `proto_te`): `kind: proto_gen`, `split: test`, `order_seed: 0`, `tag: proto`,
+`image: {max_side: 1024, question_max_side: 448}`, `max_tokens: 2500`, `finish_tokens: 1500`, `note_chars: 16000`,
+`concurrency: 64`, `guard_rows: 24`, `guard_min_valid: 0.5`, `request_timeout_s: 1200`, and the `server` block of
+section 5 (`startup_s: 3600`). The parity configuration differs only in `split: train`, the row list and `must_pass`.
+A variant for 8 × H100 with tensor parallelism 8 (`q397te8_rp.yaml`, `q397p8_rp.yaml`) is otherwise identical; it has
+never been run.
+
+### 10.7 Order of the steps
+
+| Step | Network | Command or action | Pass condition |
+|---|---|---|---|
+| 0 | — | Check GPUs, driver, disk (≥ 600 GB free) and host memory | four cards of the H200 class as in the reference run, or see section 10.12 |
+| 1 | allowed | Copy the model revision into `$K12_MODELS/Qwen3.5-397B-A17B-FP8/` with the call the runner itself uses: `python -c "from huggingface_hub import snapshot_download as d; d('Qwen/Qwen3.5-397B-A17B-FP8', revision='ea5b4f81096f3901c91dea97f81324302495781d', local_dir='/workspace/models/Qwen3.5-397B-A17B-FP8', max_workers=32)"` | size and SHA-256 of all 107 files equal [weights_manifest.json](weights_manifest.json) |
+| 2 | allowed | `uv venv /workspace/vllm_env --python <base interpreter>`, then install from the wheelhouse of the lock: `uv pip install --offline --no-index --require-hashes --find-links <wheelhouse> --python /workspace/vllm_env/bin/python -r vllm.lock`; write any text into `/workspace/vllm_env/.k12_ready` | with this marker present, the runner uses the environment and installs nothing (`runner.ensure_vllm_env`). Requires the completed lock (section 10.12) |
+| 3 | **off** | Export `HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 VLLM_NO_USAGE_STATS=1 DO_NOT_TRACK=1`; run in a container without a network interface | — |
+| 4 | off | Parity probe: runner with `q397p_rp.yaml`, then the parity check against the training-side answers of the hosted API (its script is not yet part of this repository; the build scripts read its stored verdict) | valid answers ≥ 97 % of the 64 rows; first-pass input tokens within 1 % of the reference count in ≥ 95 % of rows; same top code as the reference in ≥ 70 % of rows. Otherwise stop |
+| 5 | off | Test side: runner with `q397te_rp.yaml` | job completes; 3,498 rows answered |
+| 6 | off | `python -I eda/c110_q397_deploy.py test-status runs/q397te_rp/proto_te/proto` | 3,498 rows; valid answers ≥ 97 %; share of `NONE` at the top within the training value ± 0.06; model and settings equal those of the training side |
+| 7 | off | Downstream: `python -I tools/make_q397m3_notes.py --test-from runs/q397te_rp/proto_te/proto`, then the M3 ranking `q397m3te_rp`, then the assembly | sections 5 and 9 |
+
+The reference for steps 4 and 6 are the training-side answers of the same model through the hosted API
+(`data/derived/open_teacher/qwen35-397b/labels.jsonl`). The runner itself starts and stops the server; every step prints
+only aggregates.
+
+### 10.8 Run time and cost of the reference run
+
+| Phase | Time |
+|---|---|
+| Download of the revision (406.2 GB) | 1,030 s (about 0.39 GB/s) |
+| Server start after the download | about 7.5 min: weights from the local disk 233 s, `torch.compile` 38 s, CUDA graphs, warm-up and kernel compilation (engine initialisation 144 s) |
+| Parity probe, 64 training rows | 83.6 s (1.31 s per row at 64 parallel requests) |
+| Test side, 3,498 rows | 1.49 s per row, about 87 min (one run of 90 min wall time) |
+| Generation throughput | about 2,700–2,800 tokens/s |
+
+The successful attempt (download, start, parity probe, test side) took about 2.05 h on 4 × H200 at 21.16 USD/h, about
+43 USD. Earlier attempts on the same hardware class failed at the server start and cost about 46 USD; their causes are
+the reasons for the switches of section 5. With the weights already on the disk, a repetition takes about 1.6 h.
+
+### 10.9 Expected outputs
+
+`<out>/q397te_rp/proto_te/`: `proto_labels.jsonl` (parsed answer per row and request), `proto_raw.jsonl` (thinking and
+answer text per row and request), `proto_meta.json` (aggregates), `proto_server.log`, `summary.json`; the runner also
+writes `pip_freeze_vllm.txt` when it installs the vLLM environment itself.
+
+Aggregates of the reference run: 3,498 rows answered, 0 failed, 3,492 valid (99.8 %), share of `NONE` at the top 0.320
+(training rows through the hosted API: 0.316). The answer files have 6,633 records each: 3,498 first requests and 3,135
+completion requests, i.e. 90 % of the rows had no valid answer after the first request and were completed without
+thinking (parity probe: 59 of 64 first requests ended at the token limit).
+
+Frozen files of the reference run (read by the build scripts; never inspected row by row):
+
+| File | Bytes | SHA-256 |
+|---|---:|---|
+| `artifacts/runs/q397te_rp/q397te_rp/proto_te/proto_raw.jsonl` | 29,573,905 | `824724105f1b4abb05147db26794bdd3b1b2c030725554a7126c4fba888a6493` |
+| `artifacts/runs/q397te_rp/q397te_rp/proto_te/proto_labels.jsonl` | 1,503,024 | `82e29b9663f0dd2c6f32cb7e52676f4e8fa9e6e27c5b03a2d6c99e1720d27be0` |
+| `artifacts/runs/q397te_rp/q397te_rp/proto_te/proto_meta.json` | 416 | `3794090406eda00c149145503ecb8146deda8124440b589a0cd9ef9272a9d902` |
+| `artifacts/runs/q397te_rp/q397te_rp/proto_te/summary.json` | 637 | `91573a0318c4f0c87ebedf47cd7f79dcec66be0b938280c33a0c46ed5a928c57` |
+| `data/derived/sft/q397m3_test_notes.jsonl` (notes for M3, derived from `proto_raw.jsonl`) | 25,640,297 | `4b29f057d50c7decfc3db73ddb37182d26b51326e3af05683d4665a56f20eb60` |
+
+### 10.10 Fidelity check
+
+The parity probe runs the same protocol on 64 random training rows for which the hosted-API measurement has a valid
+answer, and compares the number of **input tokens of the first request per row** with the count reported by the API.
+Equal counts show that system text, taxonomy, question, diagram and photo reach the model in the same form; the images
+were sent to the API as JPEG (quality 75) at the same pixel size and locally as PNG, which gives the same number of image
+tokens. Result of the reference run: 64 of 64 valid, input tokens **identical in 64 of 64 rows**, same top code in 78.1 %
+of rows (rule: ≥ 70 %), MAP@3 0.695 locally against 0.716 through the API on these 64 rows (reported, not part of the rule).
+
+### 10.11 What is deterministic, and how the solution deals with the rest
+
+| Step | Deterministic? | Evidence |
+|---|---|---|
+| Prompt and image construction | yes | identical input-token counts in 64 of 64 rows against an independent implementation |
+| Text generation | **no** | greedy decoding, but continuous batching of 64 parallel requests, chunked prefill, prefix caching and FP8 expert kernels make the result depend on the composition of the batches |
+| Export of the notes for M3 | yes | byte-identical rebuilds; no time stamps in the file |
+| M3 scores behind given notes | yes on the same hardware and number format | exact scoring behind a fixed text |
+| Assembly of the submission | yes | byte-identical rebuild of both submissions on a CPU without network access |
+
+**Measured agreement between draws.** No second local draw of the 397B channel exists. Measured are: the local FP8 path
+against the hosted API on the 64 parity rows, same top code in 78.1 % of rows; for the 27B protocol channel, which uses
+the same code path, two runs of the same protocol agree on the top code in 84.5 % of 860 training rows; for the 27B
+reasoning channel, two greedy runs with identical prompts agree in 84 % of rows.
+
+**How the solution handles it.** The answers of the reference run are frozen with their SHA-256 and are part of the
+private package. The build scripts read the frozen files and reproduce both submitted files byte for byte; this mode
+needs only a CPU. Running sections 10.5–10.7 again produces a new draw of every answer: statistically equivalent, not
+identical. Its files have new checksums, which the build scripts reject by design, because the deployment files record
+the checksums of the frozen test-side inputs (submission A: the field `extra_columns.test.files_sha256` of its
+second-stage file). A file assembled from a new draw is therefore a new file; how it would be assembled is described in
+section 9, and that path does not yet cover the column sources of submission A.
+
+### 10.12 Open points
+
+These are not verified and are therefore not claimed above:
+- **A run without network access** of sections 10.5–10.7 has not been performed. The reference run downloaded weights and
+  packages at run time and kept vLLM's usage reporting on. Planned: steps 1–2 with network, steps 3–6 in a container
+  without a network interface, empty compiler caches, on 4 × H200.
+- **Other hardware.** 8 × H100 (80 GB) with tensor parallelism 8 has a configuration but has never run. Four cards with
+  96 GB (89.4 GiB each) cannot even hold the 93.35 GiB of weights per card at tensor parallelism 4 (arithmetic, not
+  tested). No 4-bit or other smaller release of the model has been tested; it would give different texts.
+- **Driver version** of the reference machine (not recorded).
+- **Complete lock file** with hashes for all pins and an offline wheelhouse.
+- **Rerun variance of the submitted files** when all generated texts are replaced at once (not measured).
