@@ -71,7 +71,7 @@ file formats.
 
 **Provider terms.** Both are business offerings. Inputs are not used to train or improve the provider's models, and the
 provider claims no ownership of inputs or outputs. API outputs are frozen with checksums; training and assembly read only
-the frozen files. Total API cost was about 0.1 kUSD (Anthropic about 43 USD, Tinker about 63 USD).
+the frozen files. Total API cost was about 0.11 kUSD (Anthropic about 46 USD, Tinker about 63 USD).
 
 ## 5. Final solution: offline, self-contained, within the limits
 

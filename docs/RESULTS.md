@@ -339,11 +339,11 @@ top code of 1.3 % of the OOF rows and do not alter the picture.
 
 | Resource | Use | Amount (order of magnitude) |
 |---|---|---|
-| Rented GPUs (RunPod Secure Cloud) | Training on A40 (48 GB) and RTX PRO 6000 (96 GB); 27B inference on RTX PRO 6000; 397B test side on 4×H200 | ≈ 400–450 USD; mostly RTX PRO 6000 (≈ 120 h) and A40 (≈ 95 h) |
-| Anthropic API | Teacher pool labels (≈ 31 USD), teacher measurements on training rows, a rationale experiment and a description experiment on training rows | ≈ 43 USD |
+| Rented GPUs (RunPod Secure Cloud) | Training on A40 (48 GB) and RTX PRO 6000 (96 GB); 27B inference on RTX PRO 6000; 397B test side on 4×H200 | ≈ 520–690 USD over the whole competition, including measurements and pilots that are not part of the final submissions (the lower figure from the account statement, the upper from our conservative per-pod ledger); mostly RTX PRO 6000 and A40 |
+| Anthropic API | Teacher pool labels (≈ 31 USD), teacher measurements on training rows, a rationale experiment, a description experiment and one further experiment on training rows that was not deployed | ≈ 46 USD |
 | Tinker API | Open-model measurements on training rows, including the training side of the 397B channel | ≈ 63 USD |
 | Kaggle (free GPU quota) | T4×2: offline inference of the 9B scorer and the 4-bit 27B, second-hardware checks, the key-free reader probe on training rows | within the weekly free quota |
 | Local machine | 8-core CPU, 15 GB RAM, no GPU: blending, second stages, analysis, assembly | — |
-| **Total paid** | | **≈ 0.5 kUSD** |
+| **Total paid** | | **≈ 0.6–0.8 kUSD** |
 
 Per-component run times are listed in [TRAINING.md](TRAINING.md) and [INFERENCE.md](INFERENCE.md).

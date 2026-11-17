@@ -277,8 +277,10 @@ Training of every component is described in [docs/TRAINING.md](docs/TRAINING.md)
 - The private input package holds every file the quick start reads, the files the build scripts pin, the frozen inputs of
   the GPU model steps, the M3 training targets and our weights. The pinned package versions of every environment are in
   `env/requirements-*.txt`.
+- How close a rerun with newly generated texts should come: about ±0.003 MAP@3 (1 sd) on the private rows
+  ([docs/VERIFICATION.md](docs/VERIFICATION.md), section 8.1).
 - Open: smoke tests without network access for the GPU model steps, including the 397B path; hashes for every pin and an
-  offline wheelhouse; an estimate of the rerun variance of the generated texts.
+  offline wheelhouse.
 - Details: [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Documentation
@@ -294,6 +296,8 @@ Training of every component is described in [docs/TRAINING.md](docs/TRAINING.md)
 | [docs/PROVENANCE.md](docs/PROVENANCE.md) | Every frozen input of the two final submissions: producer, configuration, network status, determinism; the training chain |
 | [docs/MODEL_SIZES.md](docs/MODEL_SIZES.md), [docs/weights_manifest.json](docs/weights_manifest.json) | Parameters and bytes of every model against the host's limits; file list with checksums of the base models and our weights |
 | [docs/CODEMAP.md](docs/CODEMAP.md) | Index of scripts and modules, channel names, data formats |
+| [docs/VERIFICATION.md](docs/VERIFICATION.md) | For the verification team: each item the host asked for, in order |
+| [docs/WRITEUP.md](docs/WRITEUP.md) | Two-page write-up: approach, what worked, what did not, use of the unlabelled set |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Current status and open steps |
 | [THIRD_PARTY.md](THIRD_PARTY.md) | Models, services and packages with licences |
 | [CHANGELOG.md](CHANGELOG.md) | Versions of this repository |
