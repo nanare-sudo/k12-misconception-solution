@@ -3,6 +3,70 @@
 This file records notable changes to the solution repository. Dates are UTC. The repository is a living document until
 the final solution package is delivered.
 
+## v0.5 (build branch) — 2026-11-17
+
+Sixth version: the first build of both final submissions with the code of this repository, the checksums it learned, the
+private input package for the host's verification, pinned requirements, the M3 target builder and an inference-only
+configuration of the first M3 draw.
+
+### Verified
+
+- **First build with the code of this repository.** The README quick start ran verbatim in a fresh copy of the repository
+  whose `artifacts/` and `data/derived/` came from the private inputs (the frozen files of the internal store, and the private
+  copies of the files that earlier versions of this repository write with English fields). Every build script exited with 0
+  and every pinned file matched, among them both final submissions (`sub_primary_m3x5h.csv` `4505c159…797354e7`,
+  `sub_primary_m3x4.csv` `76da786d…a3565f9973`), the intermediate form (`53ec2969…`), their three test matrices and every
+  earlier file of the chain. No change of the build code was needed.
+- **Pins of the regenerated JSON files.** The nine files that the version-0.4 code writes itself were printed as "FIRST
+  BUILD" (each checksum equal to the file's), entered into the build scripts and modules and listed in
+  [docs/INFERENCE.md](docs/INFERENCE.md#2-lines-and-expected-checksums). Compared field by field with the files from which the
+  submitted files were built, none of them differs in any non-text value; they differ only in English text fields and renamed
+  keys. The checksums of the channel metadata and blend file of submission B equal the values of the training-side rerun of
+  version 0.4.
+- **Private input package.** Every file that the first build opened was recorded with `strace`. The package holds exactly
+  the files that the quick start read and did not write itself (464 files), the 11 pinned files written by the version-0.4
+  code, the frozen inputs of the GPU model steps that the assembly does not read, the M3 training targets and our weights:
+  545 files, 3.61 GB, 153 of them derived from test rows; each with its SHA-256 in the package manifest.
+- **Second build.** A second fresh copy of this branch, with the same package linked read-only, rebuilt every file byte for
+  byte and passed every checksum check (the quick start took 1 h 48 min, the first 1 h 52 min, both on a machine shared
+  with other jobs and with every file access traced). It read no file outside the package except the competition CSV files
+  and the taxonomy, wrote nothing into the package, and made no network connection (its only network system calls were the
+  IPv6 availability probe that `urllib3` makes on import: a socket bound to `::1`, port 0, never connected). Every package
+  file of the roles `assemble` and `assemble-generated` was read.
+- Tests: 641 passed and 11 skipped in the second copy with the private input package; 564 passed and 88 skipped with the
+  repository files only.
+
+### Added
+
+- `tools/make_m3_targets.py`: the builder of the M3 training targets (folds 0–4 and the full fit), checked against the stored
+  list of the rows on which the notes carry loss; `--check` rebuilds the six target files in memory and compares them with the
+  files present and with `targets_sha256` of the six adapter recipes. It rebuilds all six files byte for byte. Tests
+  `tests/test_make_m3_targets.py`.
+- `env/requirements-cpu.txt`, `requirements-gpu.txt`, `requirements-vllm.txt`, `requirements-kaggle-t4.txt`: the exact package
+  versions of the four environments as installed in the reference runs, each with its Python and CUDA version and install
+  command (versions only; hashes and an offline wheelhouse are still open).
+- `configs/vlm/m3d1te_rp.yaml`: draw d1 of M3 on the test rows with the delivered adapter of the full fit, without training
+  (the test jobs of `m3_fullte_rp.yaml`); test in `tests/test_m3_sft.py`.
+
+### Changed
+
+- Build scripts `tools/builds/primary_m3x4.sh`, `primary_cols.sh`, `primary_m3x5h.sh` and modules `eda/c151_primary_cols.py`,
+  `eda/c166_primary_m3x5h.py`: the pins of the regenerated JSON files (20 places; the optional verdict file of the four-draw
+  rule stays unpinned).
+- `docs/weights_manifest.json`, `docs/PROVENANCE.md`: the five 9B fold adapters (training side and the check job of the 9B test
+  configurations); the description checksum of the orientation network as read by this repository.
+- Documentation: README (quick start with the private input package; status), INFERENCE §2–§7, TRAINING §2, §10.1, §10.2,
+  PROVENANCE §0, §3, §8, §9, DATA_AND_COMPLIANCE, CODEMAP, ROADMAP (steps 1 and 3 done; 4 and 6 in part).
+
+### Known gaps
+
+The following items are tracked in [docs/ROADMAP.md](docs/ROADMAP.md#2-open-steps):
+- smoke tests without network access for the GPU model steps of both final submissions, including the 397B path;
+- hashes for every pin, an offline wheelhouse and a single entry point per line;
+- a mode that re-records the checksums of newly computed test-side files;
+- the scripts that are not yet exported (listed in [docs/PROVENANCE.md](docs/PROVENANCE.md#9-open-items-of-this-list));
+- an estimate of the rerun variance of the generated texts.
+
 ## v0.4 — 2026-11-15
 
 Fifth version: the two final submissions, both from the primary line.

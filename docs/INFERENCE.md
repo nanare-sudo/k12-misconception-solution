@@ -52,18 +52,30 @@ candidate of version 0.3) → `primary_final.sh` → `primary_i1.sh` → `s035_s
 `PRIMARY_M3X5H_REGRESSION=0`, `PRIMARY_COLS_REGRESSION=0` and `PRIMARY_M3X4_REGRESSION=0` skip the step 0 of the respective
 script and only check the checksums of the predecessor's files (for debugging; a deployment build runs step 0).
 
-**What is pinned in version 0.4.** The three output files and their test matrices are pinned to the values of the
-submitted files above, as are all content files the scripts read: the frozen channel outputs, the row lists, the digests
-over the frozen column sources and over the files of draw h, and the OOF matrices `oof_m3x4_full.npy` and `oof_m3x5h.npy`.
-Not yet pinned are the JSON files that the version-0.4 code writes itself — the channel metadata `meta_m3x4_full.json` and
-`meta_m3x5h.json`, the blend files `stack_primary_m3x4.json` and `stack_primary_m3x5h.json`, the second-stage files
-`stage2_primary_m3x4.json`, `stage2_primary_cols.json`, `stage2_primary_m3x5h_base.json` and `stage2_primary_m3x5h.json`,
-and their reports. These files carry English descriptive fields and the renamed keys of this repository; their numbers
-are those of the files from which the submitted files were built, their checksums are not. On the first build in the
-package the scripts print each such checksum as "FIRST BUILD — checksum …" and continue; the CSV and test-matrix pins
-still decide whether the build reproduces the submitted file. The printed values are then entered into the scripts, and a
-second build must reproduce everything byte for byte (the procedure of the earlier versions). This first build with the
-code of this repository has not been run yet ([ROADMAP.md](ROADMAP.md)).
+**What is pinned.** The three output files and their test matrices are pinned to the values of the submitted files above,
+as are all content files the scripts read: the frozen channel outputs, the row lists, the digests over the frozen column
+sources and over the files of draw h, and the OOF matrices `oof_m3x4_full.npy` and `oof_m3x5h.npy`. The JSON files that the
+version-0.4 code writes itself carry English descriptive fields and the renamed keys of this repository; their numbers are
+those of the files from which the submitted files were built (a field-by-field comparison shows no difference in any
+non-text value), their checksums are not. They were learned on the first build with the code of this repository
+(2026-11-17), when the scripts printed each of them as "FIRST BUILD — checksum …", and are pinned since; a second build in
+a fresh copy of the repository from the private input package reproduced every file byte for byte
+([ROADMAP.md](ROADMAP.md)). The private input package contains these files, so that the scripts verify them; without them
+the scripts write them and require the same checksums.
+
+| File (under `artifacts/`) | Written by | SHA-256 |
+|---|---|---|
+| `oof_m3x4_full.npy` | `eda/c135_primary_m3x4.py oof` (pinned since version 0.4) | `96ad8725bbaa9d274376a0bb68549abc4051878171ebb572f7707962600399a6` |
+| `meta_m3x4_full.json` | `eda/c135_primary_m3x4.py oof` | `acd88b8744493b364ff14142eae1f9e59ca9351ec917e52bc607cc653c48be00` |
+| `stack_primary_m3x4.json` | `eda/c135_primary_m3x4.py stack` | `1e90852a68f53efd6dfd0a51730d6035e78345dafc5c0730b59a976de369420f` |
+| `stage2_primary_m3x4.json` | `eda/c135_primary_m3x4.py fit` | `7259ce1446a85aa700448f6c283170e119c414b24b0aea7bd243d67b6090c58a` |
+| `eda/private/primary_m3x4/sens/stage2_primary_m3x4_fixbeta.json` | `eda/c135_primary_m3x4.py fit` (sensitivity with fixed β) | `3350e3ab2206333c7f6b7bba378a102aae96865d5f2ff10f18de4347eec0d4d3` |
+| `stage2_primary_cols.json` | `eda/c151_primary_cols.py fit` | `102f98ce9c50c955753305a1795b808136d098c82c5fa1d25a0fde6f3e988a7f` |
+| `oof_m3x5h.npy` | `eda/c166_primary_m3x5h.py oof` (pinned since version 0.4) | `388546e508a603fc993bc52faf887e3831895cd57513887c3d21aed7bf78cc2f` |
+| `meta_m3x5h.json` | `eda/c166_primary_m3x5h.py oof` | `a2979b02d58572252575c202cd759d0f80b003824ed421d09945ce98ab9188f3` |
+| `stack_primary_m3x5h.json` | `eda/c166_primary_m3x5h.py stack` | `50b46374e9703131301bb771bf46c967a8f9b3b02fdf994b8e7f9bbb1545ed66` |
+| `stage2_primary_m3x5h_base.json` | `eda/c166_primary_m3x5h.py fit-base` | `4e3ad9d8c6310701ac214793c5cdd172e00f9828607567bbe376843d2a32030d` |
+| `stage2_primary_m3x5h.json` | `eda/c166_primary_m3x5h.py fit` | `572ff297dc04b7d0e4a9a28b477af74f532bcd742371717d10e172daad894d05` |
 
 **Earlier candidates and fallbacks** (versions 0.1–0.3). All of them use the rotation list of the released orientation
 network (`ORIENT=repro`, the default of the build scripts; see below).
@@ -188,7 +200,10 @@ also read by `assemble`: by the regex note columns of the safety candidate and b
 **Inputs per line** (in addition to the competition CSV files and `taxonomy_v1.csv`). The list was taken from a trace of
 every file the build scripts open in a fresh copy of the repository with the frozen inputs; it covers the assembly and
 all checks and fits that the scripts run on the way. "Safety line" covers both of its forms (the strictly inductive form
-and the final candidate with the alignment over the test set); they read the same frozen inputs.
+and the final candidate with the alignment over the test set); they read the same frozen inputs. The private input package of
+version 0.5 was cut to exactly the files that the README quick start of both final submissions reads (traced file by file),
+plus the files the build scripts pin, the frozen inputs of the model steps, the M3 training targets and our weights; its
+`PACKAGE_INDEX.tsv` lists each of its 545 files with size, SHA-256, role and whether it is derived from test rows.
 
 | Input | Safety line | Primary line |
 |---|---|---|
@@ -303,9 +318,8 @@ sha256sum artifacts/submissions/sub_primary_m3x5h.csv artifacts/submissions/sub_
 ```
 
 Step 5 alone needs the safety chain only through the checksums of its files (`primary_m3px27.sh` checks them); in a
-package without these files run step 4 first, or run steps 3–5 in this order. On the first build with the code of this
-repository the scripts print the checksums of the JSON files they write ("FIRST BUILD", section 2) and end with a note to
-pin them; the CSV and test-matrix checksums above are checked on every build.
+package without these files run step 4 first, or run steps 3–5 in this order. Every build checks the pinned checksums of
+the JSON files the scripts write (section 2) together with the CSV and test-matrix checksums above.
 
 Each build script first verifies the checksums of its pinned inputs and recomputes (or verifies) its blend and
 second-stage files from the OOF artifacts. It then calls `tools/make_submission.py`, which:
@@ -567,7 +581,9 @@ second stages were added and will be updated.
 
 **Final submissions (version 0.4).** The CPU build of submission A including its whole chain took about 45 minutes on the
 development machine (two BLAS threads; about 15 minutes without step 0) and 3,987 s in the netless Kaggle CPU rebuild of
-both submissions from the frozen inputs (internal code version, see [PROVENANCE.md](PROVENANCE.md)). Test side of the new draws: M3
+both submissions from the frozen inputs (internal code version, see [PROVENANCE.md](PROVENANCE.md)). With the code of this
+repository the whole README quick start (all six commands, which build every file of the chain) took 1 h 52 min on the first
+build and 1 h 48 min on the second, on a machine shared with other jobs and with every file access traced. Test side of the new draws: M3
 draw d4 about 7.4 h on an RTX PRO 6000 (about 17 USD); draw h on the 2,459 listed test rows in two halves of about 4 h each
 (generation about 5.8 s, ranking about 4.8 s per row; about 21.5 USD together).
 

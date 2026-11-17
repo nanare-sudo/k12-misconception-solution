@@ -234,8 +234,9 @@ The solution can be reproduced at three depths:
 host for verification but are not public, go under `data/derived/` (frozen derived inputs such as gate lists, rotation
 lists and notes) and under `artifacts/` (frozen channel outputs, OOF matrices, blend and second-stage files, the
 description of the orientation network, and earlier submission files that the build scripts use as references); see
-[docs/INFERENCE.md](docs/INFERENCE.md#3-data-layout). The private copies of these inputs are being brought to the state
-of this version ([docs/ROADMAP.md](docs/ROADMAP.md), step 3). Then:
+[docs/INFERENCE.md](docs/INFERENCE.md#3-data-layout). The private input package of this version contains them, with a
+`README_PACKAGE.md` on where each folder goes and a `MANIFEST.sha256` to check it (`sha256sum -c MANIFEST.sha256` inside the
+package folder). Then:
 
 ```bash
 # Python 3.13 with the CPU versions of env/requirements-cpu.txt (docs/INFERENCE.md, section 4)
@@ -251,9 +252,9 @@ sha256sum artifacts/submissions/sub_primary_m3x5h.csv artifacts/submissions/sub_
 #   76da786dfdbe6a6d…  sub_primary_m3x4.csv   (primary submission B)
 ```
 
-On the first run with the code of this version the three new build scripts print the checksums of the JSON files they
-write themselves ("FIRST BUILD"); the checksums of the CSV files and test matrices are checked on every run
-([docs/INFERENCE.md](docs/INFERENCE.md#2-lines-and-expected-checksums)).
+Every run checks the pinned checksums of the CSV files, the test matrices and the JSON files that the build scripts write
+themselves (learned on the first build with the code of this repository, see
+[docs/INFERENCE.md](docs/INFERENCE.md#2-lines-and-expected-checksums)).
 
 The expected checksums of these files and of their fallbacks are in [docs/INFERENCE.md](docs/INFERENCE.md#2-lines-and-expected-checksums).
 The build scripts use the rotation list of the released orientation network by default (`ORIENT=repro`); `ORIENT=legacy`
@@ -270,11 +271,14 @@ Training of every component is described in [docs/TRAINING.md](docs/TRAINING.md)
 ## Status and next steps
 
 - The two final submissions are selected (2026-11-15). Both were rebuilt byte for byte on a Kaggle CPU without network
-  access from the frozen inputs, with the internal code version from which this repository was translated.
-- Open: the first build of both files with the code of this repository (it learns the checksums of the regenerated JSON
-  files; the CSV checksums are pinned); smoke tests without network access for the GPU model steps, including the 397B
-  path; private copies of the inputs in the state of this version, including the M3 training targets; an estimate of the
-  rerun variance of the generated texts.
+  access from the frozen inputs, with the internal code version from which this repository was translated, and on
+  2026-11-17 with the code of this repository in two fresh copies from the private input package (README quick start;
+  every pinned file byte-identical).
+- The private input package holds every file the quick start reads, the files the build scripts pin, the frozen inputs of
+  the GPU model steps, the M3 training targets and our weights. The pinned package versions of every environment are in
+  `env/requirements-*.txt`.
+- Open: smoke tests without network access for the GPU model steps, including the 397B path; hashes for every pin and an
+  offline wheelhouse; an estimate of the rerun variance of the generated texts.
 - Details: [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Documentation

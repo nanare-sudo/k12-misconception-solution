@@ -19,8 +19,9 @@ runs the build of B, as their first steps):
 by the build scripts, recorded with size and SHA-256): **494 files, 2.66 GB** (submission A 490 files, submission B 405
 files; 401 in common; the four files only in B's set are B's own deployment files, which A's build writes itself). 155 of
 them are derived from test rows. Both files were rebuilt byte for byte from exactly these files on a CPU without network
-access, with the internal code version from which this repository was translated (the same rebuild with the code of this
-repository is listed in [ROADMAP.md](ROADMAP.md)). The base models are not files of the input sets; they are listed in
+access, with the internal code version from which this repository was translated, and on 2026-11-17 with the code of this
+repository in two fresh copies from the private input package ([ROADMAP.md](ROADMAP.md), step 1). The base models are not
+files of the input sets; they are listed in
 section 3 and in [weights_manifest.json](weights_manifest.json).
 
 **Columns of the tables.**
@@ -231,8 +232,9 @@ new texts and therefore new checksums downstream, with scores within the measure
   fold runs of draws d1 and d2, the 397B parity check, the posterior step of the M3 evaluation, the measurement scripts of
   the column fidelity check and of the bundle test of the column sources, the evaluation script of the five-draw rule.
 - **Frozen texts of draw h on the test side:** the generated texts stay in the two run folders (`gen_notes.jsonl`, pinned
-  through the digest of the shard files); unlike d1–d4 they are not copied into a separate frozen-notes file, because the
-  second stage does not read them.
+  through the digest of the shard files), which the build reads. Copies in the frozen-notes format of d1–d4
+  (`data/derived/sft/m3_h_test_{a,b}_frozen_notes.jsonl`, written by `tools/freeze_m3_texts.py`) are part of the private input
+  package for the model steps; the second stage does not read them.
 - **Code version not recorded** for the two test runs of `zs27q`; **package list not recorded** for the text generation
   of reasoning draw g on the test rows (the machine was reused).
 - **Reasoning gates:** the band part of the gate lists was written by ad-hoc scripts following the recorded rule;
@@ -240,5 +242,5 @@ new texts and therefore new checksums downstream, with scores within the measure
   A40 outputs it needs are available (they are not in the private package).
 - **Hosted 397B:** the revision and number format behind the hosted API are not documented by us; the licence file of
   the served revision is still to be confirmed (Apache 2.0 according to the model card).
-- **Parity row list** `data/derived/open_teacher/rows_parity64_397b.npy` (needed to repeat the parity check) is not yet
-  in the private package.
+- **Parity row list** `data/derived/open_teacher/rows_parity64_397b.npy` (needed to repeat the parity probe) and the outputs
+  of the parity run are part of the private input package; the script of the parity check is not exported (above).
