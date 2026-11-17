@@ -440,3 +440,32 @@ def test_freeze_m3_texts_fills_generated_findings(tmp_path):
     assert meta["finding_from_gen"] == 1 and meta["finding_from_rank"] == 1 and meta["still_open"] == 1
     from vlm import sft as S
     assert S.rank_prefix(by[5]["text"], by[5]["finding"]) == S.complete_prefix(S.rank_prefix("n5", None), "made five")
+
+
+def test_m3d1_inference_config_is_the_test_side_of_the_full_fit():
+    """configs/vlm/m3d1te_rp.yaml (inference only): the merge, generation and ranking jobs of m3_fullte_rp.yaml without its training
+    jobs, with the adapter of the full fit taken from the same output root as in the configurations of draws d2-d4; every other
+    setting is equal."""
+    import yaml
+
+    full = yaml.safe_load((COMP / "configs" / "vlm" / "m3_fullte_rp.yaml").read_text())
+    d1 = yaml.safe_load((COMP / "configs" / "vlm" / "m3d1te_rp.yaml").read_text())
+    d2 = yaml.safe_load((COMP / "configs" / "vlm" / "m3d2te_rp.yaml").read_text())
+    jobs_full = [j for w in full["workers"] for j in w["jobs"]]
+    jobs_d1 = [j for w in d1["workers"] for j in w["jobs"]]
+    assert [j["kind"] for j in jobs_d1] == ["merge", "sft_gen", "predict"]
+    ren = {"m3_merge_full": "m3d1_merge", "m3_test_gen": "m3d1_test_gen", "m3_test_rank": "m3d1_test_rank", "m3_full": "m3d1",
+           "m3_full_merged": "m3d1_merged", "m3_train_full": "../m3_fullte_rp/m3_train_full", "m3_test_gen/gen": "m3d1_test_gen/gen"}
+
+    def sub(o):
+        if isinstance(o, dict):
+            return {k: sub(v) for k, v in o.items()}
+        if isinstance(o, list):
+            return [sub(v) for v in o]
+        return ren.get(o, o) if isinstance(o, str) else o
+
+    assert [sub(j) for j in jobs_full if j["kind"] != "train"] == jobs_d1
+    assert d1["models"]["q38_27b"] == full["models"]["q38_27b"]
+    assert d1["models"]["m3d1"] == {**full["models"]["m3_full"], "merged": "m3d1_merged"}
+    merge_d2 = next(j for w in d2["workers"] for j in w["jobs"] if j["kind"] == "merge")
+    assert merge_d2["adapter_from"] == jobs_d1[0]["adapter_from"]

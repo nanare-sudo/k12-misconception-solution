@@ -52,11 +52,11 @@ M3X3_ROWS="data/derived/m3x3_full_rows.npy"; M3X3_ROWS_SHA="c83e7d6eb3bd6a2aa38b
 RULE="artifacts/eda/private/primary_m3x4/c135_rule.json"; RULE_SHA=""  # verdict of the four-draw rule (c135 rule); optional in the package (the pins of the deployment files suffice)
 # results (pinned after the first build)
 CH_OOF="artifacts/oof_m3x4_full.npy"; CH_OOF_SHA="96ad8725bbaa9d274376a0bb68549abc4051878171ebb572f7707962600399a6"
-CH_META="artifacts/meta_m3x4_full.json"; CH_META_SHA=""
-STACK="artifacts/stack_${STEM}.json"; STACK_SHA=""
-STAGE2="artifacts/stage2_${STEM}.json"; STAGE2_SHA=""
+CH_META="artifacts/meta_m3x4_full.json"; CH_META_SHA="acd88b8744493b364ff14142eae1f9e59ca9351ec917e52bc607cc653c48be00"
+STACK="artifacts/stack_${STEM}.json"; STACK_SHA="1e90852a68f53efd6dfd0a51730d6035e78345dafc5c0730b59a976de369420f"
+STAGE2="artifacts/stage2_${STEM}.json"; STAGE2_SHA="7259ce1446a85aa700448f6c283170e119c414b24b0aea7bd243d67b6090c58a"
 PRIV="artifacts/eda/private/primary_m3x4"
-SENS="$PRIV/sens/stage2_primary_m3x4_fixbeta.json"; SENS_SHA=""
+SENS="$PRIV/sens/stage2_primary_m3x4_fixbeta.json"; SENS_SHA="3350e3ab2206333c7f6b7bba378a102aae96865d5f2ff10f18de4347eec0d4d3"
 COPY_STAGE2="$PRIV/copy/stage2_m3x4k_e.json"
 D4_RUN="m3d4te_rp"
 D4_DONE="artifacts/runs/${D4_RUN}/${D4_RUN}/m3d4_test_rank/test_proto_rank.done.npy"  # ranking of the d4 test side (step 7 checks the completeness)

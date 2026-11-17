@@ -1,5 +1,5 @@
 {
- "note": "Weights manifest of the two final submissions (solution repository version 0.4). Base models: public Hugging Face metadata of the pinned revisions (file list, size, LFS SHA-256 or git blob id), retrieved anonymously on 2026-11-14. Own weights: size and SHA-256 computed from the stored files; delivered in a private Kaggle model. Sizes and the counting rule: docs/MODEL_SIZES.md.",
+ "note": "Weights manifest of the two final submissions (solution repository version 0.4). Base models: public Hugging Face metadata of the pinned revisions (file list, size, LFS SHA-256 or git blob id), retrieved anonymously on 2026-11-14. Own weights: size and SHA-256 computed from the stored files; delivered in a private Kaggle model and in the private input package (weights/). Sizes and the counting rule: docs/MODEL_SIZES.md.",
  "base_models": [
   {
    "repo": "Qwen/Qwen3.5-397B-A17B-FP8",
@@ -1010,6 +1010,51 @@
    "sha256": "83cc1224da0edbea0af640a8682ecb0b882f33b107cf89de9a7673ce19223abe",
    "format": "F32, 2 x 426,540 parameters",
    "role": "rotation list of the test photos (CPU)"
+  },
+  {
+   "name": "v1_f0 adapter (LoRA on Qwen3.5-9B, fold 0)",
+   "delivered_as": "private input package: weights/v1_folds/v1_f0/",
+   "file": "adapter_model.safetensors",
+   "bytes": 110906720,
+   "sha256": "05f2aea57f07a2661e51deeb3972ecd959de83440d9579a7fbfbef7a902aaaf3",
+   "format": "F32, 27,721,728 parameters",
+   "role": "training side only: out-of-fold 9B scores and the rotation run v1rot_t4; v1_f1 also in the check job check_f1 of the 9B test configurations; not used for any test prediction and not counted in docs/MODEL_SIZES.md"
+  },
+  {
+   "name": "v1_f1 adapter (LoRA on Qwen3.5-9B, fold 1)",
+   "delivered_as": "private input package: weights/v1_folds/v1_f1/",
+   "file": "adapter_model.safetensors",
+   "bytes": 110906720,
+   "sha256": "a80afb910c4a89f54bb80a11723f51fae4373531f9e4d425cbbe007e9906783e",
+   "format": "F32, 27,721,728 parameters",
+   "role": "training side only: out-of-fold 9B scores and the rotation run v1rot_t4; v1_f1 also in the check job check_f1 of the 9B test configurations; not used for any test prediction and not counted in docs/MODEL_SIZES.md"
+  },
+  {
+   "name": "v1_f2 adapter (LoRA on Qwen3.5-9B, fold 2)",
+   "delivered_as": "private input package: weights/v1_folds/v1_f2/",
+   "file": "adapter_model.safetensors",
+   "bytes": 110906720,
+   "sha256": "bbf6040a79fdad94d6c336f113e8b3bfac926ffa78ff96c41d6fe9f445a967be",
+   "format": "F32, 27,721,728 parameters",
+   "role": "training side only: out-of-fold 9B scores and the rotation run v1rot_t4; v1_f1 also in the check job check_f1 of the 9B test configurations; not used for any test prediction and not counted in docs/MODEL_SIZES.md"
+  },
+  {
+   "name": "v1_f3 adapter (LoRA on Qwen3.5-9B, fold 3)",
+   "delivered_as": "private input package: weights/v1_folds/v1_f3/",
+   "file": "adapter_model.safetensors",
+   "bytes": 110906720,
+   "sha256": "0084a8c24538d6258b8a10566dfd74d14e545a35afb65314e9a701e07dd3446a",
+   "format": "F32, 27,721,728 parameters",
+   "role": "training side only: out-of-fold 9B scores and the rotation run v1rot_t4; v1_f1 also in the check job check_f1 of the 9B test configurations; not used for any test prediction and not counted in docs/MODEL_SIZES.md"
+  },
+  {
+   "name": "v1_f4 adapter (LoRA on Qwen3.5-9B, fold 4)",
+   "delivered_as": "private input package: weights/v1_folds/v1_f4/",
+   "file": "adapter_model.safetensors",
+   "bytes": 110906720,
+   "sha256": "7739fbcb08baf7875da13b75037a87597c702a1c9419b164754750c607145e58",
+   "format": "F32, 27,721,728 parameters",
+   "role": "training side only: out-of-fold 9B scores and the rotation run v1rot_t4; v1_f1 also in the check job check_f1 of the 9B test configurations; not used for any test prediction and not counted in docs/MODEL_SIZES.md"
   }
  ]
 }

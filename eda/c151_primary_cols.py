@@ -64,10 +64,10 @@ import stage2_sources as XS  # noqa: E402
 ART = COMP / "artifacts"
 PRIV0 = ART / "eda" / "private" / "primary_cols"
 M3X4, M3X4_OOF_SHA = "m3x4_full", "96ad8725bbaa9d274376a0bb68549abc4051878171ebb572f7707962600399a6"
-STACK_M3X4_SHA = ""  # stack_primary_m3x4.json (eda/c135_primary_m3x4.py stack); empty = first build of this repository: printed, then pinned
+STACK_M3X4_SHA = "1e90852a68f53efd6dfd0a51730d6035e78345dafc5c0730b59a976de369420f"  # stack_primary_m3x4.json (eda/c135_primary_m3x4.py stack); empty = first build of this repository: printed, then pinned
 BASES = {
     "m3x4": {"label": "primary_m3x4", "stem": "primary_m3x4", "stage2": "stage2_primary_m3x4.json",
-             "stage2_sha": "", "stack_sha": STACK_M3X4_SHA,
+             "stage2_sha": "7259ce1446a85aa700448f6c283170e119c414b24b0aea7bd243d67b6090c58a", "stack_sha": STACK_M3X4_SHA,
              "out": "primary_cols", "tag": "cols", "mid": "m3px27xm", "build_field": "m3x4_build", "units": [7592, 7542], "candidate": "primary_cols"},
 }
 DEFAULT_COLS = "qfp"

@@ -37,6 +37,9 @@
   `all`; these are historical names of the two lines.
 - `decisions/` holds recorded decisions that a step script checks by a SHA-256 pinned in its code
   (`decisions/override_cv_condition_ii.json`, checked by `eda/c123_safety_set.py`).
+- `env/` holds the pinned requirements of the four environments: `requirements-cpu.txt` (assembly and tests),
+  `requirements-gpu.txt` (training, merging and scoring with transformers), `requirements-vllm.txt` (text generation) and
+  `requirements-kaggle-t4.txt` (the wheels on top of the Kaggle GPU image); each header names the Python and CUDA version.
 
 ## 2. Libraries
 
@@ -117,6 +120,7 @@
 | `tools/make_q397m3_notes.py` | Notes of the 397B channel in the format of the frozen M3 notes (input of the `q397m3` ranking) |
 | `tools/make_m3px27_notes.py` | Notes of the protocol channel in the format of the frozen M3 notes (input of the `m3px27` ranking) |
 | `tools/make_charsize_rows.py` | Row lists of the character-height rule (`--max-height 20 --name h20`: training and test rows whose median character height in the photo at long side 1,024 px is at most 20 px), from the stored image statistics of `eda/i5_01_image_stats.py`; label-free |
+| `tools/make_m3_targets.py` | Training targets of M3 per fold and for the full fit (`--full`; `--check` rebuilds them in memory and compares them with the files and the adapter recipes), from `train.csv`, the frozen protocol notes and `oof_pr27`, checked against the stored list `artifacts/eda/private/m3_targets/sft_manifest.json` |
 | `tools/export_proto_notes.py` | Export of the first-pass reasoning of the protocol answers into one note file per table (`data/derived/proto_notes/`, `proto_notes_test/`); recorded state labels |
 | `tools/replay/gates.py` | Regenerates the gate lists of the reasoning channels (`data/derived/think_rows/`) and checks them against the frozen lists |
 | `tools/teacher_api.py` | **Development only.** Teacher pseudo-labels for training and pool rows through the Anthropic API (never test rows; key from the environment; spending cap) |
@@ -170,7 +174,7 @@ output with the legacy-list file of the same line, so the legacy-list files must
 | reasoning channel, draw n | `zs27v_n_rp`, `zs27v_n3_rp` | `zs27v_n3_rp` |
 | `pr27` / `pr27xm` (teacher protocol) | `pr27_rp`, `px27_rp`; second draw of the answers `pr27s2_rp`, `pr27s3_rp` (sensitivity check of the safety line only) | `pr27te_rp`, `n1_rp` (`rank_test`) |
 | `m3px27` / `m3px27xm` (M3 behind the protocol notes) | `m3px27_oof_rp` | `m3px27te_rp` |
-| M3 | `m3_pilot_rp`, `m3_f034_rp`, `m3long_rp`, `cv01_m3d2_f034`, `m3d3_oof_rp`, `m3_full_rp`; fourth draw `m3d4_oof_rp`; draw h at 2,048 px `m3ha_oof_rp`, `m3hb_oof_rp` | `m3_fullte_rp` (d1), `m3d2te_rp` (d2), `m3d3te_rp` (d3), `m3d4te_rp` (d4), `m3hte_a_rp`, `m3hte_b_rp` (h, listed rows) |
+| M3 | `m3_pilot_rp`, `m3_f034_rp`, `m3long_rp`, `cv01_m3d2_f034`, `m3d3_oof_rp`, `m3_full_rp`; fourth draw `m3d4_oof_rp`; draw h at 2,048 px `m3ha_oof_rp`, `m3hb_oof_rp` | `m3_fullte_rp` (d1; `m3d1te_rp`: the same test jobs with the delivered adapter, without training), `m3d2te_rp` (d2), `m3d3te_rp` (d3), `m3d4te_rp` (d4), `m3hte_a_rp`, `m3hte_b_rp` (h, listed rows) |
 | `q397` / `q397m3` | `q397p_rp` (fidelity check), `q397m3_oof_rp`; never run: `q397p8_rp` | `q397te_rp`, `q397m3te_rp`; never run: `q397te8_rp` (8×H100 variant) |
 | CPU smoke tests | `local_cpu_test`, `local_m3_test`, `local_proto_rank` | — |
 
@@ -203,6 +207,7 @@ adopted), and `pool_ans_t4` (an early run on pool photos whose row order the tea
 | `test_primary_cols.py` | `src/stage2_sources.py` (column definitions, parser cross-check, guard, controls), `c151` checks, the extra-column path of `make_submission`, pins of `primary_cols.sh` |
 | `test_primary_m3x5h.py` | `c166`: five-draw channel with row list, guards and controls of draw h, the row-list draw of `make_submission`, pins of `primary_m3x5h.sh` |
 | `test_primary_m3px27.py` | Note guard and comparison form of the mean channel in `make_submission`, `c118.build_stage2` with a given deployment form, `c133` checks, checksums of `primary_m3px27.sh` |
+| `test_make_m3_targets.py` | Record format and loss rule of the M3 target builder, mapping to the adapter recipes; with the private files the byte-identical rebuild of the six target files |
 | `test_answer_match.py` | Mechanical answer comparison (number formats, fractions, LaTeX, units, no `eval`) |
 | `test_orient_list.py` | Choice and checks of the rotation list (`orient_list.sh`, `tools/orient_list.py`) |
 | `test_orient_repro.py` | Orientation network and rotation lists |
@@ -249,7 +254,6 @@ still write the files that were delivered.
 | Step | Frozen output | Consumed by |
 |---|---|---|
 | Blank-photo list | `data/derived/blank/test_rows.npy` | `tools/make_submission.py --blank-rows` |
-| M3 training targets | `data/derived/sft/m3_fold{0..4}_targets.jsonl`, `m3_full_targets.jsonl` | M3 training runs |
 | Combination of fold runs of M3 draws d1 and d2 | `artifacts/runs/m3_5f/`, `artifacts/runs/m3long_comb/` | `eda/a9_m3_draws_oof.py` |
 | 397B fidelity check on 64 training rows | `artifacts/eda/private/q397_deploy/c109_parity.json` | the build scripts of the primary line (stored verdict) |
 | Posterior step of the M3 decision rule | `artifacts/eda/private/m3_draws_eval/c108_m3_three_draws.json` | the build scripts (stored verdict) |

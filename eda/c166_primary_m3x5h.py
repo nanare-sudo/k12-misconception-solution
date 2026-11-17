@@ -80,13 +80,13 @@ STAGE2_BASE = ART / f"stage2_{STEM}_base.json"
 STAGE2 = ART / f"stage2_{STEM}.json"
 M3, M3X4 = "m3x3_full", "m3x4_full"
 M3X4_OOF_SHA = "96ad8725bbaa9d274376a0bb68549abc4051878171ebb572f7707962600399a6"
-M3X4_META_SHA = ""  # meta_m3x4_full.json is written by eda/c135_primary_m3x4.py oof: pinned after the first build (not used here)
+M3X4_META_SHA = "acd88b8744493b364ff14142eae1f9e59ca9351ec917e52bc607cc653c48be00"  # meta_m3x4_full.json is written by eda/c135_primary_m3x4.py oof: pinned after the first build (not used here)
 STACK_M3X4 = ART / "stack_primary_m3x4.json"
-STACK_M3X4_SHA = ""  # written by eda/c135_primary_m3x4.py stack: pinned after the first build (not used here)
+STACK_M3X4_SHA = "1e90852a68f53efd6dfd0a51730d6035e78345dafc5c0730b59a976de369420f"  # written by eda/c135_primary_m3x4.py stack: pinned after the first build (not used here)
 STAGE2_M3X4 = ART / "stage2_primary_m3x4.json"
-STAGE2_M3X4_SHA = ""  # written by eda/c135_primary_m3x4.py fit: likewise
+STAGE2_M3X4_SHA = "7259ce1446a85aa700448f6c283170e119c414b24b0aea7bd243d67b6090c58a"  # written by eda/c135_primary_m3x4.py fit: likewise
 STAGE2_COLS = ART / "stage2_primary_cols.json"
-STAGE2_COLS_SHA = ""  # written by eda/c151_primary_cols.py fit: likewise
+STAGE2_COLS_SHA = "102f98ce9c50c955753305a1795b808136d098c82c5fa1d25a0fde6f3e988a7f"  # written by eda/c151_primary_cols.py fit: likewise
 CHAIN_M3X4 = ART / "eda" / "private" / "primary_m3x4" / "chain"  # chain files a–d of primary_m3x4 (c135 fit)
 H_SHARDS = {0: "m3ha_oof_rp", 1: "m3ha_oof_rp", 2: "m3ha_oof_rp", 3: "m3hb_oof_rp", 4: "m3hb_oof_rp"}
 H_SPEC = "+".join(f"runs/{H_SHARDS[k]}/m3h_rank_f{k}/bench" for k in range(5))  # = the OOF draw h of the internal evaluation

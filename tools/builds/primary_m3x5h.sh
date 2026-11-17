@@ -41,10 +41,10 @@ LABEL="primary_m3x5h (primary_cols with the M3 channel m3x5h)"
 # stored builds primary_cols / primary_m3x4 (the intermediate build of step 0 and its base)
 COLS_FILE="artifacts/submissions/sub_primary_cols.csv"; COLS_FILE_SHA="53ec296976834959caea500217aa8e01904fbdc8be40a0542f63a462e4251926"
 COLS_MAT="artifacts/test_primary_m3x4_cols.npy"; COLS_MAT_SHA="84cf58aac011166aa5c242f94d1b6c19a5e7f7d6892d60157185cdfb1148ec95"
-COLS_STAGE2="artifacts/stage2_primary_cols.json"; COLS_STAGE2_SHA=""  # written by eda/c151_primary_cols.py fit: pinned after the first build
+COLS_STAGE2="artifacts/stage2_primary_cols.json"; COLS_STAGE2_SHA="102f98ce9c50c955753305a1795b808136d098c82c5fa1d25a0fde6f3e988a7f"  # written by eda/c151_primary_cols.py fit: pinned after the first build
 M3X4_FILE="artifacts/submissions/sub_primary_m3x4.csv"; M3X4_FILE_SHA="76da786dfdbe6a6ddcbcc93070f385e18870cb5cdaea895d92104aa3565f9973"
-M3X4_STACK="artifacts/stack_primary_m3x4.json"; M3X4_STACK_SHA=""  # written by eda/c135_primary_m3x4.py stack: pinned after the first build
-M3X4_STAGE2="artifacts/stage2_primary_m3x4.json"; M3X4_STAGE2_SHA=""  # written by eda/c135_primary_m3x4.py fit: pinned after the first build
+M3X4_STACK="artifacts/stack_primary_m3x4.json"; M3X4_STACK_SHA="1e90852a68f53efd6dfd0a51730d6035e78345dafc5c0730b59a976de369420f"  # written by eda/c135_primary_m3x4.py stack: pinned after the first build
+M3X4_STAGE2="artifacts/stage2_primary_m3x4.json"; M3X4_STAGE2_SHA="7259ce1446a85aa700448f6c283170e119c414b24b0aea7bd243d67b6090c58a"  # written by eda/c135_primary_m3x4.py fit: pinned after the first build
 M3X4_OOF="artifacts/oof_m3x4_full.npy"; M3X4_OOF_SHA="96ad8725bbaa9d274376a0bb68549abc4051878171ebb572f7707962600399a6"
 # row lists (tools/make_charsize_rows.py --max-height 20 --name h20) and all files of the OOF draw h (c166 digest --side train)
 LIST_TRAIN="data/derived/charsize/train_h20_rows.npy"; LIST_TRAIN_SHA="11afce9af96fca09032153b566ee81725f466ab927e782fcdad4324b55d18e77"
@@ -54,10 +54,10 @@ TRAIN_H_SHA="cffb5d0e8f69ad725d6ed1f6e9a331c395635818ac59e3a6734b646546baa004"  
 TEST_H_SHA="5023ddc9b3fe1679dc4e20bc3d2f5350206d3586963d6d8312d5396978f7832f"   # test shards h (c166 digest --side test): printed by the first complete build, then pinned here
 # results (pinned after the first build)
 CH_OOF="artifacts/oof_${CH}.npy"; CH_OOF_SHA="388546e508a603fc993bc52faf887e3831895cd57513887c3d21aed7bf78cc2f"
-CH_META="artifacts/meta_${CH}.json"; CH_META_SHA=""
-STACK="artifacts/stack_${STEM}.json"; STACK_SHA=""
-STAGE2_BASE="artifacts/stage2_${STEM}_base.json"; STAGE2_BASE_SHA=""
-STAGE2="artifacts/stage2_${STEM}.json"; STAGE2_SHA=""
+CH_META="artifacts/meta_${CH}.json"; CH_META_SHA="a2979b02d58572252575c202cd759d0f80b003824ed421d09945ce98ab9188f3"
+STACK="artifacts/stack_${STEM}.json"; STACK_SHA="50b46374e9703131301bb771bf46c967a8f9b3b02fdf994b8e7f9bbb1545ed66"
+STAGE2_BASE="artifacts/stage2_${STEM}_base.json"; STAGE2_BASE_SHA="4e3ad9d8c6310701ac214793c5cdd172e00f9828607567bbe376843d2a32030d"
+STAGE2="artifacts/stage2_${STEM}.json"; STAGE2_SHA="572ff297dc04b7d0e4a9a28b477af74f532bcd742371717d10e172daad894d05"
 OUT="artifacts/submissions/sub_${STEM}.csv"; OUT_SHA="4505c15950167650a66cdc60eb9c153eebfb9ed6192277bd283045f3797354e7"        # pinned after the first complete build (the submitted file)
 SUFFIX="_${TAG}"; TESTMAT="artifacts/test_${STEM}${SUFFIX}.npy"; TESTMAT_SHA="12c72dccc5995a90f6f406355ec7526a87a8c742dd5402945f003a69c073424a"
 PRIV="artifacts/eda/private/primary_m3x5h"

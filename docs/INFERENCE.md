@@ -257,7 +257,9 @@ see [ROADMAP.md](ROADMAP.md).
 
 ## 4. Environments
 
-The pinned versions are listed here; lock files with hashes and an offline wheelhouse are **planned**.
+The main pins are listed here. The complete pin set of each environment is in `env/requirements-cpu.txt`,
+`env/requirements-gpu.txt`, `env/requirements-vllm.txt` and `env/requirements-kaggle-t4.txt` (each with its Python and CUDA
+version); lock files with hashes for every pin and an offline wheelhouse are **planned**.
 
 | Environment | Main pins |
 |---|---|
@@ -277,7 +279,7 @@ disabled (`VLLM_NO_USAGE_STATS=1`, `DO_NOT_TRACK=1`); the vLLM server bound to 1
 ## 5. Mode `assemble`
 
 ```bash
-# 1. Python 3.13 environment with the versions of section 4
+# 1. Python 3.13 environment with the versions of section 4 (env/requirements-cpu.txt)
 # 2. Competition data under data/, private inputs under data/derived/ and artifacts/ (section 3)
 export OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=2
 python -I tools/make_folds.py --check || python -I tools/make_folds.py   # artifacts/folds.npy from configs/folds.parquet
@@ -459,7 +461,7 @@ texts, notes and gate lists. In `full` the generation jobs run as well.
 | Exact ranking behind the notes | `pr27xm` | `n1_rp` (`rank_test`) | RTX PRO 6000 96 GB | both (primary: fallbacks) |
 | Notes for M3 behind the protocol notes | `m3px27xm` | `tools/make_m3px27_notes.py` (test table) → `data/derived/sft_m3px27te/` | CPU | primary |
 | M3 behind the protocol notes | `m3px27xm` | `m3px27te_rp` (full-fit adapter of M3) | RTX PRO 6000 96 GB | primary |
-| M3 merge and draw d1 | `m3x3_full` | `m3_fullte_rp` | RTX PRO 6000 96 GB | both |
+| M3 merge and draw d1 | `m3x3_full` | `m3_fullte_rp` (trains the adapter first); inference only with the delivered adapter: `m3d1te_rp` | RTX PRO 6000 96 GB | both |
 | M3 draws d2 and d3 | `m3x3_full` | `m3d2te_rp`, `m3d3te_rp` | RTX PRO 6000 96 GB | both |
 | M3 draw d4 | `m3x4_full`, `m3x5h` | `m3d4te_rp` | RTX PRO 6000 96 GB | final submissions |
 | Row list "character height ≤ 20 px" | `m3x5h` | `python -I tools/make_charsize_rows.py --max-height 20 --name h20` (stored per-image statistics of `eda/i5_01_image_stats.py`; no photo is read by this step) | CPU | submission A |
@@ -771,10 +773,10 @@ Two Python environments on the same machine:
 | Runner (base) | The image's Python 3.12.3 with `transformers==5.15.1 peft==0.21.2 accelerate==1.15.0 flash-linear-attention==0.5.2` and the unpinned `bitsandbytes pyarrow pandas pyyaml pillow` (resolved: bitsandbytes 0.50.2, pyarrow 26.0.0, pandas 3.1.0, PyYAML 6.0.3, Pillow 11.0.0; torch 2.8.0+cu128 from the image). The recorded package list is identical to the source of the base lock file |
 | vLLM server | Virtual environment `/workspace/vllm_env`, created with `uv venv --python <base interpreter>` and `uv pip install vllm==0.31.0 transformers==5.17.0` (`runner.ensure_vllm_env`). Resolved to 199 packages, among them vllm 0.31.0, torch 2.13.0, transformers 5.17.0, flashinfer-python 0.7.0.post1, triton 3.7.1, nvidia-nccl-cu13 2.29.7, cuda-toolkit 13.0.3.0, ninja 1.13.2, tokenizers 0.23.3, numpy 2.3.5, Pillow 13.0.0 |
 
-**Lock files.** A lock file of the vLLM environment pins the same 199 packages (it is kept with the private package and
-is not yet part of this repository). The package list of the reference run differs from it in one package:
-`openai==3.42.0` (lock: 3.41.0; a dependency of vLLM, not used by the job). The lock carries hashes for 130 of its pins;
-the remaining hashes and an offline wheelhouse are still to be produced (section 10.12).
+**Lock files.** `env/requirements-vllm.txt` pins the same 199 packages (versions only; a private lock file carries hashes for
+130 of them). The package list of the reference run differs from it in one package: `openai==3.42.0` (file: 3.41.0; a
+dependency of vLLM, not used by the job). Hashes for every pin and an offline wheelhouse are still to be produced (section
+10.12).
 
 ### 10.5 Server start
 

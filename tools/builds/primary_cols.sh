@@ -47,14 +47,14 @@ STEM_BASE="primary_m3x4"; STEM="primary_cols"; TAG="cols"
 BASE_SUB="artifacts/submissions/sub_primary_m3x4.csv"; BASE_SUB_SHA="76da786dfdbe6a6ddcbcc93070f385e18870cb5cdaea895d92104aa3565f9973"
 BASE_MAT="artifacts/test_primary_m3x4_m3x4.npy"; BASE_MAT_SHA="30f74c8f72746f34cc423df7218bed60e7cf9b121b504a27e34606dbb3c97504"
 # blend and deployment file of the base are written by eda/c135_primary_m3x4.py of this repository: empty = first build (printed, then pinned)
-BASE_STACK="artifacts/stack_primary_m3x4.json"; BASE_STACK_SHA=""
-BASE_STAGE2="artifacts/stage2_primary_m3x4.json"; BASE_STAGE2_SHA=""
+BASE_STACK="artifacts/stack_primary_m3x4.json"; BASE_STACK_SHA="1e90852a68f53efd6dfd0a51730d6035e78345dafc5c0730b59a976de369420f"
+BASE_STAGE2="artifacts/stage2_primary_m3x4.json"; BASE_STAGE2_SHA="7259ce1446a85aa700448f6c283170e119c414b24b0aea7bd243d67b6090c58a"
 MID="m3px27xm"; MID_PROTO="runs/pr27te_rp/proto_te/proto"
 STAGE2="artifacts/stage2_${STEM}.json"
 OUT="artifacts/submissions/sub_${STEM}.csv"
 SUFFIX="_${TAG}"; TESTMAT="artifacts/test_${STEM_BASE}${SUFFIX}.npy"
 # pins: deployment file (c151 fit; written by the code of this repository: empty = first build), file and test matrix (as submitted)
-STAGE2_SHA=""; OUT_SHA="53ec296976834959caea500217aa8e01904fbdc8be40a0542f63a462e4251926"; TESTMAT_SHA="84cf58aac011166aa5c242f94d1b6c19a5e7f7d6892d60157185cdfb1148ec95"
+STAGE2_SHA="102f98ce9c50c955753305a1795b808136d098c82c5fa1d25a0fde6f3e988a7f"; OUT_SHA="53ec296976834959caea500217aa8e01904fbdc8be40a0542f63a462e4251926"; TESTMAT_SHA="84cf58aac011166aa5c242f94d1b6c19a5e7f7d6892d60157185cdfb1148ec95"
 SOURCES_SHA="ed4af2f667a02600aef494982b76860b1a4a91a214383505f3ae47a1a055e8d9"  # all source files of the protocol columns (src/stage2_sources.sources_digest: path + SHA-256 per file, training and test; 18 files)
 PRIV="artifacts/eda/private/${STEM}"
 COPY_STAGE2="$PRIV/copy/stage2_${TAG}k.json"

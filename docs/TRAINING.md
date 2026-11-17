@@ -85,8 +85,10 @@ assembly ([METHOD.md](METHOD.md#8-class-marginal-alignment)); it uses no label.
 | vLLM | Text generation (reasoning, protocol answers, M3 draws) | Separate virtual environment: vllm 0.31.0, transformers 5.17.0, torch 2.13.0 |
 | CPU | OOF assembly, blend, second stages, assembly | Python 3.13.5, numpy 2.4.2, scipy 1.17.1, pandas 2.3.3, scikit-learn 1.8.0, pyarrow 23.0.1, PyYAML 6.0.3, Pillow 11.3.0, torch 2.11.0 and transformers 5.15.1 (imported by shared model helpers; used on the CPU); pytest 8.4.2 for the tests |
 
-Lock files with hashes and an offline wheelhouse are **planned** ([ROADMAP.md](ROADMAP.md)); until then, install the
-versions listed above.
+The complete pin set of every environment is in `env/requirements-gpu.txt`, `env/requirements-vllm.txt`,
+`env/requirements-cpu.txt` and `env/requirements-kaggle-t4.txt` (exact versions as installed in the reference runs; each file
+names its Python and CUDA version and how it is installed). Lock files with hashes for every pin and an offline wheelhouse
+are **planned** ([ROADMAP.md](ROADMAP.md)).
 
 **Base models** (fixed revisions; all Apache 2.0):
 
@@ -213,17 +215,29 @@ No training is involved. Same-question examples and topic blocks are drawn from 
 - the frozen protocol notes `data/derived/proto_notes/train_pr27.jsonl`;
 - `oof_pr27`, which decides where the notes carry loss.
 
-The target builder is not part of this repository, and the six files are **not yet** in the private package (version 0.3
-said they were delivered; that was wrong). Their checksums are recorded in the training recipe of every adapter
-(`sft_recipe.json`: `targets_sha256`; full fit `b685a7b3da67822280ca51b8a1cf0c47e7ba41f0d6c561a33a7e7dfb855e35aa`), and a
-rebuild from the frozen inputs was bit-identical. `src/vlm/sft.py` reads and checks them at training time. Adding the six
-files, the list the builder checks against and the builder itself is an open item ([ROADMAP.md](ROADMAP.md)).
+The builder is `tools/make_m3_targets.py`:
+
+```bash
+python -I tools/make_m3_targets.py --full            # writes the six target files (+ .meta.json) to data/derived/sft/ if absent
+python -I tools/make_m3_targets.py --full --check    # writes nothing: rebuilds them in memory and compares them with the files
+                                                     #   present and with targets_sha256 of the six adapter recipes
+```
+
+It recomputes from `oof_pr27` and the notes the rows on which the notes carry loss and stops unless they equal the stored
+list `artifacts/eda/private/m3_targets/sft_manifest.json` (field `pr27_ok` per fold; SHA-256 pinned in the tool). Token
+lengths in the meta files use the tokenizer of Qwen3.5-0.8B (`--tokenizer`, default `data/models/Qwen3.5-0.8B`) and the
+headers of the training photos; the meta files record their creation time and are therefore not byte-reproducible, the target
+files are, and an existing target file is never overwritten by a different one. The six target files, their meta files and
+the stored list are part of the private input package. Their checksums are recorded in the training recipe of every adapter
+(`sft_recipe.json`: `targets_sha256`; full fit `b685a7b3da67822280ca51b8a1cf0c47e7ba41f0d6c561a33a7e7dfb855e35aa`); a rebuild
+from the frozen inputs with the tool of this repository is byte-identical for all six files. `src/vlm/sft.py` reads and checks
+them at training time.
 
 **10.2 Adapters and first draw.**
 
 | | |
 |---|---|
-| Configurations | `m3_pilot_rp` (folds 1 and 2, preceded by a 32-step smoke job), `m3_f034_rp` (folds 0, 3 and 4), `m3_fullte_rp` (full fit → adapter `m3_full`, merge and test draw d1; `m3_full_rp` holds the same training jobs) |
+| Configurations | `m3_pilot_rp` (folds 1 and 2, preceded by a 32-step smoke job), `m3_f034_rp` (folds 0, 3 and 4), `m3_fullte_rp` (full fit → adapter `m3_full`, merge and test draw d1; `m3_full_rp` holds the same training jobs; `m3d1te_rp` holds only the merge and test draw d1 with the delivered adapter) |
 | Recipe | LoRA r 32, α 64, dropout 0.05 on layers 40–63; vision tower frozen; 2 epochs; learning rate 1e-4; gradient accumulation 8; gradient checkpointing; summed code loss with weight 1.0, finding 1.0, notes 0.5, scaffold 0.5; notes capped at 2,500 tokens; seed 42 |
 | Hardware and time | RTX PRO 6000 96 GB, bf16, peak about 72 GB. 1.75–1.80 s per step: 2,400 steps per fold (about 70 min) and 3,000 steps for the full fit (about 90 min). A pre-run aborts on cards that are too slow or too small |
 | Per fold | Train → merge the adapter → vLLM writes notes, finding and root for the fold's 300 rows (draw d1: greedy, up to 3,200 tokens) → exact ranking of all 74 classes behind the canonical text |
@@ -485,7 +499,7 @@ are marked; their outputs are frozen inputs ([CODEMAP.md](CODEMAP.md#10-steps-wh
 | `think18nb`, `think18sb` | `tools/replay/gates.py`, runner (`think_gen` + scoring), `eda/a6_assemble_oof.py` | `tools/replay/gates.py check`, runner |
 | `pr27xm` | runner (`proto_gen`, `proto_rank`), `eda/a8_proto_oof.py`, `eda/c95_rank_mean.py`, `tools/export_proto_notes.py` | runner, `tools/export_proto_notes.py --allow-test` |
 | `m3px27xm` | `tools/make_m3px27_notes.py`, runner (M3 ranking behind the notes), `eda/c132_m3px27_eval.py`, `eda/c133_primary_m3px27.py` | runner, `tools/make_m3px27_notes.py`, `eda/c133_primary_m3px27.py test-guard` |
-| `m3x3_full` | runner (`train`, `merge`, `sft_gen`, ranking), M3 targets (frozen, builder not included), combination of fold runs (frozen, script not included), `eda/a9_m3_draws_oof.py`, `eda/c108_m3_three_draws.py` | runner, `tools/freeze_m3_texts.py`, `eda/a9_m3_draws_oof.py --gen-status`, `eda/c99_m3_deploy.py --variant` |
+| `m3x3_full` | runner (`train`, `merge`, `sft_gen`, ranking), M3 targets (`tools/make_m3_targets.py`), combination of fold runs (frozen, script not included), `eda/a9_m3_draws_oof.py`, `eda/c108_m3_three_draws.py` | runner, `tools/freeze_m3_texts.py`, `eda/a9_m3_draws_oof.py --gen-status`, `eda/c99_m3_deploy.py --variant` |
 | `q397m3` | `tools/open_teacher.py` (development only), `eda/c110_q397_deploy.py`, `tools/make_q397m3_notes.py`, runner, `eda/c117_q397m3_deploy.py`, `eda/c115_q397m3_eval.py` | runner, `tools/make_q397m3_notes.py`, `eda/c117_q397m3_deploy.py test-guard`, `eda/c110_q397_deploy.py test-status`; parity check (stored verdict, script not included) |
 | Blends | `eda/c99_m3_deploy.py`, `eda/c110_q397_deploy.py`, `eda/c107_q397_full.py`, `eda/a2_probe_stack.py`, `eda/c21_margin_align.py` | `tools/make_submission.py` |
 | Second stages | `eda/c118_stage2.py`, `eda/c120_s036_safe_stage2.py`, `eda/c121_stage2_i1.py`, `eda/c123_safety_set.py`, `eda/c124_stage2_mm.py`, `eda/c129_safety_nd.py`, `eda/c130_safety_ndr.py`, `eda/c133_primary_m3px27.py`, `eda/risk_rule.py`, `src/stage2.py`, `src/answer_match.py`, `src/note_sim.py`, `src/note_regex.py` | `tools/make_submission.py --stage2`, `eda/c121_stage2_i1.py submit` |

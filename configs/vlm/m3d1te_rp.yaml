@@ -1,0 +1,82 @@
+# M3, draw d1 on all 3,498 test rows, INFERENCE ONLY with the delivered adapter of the full fit: merge the adapter into the 27B,
+# generate notes + finding + root for every test row (greedy, up to 3,200 tokens), then the exact ranking of all 74 codes behind
+# the canonical text. These are the three test-side jobs of m3_fullte_rp.yaml (merge, generation, ranking) with the same model,
+# settings and order, without its two training jobs; the adapter comes from the full fit instead of being trained again, as in the
+# configurations of draws d2-d4 (job names m3d1_* like theirs). A rerun gives a new draw of the texts (docs/INFERENCE.md, section 6);
+# the ranking behind fixed texts is deterministic on the reference hardware. Test outputs stay under the output folder; only
+# aggregates are inspected.
+# Inputs: the adapter folder of the full fit under the same output root, as for d2-d4 (adapter_from: ../m3_fullte_rp/m3_train_full,
+#   that is <out>/m3_fullte_rp/m3_train_full/ with adapter/adapter_config.json, adapter/adapter_model.safetensors and
+#   sft_recipe.json; the private package holds exactly this folder as weights/m3_full/); the competition data (test.csv, the test
+#   photos and the question diagrams) and the taxonomy.
+#   python -u -m vlm.runner --config ../configs/vlm/m3d1te_rp.yaml --out <out>      (from src/, as for the other runs)
+# Assembly with the new draw: replace runs/m3_fullte_rp/m3_test_rank/test by runs/m3d1te_rp/m3d1_test_rank/test in the make_submission
+#   call (docs/INFERENCE.md, section 9; the pinned checksums of the frozen draw then no longer apply).
+# Hardware: one RTX PRO 6000 (96 GB, 200 GB disk). Time: loading, merging and server start about 0.4 h; generation about 2.5-2.9 h;
+#   ranking about 3.4 s per row (about half of the answers are open and are completed first), about 3.3 h: about 6.2-6.6 h.
+# Checks (aggregates only): merge log line, generation meta (answered 3,498, failed 0, share of complete answers about 0.49 as for
+#   the frozen draw), ranking 'failed': 0, prompt-header check, share of NONE at the top about 0.35;
+#   python -I eda/a9_m3_draws_oof.py --gen-status runs/m3d1te_rp/m3d1_test_rank/test --table test
+run: m3d1te_rp
+models:
+  q38_27b:
+    repo: Qwen/Qwen3.8-27B
+    revision: 1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0
+    dtype: bf16
+    max_beam_tokens: 600000
+  m3d1:
+    merged: m3d1_merged
+    dtype: bf16
+    max_beam_tokens: 600000
+workers:
+- gpu: 0
+  jobs:
+  - name: m3d1_merge
+    kind: merge
+    model: q38_27b
+    adapter_from: ../m3_fullte_rp/m3_train_full
+    out_model: m3d1_merged
+  - name: m3d1_test_gen
+    kind: sft_gen
+    model: m3d1
+    split: test
+    order_seed: 0
+    image:
+      max_side: 1024
+      question_max_side: 448
+    max_tokens: 3200
+    concurrency: 64
+    guard_rows: 24
+    guard_min_complete: 0.25
+    max_failed: 0.05
+    request_timeout_s: 1200
+    tag: gen
+    server:
+      max_model_len: 16000
+      gpu_memory_utilization: 0.9
+      max_num_seqs: 64
+      startup_s: 900
+      pip: vllm==0.31.0 transformers==5.17.0
+  - name: m3d1_test_rank
+    kind: predict
+    model: m3d1
+    fold: null
+    sft_from: m3d1_test_gen/gen
+    probes:
+    - proto_rank
+    predict:
+    - split: test
+      tag: test
+      probes:
+      - proto_rank
+    image:
+      max_side: 1024
+      question_max_side: 448
+    batch: 6
+    beams: 74
+    finish_tokens: 320
+    prefix_cache_tol: 0.12
+    prefix_cache_same_top: false
+    prefix_cache_check_rows: 4
+    save_every: 25
+    drop_model: true

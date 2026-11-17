@@ -197,6 +197,7 @@ k12-solution/
 ├── src/                   metric, label space, submission checks, transcription cleaning, second stage, answer matching,
 │                          note similarity and regex note features, orientation net
 │   └── vlm/               model runner: prompts, exact code scoring, LoRA training, vLLM text generation
+├── env/                   pinned requirements of the four environments (CPU assembly, GPU, vLLM text generation, Kaggle T4)
 ├── decisions/             recorded decisions that a build script checks by their pinned checksum
 ├── kaggle_core/           small shared library: artifacts, folds, metrics, submission validation
 ├── eda/                   step scripts: OOF assembly, blend fitting, deployment checks, second stages
@@ -237,7 +238,7 @@ description of the orientation network, and earlier submission files that the bu
 of this version ([docs/ROADMAP.md](docs/ROADMAP.md), step 3). Then:
 
 ```bash
-# Python 3.13 with the CPU versions listed in docs/INFERENCE.md (section 4)
+# Python 3.13 with the CPU versions of env/requirements-cpu.txt (docs/INFERENCE.md, section 4)
 export OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=2
 python -I tools/make_folds.py                              # artifacts/folds.npy from configs/folds.parquet
 ORIENT=legacy bash tools/builds/s029_m3x3.sh safe          # earlier files with the first-version rotation list,

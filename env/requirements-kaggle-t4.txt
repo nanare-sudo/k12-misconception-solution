@@ -1,0 +1,11 @@
+# Kaggle T4×2 notebooks (9B scorer `v1`/`v1r`, `zs27t` in 4 bit, and the M3 ranking checks on the second hardware class):
+# these four packages are installed from attached offline wheels on top of the Kaggle GPU image, without dependencies;
+# everything else comes with the image (not reproducible from PyPI alone).
+# Python: 3.13 (Kaggle GPU image). CUDA: 12.8 (torch 2.11.0+cu128 of the image). Internet off.
+#   python -m pip install --no-index --no-deps --find-links <wheel folder> -r env/requirements-kaggle-t4.txt
+
+# --- wheels installed on top of the Kaggle GPU image, without dependencies (bitsandbytes was unpinned there; version as installed) ---
+accelerate==1.15.0
+bitsandbytes==0.50.2
+peft==0.21.2
+transformers==5.15.1
