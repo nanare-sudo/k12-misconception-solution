@@ -269,7 +269,7 @@ Seeds: section 7.
 
 ## 9. Private weights and inputs
 
-Download: `<PRIVATE LINK>`. Not public: everything in it is trained on or derived from the competition data.
+Download: the private link in our email to the host (not stored in this repository). Not public: everything in it is trained on or derived from the competition data.
 
 | Content | Size |
 |---|---:|
