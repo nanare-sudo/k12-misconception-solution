@@ -497,7 +497,8 @@ scoring and ranking jobs only (`rescore`). `configs/vlm/test_side/` holds the te
 Both keep the run and job names of the reference runs, so that the outputs land where the CPU tools read them
 ([VERIFICATION.md §5.2](VERIFICATION.md#52-rescore-and-full-gpu)). `tools/make_inference_configs.py` writes the two
 folders from the reference configurations. `tools/gpu_inference.sh rescore|full <package-dir>` runs the model steps of
-the table in the order of [VERIFICATION.md §5.2](VERIFICATION.md#52-rescore-and-full-gpu) and then writes A and B with
+the table in the order of [VERIFICATION.md §5.2](VERIFICATION.md#52-rescore-and-full-gpu) and freezes the new M3 texts.
+In `full` it also exports the new notes and re-records the checksums of the new answers. It then writes A and B with
 the two calls of §5. `--dry-run` only prints the commands and checks that every configuration and input folder exists.
 The CPU rows that recompute or check a row list (blank photos, rotation, gates, character height) are separate commands.
 
