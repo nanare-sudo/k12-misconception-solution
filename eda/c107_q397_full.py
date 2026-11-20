@@ -122,8 +122,8 @@ OOF_SHA16 = {"v1r": "e1729c1fddad7ebb", "zs27q": "7a11b94751f6d458", "zs27t": "5
              "think18nb": "9c3403b57d07a956", "think18sb": "275cace8a36ca757", "pr27xm": "bf3d1b58abfc57eb",
              "m3x2_full_cv01": "e08f2deefe90a9b3"}
 M3_SHA256 = "e08f2deefe90a9b3b903668222cb51aa3a07f6dd80705e8f2c078ff3b2302ef1"
-STACK_BEST = ("stack_cv01_best_l2.json", "2d39d90ff232621fd79084b696a368ce574b570b92a0b56f161f41de84e0f6b4")
-STACK_SAFE = ("stack_v1r_zs27t_think18sb_pr27xm_m3x2_ar.json", "f6254444527250f898f50a6443096d7f90d63da38e917240b738965d6f1c78f0")
+STACK_BEST = ("stack_cv01_best_l2.json", "b2835875298a89247fbc8a4eeaf1cc4177de17af66ef395ffa636b586d1add43")
+STACK_SAFE = ("stack_v1r_zs27t_think18sb_pr27xm_m3x2_ar.json", "fbb5c2ba87eec7a77f7537a139eba86e27d0890dc0f6992183b49524906ab1eb")
 
 # line labels (recorded in the reports derived from these recipes)
 LINE_BEST = {"label": "primary line (earlier recipe)", "names": ["v1r", "zs27q", "think18nb", "pr27xm", "m3x2_full_cv01"],

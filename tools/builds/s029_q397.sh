@@ -94,7 +94,7 @@ check 57eee5101f00d46d9b7a1c1fc68cf2554245b7cb2ecd6ec1c4bcd77e023d4279 artifacts
 check c5bcd665a0cd5246b78dcd67012d6831e0e51ecb553666d60e6f164bf519fadf artifacts/oof_q397.npy
 check f591eb385fb7fecad986937488d5e9ac5c180bc0d597f19f71750340917388dc artifacts/meta_q397.json
 check e08f2deefe90a9b3b903668222cb51aa3a07f6dd80705e8f2c078ff3b2302ef1 artifacts/oof_m3x2_full_cv01.npy
-check b15d3c16ad412875092a5b7b4d7cf2203172a733583e0c5a2fc4912d76f04f13 artifacts/meta_m3x2_full_cv01.json
+check b48d39106e0b3de0f67f7922a2fa9f2cb8560264ceef0c26ddb976d13f04e255 artifacts/meta_m3x2_full_cv01.json
 check bf3d1b58abfc57eb64139418ed7646f45ba9f879791661658035171b9a2f0d03 artifacts/oof_pr27xm.npy
 check "$REF_SHA" "$REF"
 case "$STEM" in  # blend files built in advance (c110 stack --save); the m3x3 versions are created on the first call

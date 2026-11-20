@@ -36,10 +36,9 @@ def main() -> int:
     out = root / "derived" / "charsize"
     out.mkdir(parents=True, exist_ok=True)
     st = pd.read_parquet(STATS, columns=["folder", "file", "cc_h_p50"])
-    # Recorded key and description of the frozen list meta file (data/derived/charsize/charsize_h20.meta.json, pinned by its checksum in
-    # tools/builds/primary_m3x5h.sh and part of the digest TRAIN_H_SHA there): kept verbatim, so that a rerun reproduces the pinned file
-    # byte for byte. Meaning: "statistic": "cc_h_p50 (median character height in pixels at long side 1,024)".
-    meta = {"kennzahl": "cc_h_p50 (mittlere Zeichenhöhe in Pixeln bei langer Seite 1.024)", "max_height": a.max_height, "name": a.name,
+    # Key and description as in the frozen list meta file data/derived/charsize/charsize_h20.meta.json (pinned by its checksum in
+    # tools/builds/primary_m3x5h.sh and part of the digest TRAIN_H_SHA there).
+    meta = {"statistic": "cc_h_p50 (median character height in pixels at long side 1,024)", "max_height": a.max_height, "name": a.name,
             "stats_sha256": hashlib.sha256(STATS.read_bytes()).hexdigest(), "tables": {}}
     for split in ("train", "test"):
         t = C.load_table(root, split)

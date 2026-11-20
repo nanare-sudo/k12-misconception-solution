@@ -96,7 +96,7 @@ TEST_RANKS4 = ("runs/m3_fullte_rp/m3_test_rank/test", "runs/m3d2te_rp/m3d2_test_
                "runs/m3d4te_rp/m3d4_test_rank/test")
 LISTS = {"train": ("derived/charsize/train_h20_rows.npy", "11afce9af96fca09032153b566ee81725f466ab927e782fcdad4324b55d18e77", 1001),
          "test": ("derived/charsize/test_h20_rows.npy", "9b1a1837bc2cf399e2e221c49def4b4ae11d666b5346ecb1eddc076622c8340a", 2459)}
-LIST_META = ("derived/charsize/charsize_h20.meta.json", "4a48a02b00a53aaf022a48d3031ef2ad7cd8f1fc10052139cbb875c3431007df")
+LIST_META = ("derived/charsize/charsize_h20.meta.json", "17292d7b8a81108acaaa2401bf16e5b713f1347a22c2eb281da8a6fecfabec62")
 ARM = "add5_sm"
 UNITS = {"base": {"line": [7592, 7542], "with": [7597, 7566]}, ARM: {"line": [7584, 7542], "with": [7583, 7564]}}  # internal evaluation, original split (pinned)
 FULL_TRAIN = ("m3_fullte_rp", "m3_train_full")

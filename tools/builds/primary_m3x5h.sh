@@ -49,12 +49,12 @@ M3X4_OOF="artifacts/oof_m3x4_full.npy"; M3X4_OOF_SHA="96ad8725bbaa9d274376a0bb68
 # row lists (tools/make_charsize_rows.py --max-height 20 --name h20) and all files of the OOF draw h (c166 digest --side train)
 LIST_TRAIN="data/derived/charsize/train_h20_rows.npy"; LIST_TRAIN_SHA="11afce9af96fca09032153b566ee81725f466ab927e782fcdad4324b55d18e77"
 LIST_TEST_REL="derived/charsize/test_h20_rows.npy"; LIST_TEST="data/$LIST_TEST_REL"; LIST_TEST_SHA="9b1a1837bc2cf399e2e221c49def4b4ae11d666b5346ecb1eddc076622c8340a"
-LIST_META="data/derived/charsize/charsize_h20.meta.json"; LIST_META_SHA="4a48a02b00a53aaf022a48d3031ef2ad7cd8f1fc10052139cbb875c3431007df"
+LIST_META="data/derived/charsize/charsize_h20.meta.json"; LIST_META_SHA="17292d7b8a81108acaaa2401bf16e5b713f1347a22c2eb281da8a6fecfabec62"
 TRAIN_H_SHA="cffb5d0e8f69ad725d6ed1f6e9a331c395635818ac59e3a6734b646546baa004"  # 42 files: shards, generation, list, list meta
 TEST_H_SHA="5023ddc9b3fe1679dc4e20bc3d2f5350206d3586963d6d8312d5396978f7832f"   # test shards h (c166 digest --side test): printed by the first complete build, then pinned here
 # results (pinned after the first build)
 CH_OOF="artifacts/oof_${CH}.npy"; CH_OOF_SHA="388546e508a603fc993bc52faf887e3831895cd57513887c3d21aed7bf78cc2f"
-CH_META="artifacts/meta_${CH}.json"; CH_META_SHA="a2979b02d58572252575c202cd759d0f80b003824ed421d09945ce98ab9188f3"
+CH_META="artifacts/meta_${CH}.json"; CH_META_SHA="43b0586b76f17faf652849470ffa8e3e7504d845679559a09c168000d1f08a23"
 STACK="artifacts/stack_${STEM}.json"; STACK_SHA="50b46374e9703131301bb771bf46c967a8f9b3b02fdf994b8e7f9bbb1545ed66"
 STAGE2_BASE="artifacts/stage2_${STEM}_base.json"; STAGE2_BASE_SHA="4e3ad9d8c6310701ac214793c5cdd172e00f9828607567bbe376843d2a32030d"
 STAGE2="artifacts/stage2_${STEM}.json"; STAGE2_SHA="572ff297dc04b7d0e4a9a28b477af74f532bcd742371717d10e172daad894d05"
