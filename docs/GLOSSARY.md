@@ -145,8 +145,13 @@ file and folder names are kept as they were during development, because the code
 | long older names, such as `sub_v1r_zs27t_think18sb_pr27xm_m3x3_full_ar_ia_t4.csv` | Files of earlier builds whose names list the channels of the blend; the short tags at the end are build labels | `artifacts/submissions/`, `artifacts/stack_*.json` |
 | `artifacts/runs/<run>/<run>/<job>/` | Frozen outputs of one job of a model run | private package |
 | `artifacts/eda/private/<topic>/` | Stored reports of the step and build scripts. Some hold per-row values, so the folder is private | private package |
+| `runs/gpu_rescore/`, `runs/gpu_full/` | Default output folders of `tools/gpu_inference.sh` for the raw outputs of the model runs | repository root, after a GPU run |
 | `artifacts/repin_backup/` | Copies that `tools/repin_test_side.py --write` keeps before it re-records checksums | after a `full` run |
 | `weights/` | Our adapters and the orientation network | private package |
+| `m3_full`, `v1_full` | Our adapters of the full fit on all 1,500 training rows: M3 (LoRA on Qwen3.8-27B) and the 9B scorer (LoRA on Qwen3.5-9B) | `weights/m3_full/`, `weights/v1_full/` |
+| `v1_f0` … `v1_f4`, `m3_train_f0` … `m3_train_f4` | The five fold adapters of the 9B scorer and of M3; each one never saw its own fold | `weights/v1_folds/`; M3 under `artifacts/runs/m3_pilot_rp/` and `m3_f034_rp/` |
+| `sft_recipe.json` | Training recipe of an M3 adapter, with the checksums of its training targets | next to each M3 adapter |
+| `orient_cnn` | The orientation network: weights `orient_cnn.pt` and description `orient_cnn.json` | `weights/orient_cnn/`, `artifacts/orient/` |
 | `PACKAGE_INDEX.tsv` | Every package file with its size, SHA-256, role and whether it is derived from test rows | private package |
 | `MANIFEST.sha256` | Checksums of all package files, for `sha256sum -c` | private package |
 | `README_PACKAGE.md` | Where each package folder goes | private package |

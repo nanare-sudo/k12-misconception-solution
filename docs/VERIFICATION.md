@@ -143,10 +143,10 @@ optional 397B parity check.
 The CPU machine has 4 cores (8 threads) and 15 GB RAM; it is the reference CPU of §5.1, and other jobs shared it during
 the timed runs. The 4 × H200 machine reported 304 GiB of host memory. We did not record the system RAM of the rented
 single-GPU machines and of the Kaggle notebooks. Disk: 200 GB for the 27B and M3 runs and 600 GB for the 397B run, whose
-weights alone take 406.2 GB. Each M3 configuration merges the adapter into its own model folder under `$K12_MODELS`. We
-estimate about 18.5 GB of new files per merge. We have not tested whether all M3 configurations fit into 200 GB when
-they run one after another on one machine. A configuration for the 397B on 8 × H100 exists but has never run
-([INFERENCE.md §10.12](INFERENCE.md#1012-open-points)).
+weights alone take 406.2 GB. Each M3 configuration merges the adapter into its own model folder under `$K12_MODELS` and
+removes that folder after its last job, so only one merged model exists at a time. A merge writes the changed weight
+files and links the others; we estimate about 18.5 GB of new files. A configuration for the 397B on 8 × H100 exists but
+has never run ([INFERENCE.md §10.12](INFERENCE.md#1012-open-points)).
 
 ## 4. Where to place the data
 
@@ -170,8 +170,9 @@ runner checks the row order of `test.csv` against a pinned digest.
 
 `reproduce.sh` copies the package's `artifacts/` and makes the copy writable, because the build scripts write their
 outputs and reports next to the frozen files. It links `data/derived/` to the package, because the CPU check only reads
-it. The GPU modes, the training steps and some checks of §5.2 write into `data/derived/`, so use a writable copy there.
-Full tree of the private part: [INFERENCE.md §3](INFERENCE.md#3-data-layout). File checksums of the base models:
+it. The GPU script of §5.2 replaces this link by a writable copy, because it writes new notes there. For the training
+steps of section 6, use a writable copy as well. Full tree of the private part:
+[INFERENCE.md §3](INFERENCE.md#3-data-layout). File checksums of the base models:
 [weights_manifest.json](weights_manifest.json).
 
 ## 5. (a) Inference from the trained weights to the submission file
@@ -265,38 +266,33 @@ TODO(final): date and result of the final check of version 0.6 with the delivere
 
 ### 5.2 `rescore` and `full` (GPU)
 
-Run the quick check of §5.1 first. It writes `check_A.csv` and `check_B.csv`, the reference files for the comparison at
-the end.
+`tools/gpu_inference.sh` runs the GPU model steps of both submissions again and then writes A and B from the new
+outputs. In mode `rescore` it recomputes every scoring and ranking step behind the frozen texts of the package; no text
+is generated, and no vLLM environment is needed. In mode `full` it also generates every text anew.
 
 #### Before you start
 
-1. Install the GPU base environment of section 2. For `full`, also install the vLLM environment.
-2. Put the competition photos under `data/competition_data/images/` (section 4). Make `data/derived/` a writable copy of
-   the package folder, because both modes write new notes into it:
-
-   ```bash
-   rm data/derived                                    # the link that reproduce.sh made
-   cp -r <package-dir>/data/derived data/derived && chmod -R u+w data/derived
-   ```
-
-3. Download the base models at the pinned revisions into one folder and set `K12_MODELS` to it.
-   [weights_manifest.json](weights_manifest.json) lists every file with its checksum. The merged M3 models are written
-   there as well.
-4. Set the variables for runs without network access (section 2), then cut the network.
-
-After a GPU run, `artifacts/` and `data/derived/` no longer match the package. To run the quick check again, move both
-folders away first, for example with `mv artifacts artifacts.gpu` and `mv data/derived data/derived.gpu`. `reproduce.sh`
-then sets them up from the package again.
+1. Run the quick check of §5.1 once. It sets up `artifacts/` and `data/derived/` and writes `check_A.csv` and
+   `check_B.csv`, the reference files for the comparison at the end.
+2. Put the competition photos under `data/competition_data/images/` and `unlabelled.csv` next to the other CSV files in
+   `data/` (section 4).
+3. Install the GPU base environment of section 2. For `full`, also install the vLLM environment.
+4. Download the base models at the pinned revisions into one folder and set `K12_MODELS` to it.
+   [weights_manifest.json](weights_manifest.json) lists every file with its checksum.
+5. Cut the network. The script sets the variables of section 2 itself, and it sets `K12_DATA` to `data/` and
+   `K12_ADAPTERS` to the package's `weights/` folder.
 
 #### Run
 
 ```bash
-tools/gpu_inference.sh rescore <package-dir> --dry-run    # prints every command and checks configurations and inputs
-tools/gpu_inference.sh rescore <package-dir>              # or: tools/gpu_inference.sh full <package-dir>
+bash tools/gpu_inference.sh rescore <package-dir> --dry-run    # prints every command and checks every input
+bash tools/gpu_inference.sh rescore <package-dir>              # or: bash tools/gpu_inference.sh full <package-dir>
 ```
 
-`--out DIR` sets the folder for the raw outputs of the model runs. With `--dry-run` the script prints every command and
-checks that each configuration file and each input folder exists, without running a model; this works on a CPU.
+`--dry-run` needs no GPU and no base models, so you can run it on a CPU first. `--out DIR` sets the folder for the raw
+outputs of the model runs; the default is `runs/gpu_<mode>/` in the repository. A configuration that has finished is not
+run again when you call the script again with the same output folder. Each configuration names the GPUs it uses (field
+`gpu` of each worker). To split the work over several machines, run the printed commands by hand.
 
 #### What the script runs
 
@@ -311,37 +307,44 @@ configuration.
 **Do not run `configs/vlm/m3_fullte_rp.yaml` itself for inference.** Its jobs `m3_smoke_full` and `m3_train_full`
 retrain M3 for about 1.5 h and overwrite the delivered adapter, from which every M3 configuration merges.
 
-`rescore` runs these steps; no text is generated:
-1. Copy the frozen texts of the reasoning and M3 draws from the package into the output folder, so that the ranking jobs
-   read them.
-2. 9B scorer, plain and rotation-corrected: `v1te_a_t4`, `v1te_b_t4`, `test_side/v1rot_t4`.
-3. 27B zero-shot scorer: `zs27q_test0_rp`, `zs27q_test1_rp`.
-4. Scoring behind the reasoning draws g and n: `rescore/zs27v_te_rp`, `rescore/zs27v_n3_rp`.
-5. M3 rankings of the draws d1–d4: `rescore/m3_fullte_rp`, `rescore/m3d2te_rp`, `rescore/m3d3te_rp`,
-   `rescore/m3d4te_rp`.
-6. M3 ranking of draw h, for A only: `rescore/m3hte_a_rp`, `rescore/m3hte_b_rp`.
-7. M3 behind the frozen protocol notes and behind the frozen 397B notes: `m3px27te_rp`, `q397m3te_rp`.
+The script works in six steps:
+1. It checks every input and stops before the first GPU step if one is missing.
+2. It replaces the link `data/derived` by a writable copy of the package folder, because the later steps write new notes
+   into it.
+3. It copies the delivered M3 adapter to `<out>/m3_fullte_rp/m3_train_full/`, where every M3 configuration merges it
+   from. In `rescore` it also copies the frozen texts of the reasoning and M3 draws into the output folder, so that the
+   ranking jobs read them.
+4. It runs the configurations listed below with the model runner. It then copies each finished job folder to
+   `artifacts/runs/<run>/<run>/<job>/`, where the CPU tools read it.
+5. It freezes the M3 notes of the draws d1–d4 again behind their new rankings (`tools/freeze_m3_texts.py`). In `full` it
+   re-records the checksums of the new protocol and 397B answers with `tools/repin_test_side.py --write`; in `rescore`
+   it checks with `--check` that they did not change.
+6. It runs the two calls of the quick check with the output names `artifacts/submissions/new_A.csv` and `new_B.csv`. It
+   prints counts and shares only: per file the number of rows, the shares of rows with the same top-1 code, the same
+   three codes and the same line as `check_A.csv` or `check_B.csv`, and its SHA-256.
 
-`full` generates every text anew:
-1. 9B scorer and 27B zero-shot scorer as in `rescore`.
-2. Reasoning draws g and n, and the protocol answers of the 27B: `test_side/zs27v_te_rp`, `test_side/zs27v_n3_rp`,
-   `pr27te_rp`.
-3. M3 draws d1–d4 with merge, generation and ranking: `test_side/m3_fullte_rp`, `m3d2te_rp`, `m3d3te_rp`, `m3d4te_rp`.
-   Draw h for A: `m3hte_a_rp`, `m3hte_b_rp`.
-4. 397B parity probe and test side on 4 × H200: `q397p_rp`, `q397te_rp`.
-5. On the CPU, the notes from the new answers: `tools/export_proto_notes.py`, `tools/make_m3px27_notes.py` and
-   `tools/make_q397m3_notes.py`.
-6. M3 behind the new notes: `m3px27te_rp`, `q397m3te_rp`.
+The configurations of `rescore`, in this order:
+- 9B scorer, plain and rotation-corrected: `v1te_a_t4`, `v1te_b_t4`, `test_side/v1rot_t4`.
+- 27B zero-shot scorer: `zs27q_test0_rp`, `zs27q_test1_rp`.
+- Scoring behind the reasoning draws g and n: `rescore/zs27v_te_rp`, `rescore/zs27v_n3_rp`.
+- M3 rankings of the draws d1–d4: `rescore/m3_fullte_rp`, `rescore/m3d2te_rp`, `rescore/m3d3te_rp`, `rescore/m3d4te_rp`.
+- M3 ranking of draw h, for A only: `rescore/m3hte_a_rp`, `rescore/m3hte_b_rp`.
+- M3 behind the frozen protocol notes and behind the frozen 397B notes: `m3px27te_rp`, `q397m3te_rp`.
 
-In both modes the script then does the following:
-- It copies each new job folder to the place where the CPU tools read it, `artifacts/runs/<run>/<run>/<job>/`. Merge,
-  smoke and check jobs keep their frozen folders.
-- It freezes the M3 notes of draws d1–d4 again behind their new rankings (`tools/freeze_m3_texts.py`).
-- In `full` only, it re-records the checksums of the new protocol and 397B answers with
-  `tools/repin_test_side.py --write` (see "What stays pinned" below).
-- It runs the two calls of the quick check with the output names `artifacts/submissions/new_A.csv` and `new_B.csv`.
-- It prints aggregates only: the number of rows, the share of rows with the same top-1 code and the share with the same
-  three codes, against `check_A.csv` and `check_B.csv`.
+The configurations of `full`, in this order:
+- 9B scorer and 27B zero-shot scorer as in `rescore`.
+- Reasoning draws g and n, and the protocol answers of the 27B: `test_side/zs27v_te_rp`, `test_side/zs27v_n3_rp`,
+  `pr27te_rp`.
+- M3 draws d1–d4 with merge, generation and ranking: `test_side/m3_fullte_rp`, `m3d2te_rp`, `m3d3te_rp`, `m3d4te_rp`.
+  Draw h for A: `m3hte_a_rp`, `m3hte_b_rp`.
+- 397B parity probe and test side on 4 × H200: `q397p_rp`, `q397te_rp`.
+- On the CPU, the notes from the new answers: `tools/export_proto_notes.py`, `tools/make_m3px27_notes.py` and
+  `tools/make_q397m3_notes.py`.
+- M3 behind the new notes: `m3px27te_rp`, `q397m3te_rp`.
+
+After a GPU run, `artifacts/` and `data/derived/` hold the new outputs and no longer match the package. To run the quick
+check on the frozen outputs again, move both folders away first, for example with `mv artifacts artifacts.gpu` and
+`mv data/derived data/derived.gpu`. `reproduce.sh` then sets them up from the package again.
 
 #### Reference hardware
 
@@ -365,7 +368,7 @@ of `q397te_rp`). `meta_m3px27xm.json` records the checksum of the protocol notes
 The runner reads the base models from `$K12_MODELS` and our adapters from the package's `weights/` folder. The 9B
 configurations need the adapter `v1_full` and, for their pre-check job `check_f1`, the fold adapter `v1_folds/v1_f1`.
 The M3 full-fit adapter `weights/m3_full` must lie at `<out>/m3_fullte_rp/m3_train_full/`, where every M3 configuration
-merges it from; the script puts it there. The 9B configurations expect two GPUs, as on Kaggle T4 × 2 (worker
+merges it from; step 3 of the script puts it there. The 9B configurations expect two GPUs, as on Kaggle T4 × 2 (worker
 `gpu: "0,1"` with `max_memory` per card). The keys `kernel_sources` and `dataset_sources` in the T4 configurations name
 our private Kaggle resources; the runner ignores them.
 

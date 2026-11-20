@@ -54,8 +54,8 @@ score was known ([VERIFICATION §1](docs/VERIFICATION.md#1-which-submission-is-w
    python -m pip install -r env/requirements-cpu.txt
    ```
 
-2. Put `train.csv` and `test.csv` under `data/`, and `taxonomy_v1.csv` and `sample_submission.csv` under
-   `data/competition_data/`. The CPU check reads no photo.
+2. Put `train.csv` and `test.csv` from the root of the competition download under `data/`, and `taxonomy_v1.csv` and
+   `sample_submission.csv` under `data/competition_data/`. The CPU check reads no photo.
 
 3. Download our private package (the link is in our email) and unpack it anywhere: `unzip k12-host-package.zip` gives
    the folder `k12-host-package/`. Run the quick check from the repository root, with the path of that folder as
@@ -65,9 +65,9 @@ score was known ([VERIFICATION §1](docs/VERIFICATION.md#1-which-submission-is-w
    bash reproduce.sh <package-dir>
    ```
 
-   It checks the four CSV files and the package against their checksums and sets up `artifacts/` and `data/derived/`.
-   It then rebuilds both submission files from the frozen model outputs and compares them with the submitted files. It
-   ends like this, with exit code 0; only the time differs:
+   It checks the four CSV files and the package against their checksums and sets up `artifacts/` and `data/derived/`. It
+   then rebuilds both submission files from the frozen model outputs and compares them with the submitted files. It ends
+   like this, with exit code 0; only the time differs:
 
    ```
    OK A 4505c15950167650a66cdc60eb9c153eebfb9ed6192277bd283045f3797354e7
@@ -79,11 +79,11 @@ score was known ([VERIFICATION §1](docs/VERIFICATION.md#1-which-submission-is-w
 verifies every blend and second-stage file, compares it bit for bit with the delivered file and builds both submissions
 again.
 
-On GPUs, `tools/gpu_inference.sh rescore <package-dir>` recomputes every scoring and ranking step from our trained
-weights, behind our frozen texts. `tools/gpu_inference.sh full <package-dir>` also generates every text anew. Both write
-the two submission files at the end ([VERIFICATION §5.2](docs/VERIFICATION.md#52-rescore-and-full-gpu)). Our test side
-ran on Kaggle T4 × 2, an A40 48 GB, an RTX PRO 6000 Blackwell 96 GB and, for the 397B model, 4 × H200; training used the
-A40 and the RTX PRO 6000.
+On GPUs, `bash tools/gpu_inference.sh rescore <package-dir>` recomputes every scoring and ranking step from our trained
+weights, behind our frozen texts. `bash tools/gpu_inference.sh full <package-dir>` also generates every text anew. Both
+write the two submission files at the end ([VERIFICATION §5.2](docs/VERIFICATION.md#52-rescore-and-full-gpu)). Our test
+side ran on Kaggle T4 × 2, an A40 48 GB, an RTX PRO 6000 Blackwell 96 GB and, for the 397B model, 4 × H200; training
+used the A40 and the RTX PRO 6000.
 
 ## Where to find each item of the host's checklist
 
