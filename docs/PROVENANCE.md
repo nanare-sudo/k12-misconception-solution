@@ -1,6 +1,8 @@
 # Provenance of every input of the two final submissions
 
-*Version 0.4. Lists every frozen file that the build of the two final submissions reads, where it came from, and whether
+Reference document. To reproduce the submissions, start with [VERIFICATION.md](VERIFICATION.md).
+
+*Version 0.6. Lists every frozen file that the build of the two final submissions reads, where it came from, and whether
 its production step can be repeated without network access. A second part lists the training chain: the inputs of the
 trained components, which the assembly does not read but which a retraining needs.*
 
@@ -19,10 +21,10 @@ runs the build of B, as their first steps):
 by the build scripts, recorded with size and SHA-256): **494 files, 2.66 GB** (submission A 490 files, submission B 405
 files; 401 in common; the four files only in B's set are B's own deployment files, which A's build writes itself). 155 of
 them are derived from test rows. Both files were rebuilt byte for byte from exactly these files on a CPU without network
-access, with the internal code version from which this repository was translated, and on 2026-11-17 with the code of this
-repository in two fresh copies from the private input package ([ROADMAP.md](ROADMAP.md), step 1). The base models are not
-files of the input sets; they are listed in
-section 3 and in [weights_manifest.json](weights_manifest.json).
+access, with the internal code version from which this repository was translated. With the code of this repository they
+were rebuilt in two fresh copies (2026-11-17) and once more from a fresh clone (2026-11-20), each from the private input
+package ([VERIFICATION.md](VERIFICATION.md#51-assemble-cpu)). The base models are not files of the input sets; they are
+listed in section 3 and in [weights_manifest.json](weights_manifest.json).
 
 **Columns of the tables.**
 - *Rows*: training rows (`train.csv`, 1,500), pool rows (`unlabelled.csv`, 50,000) or test rows (`test.csv`, 3,498).
@@ -35,9 +37,13 @@ section 3 and in [weights_manifest.json](weights_manifest.json).
   reproduce a pinned value), **reference** (an earlier file compared with a recomputation), **rescore** (only needed to
   recompute a model step, not by the CPU assembly).
 
-The complete per-file list (path, size, SHA-256, role) is the machine-readable input manifest of the private package.
-Paths below are relative to the root of the competition folder of that package; file names that carry internal build
-labels may appear under role names in this repository (with new checksums where a text field changed).
+These 494 files are the input sets traced on our internal build; they include the competition CSV files and the M3
+adapters. The private input package lists its own files in `PACKAGE_INDEX.tsv` (path, size, SHA-256, role, derived from
+test rows or not; counts per role in [VERIFICATION.md §9](VERIFICATION.md#9-private-weights-and-inputs)). The build of both
+submissions with the code of this repository reads the package files of the roles `assemble` and `assemble-generated`
+and the competition CSV files. Paths below are relative to the repository root, where the package folders `artifacts/`
+and `data/derived/` go. File names that carry internal build labels may appear under role names in this repository, with
+new checksums where a text field changed.
 
 ## 1. Answers to the four control questions
 
@@ -47,7 +53,8 @@ labels may appear under role names in this repository (with new checksums where 
   and only the image folders `train`, `unlabelled` and `questions` (`tools/teacher_api.py`).
 - They enter the submissions only as per-question summaries of **pool** rows (the "task block" in the prompts of two
   channels on the test rows) — pseudo-labels of the unlabelled data, which the host explicitly allows.
-- Apart from `test.csv` itself, all 154 test-derived inputs were produced by our own runs of open-weight models (Qwen3.5-9B with our adapter,
+- Apart from `test.csv` itself, all test-derived inputs (154 files of the traced sets, and every test-derived file of the
+  private package) were produced by our own runs of open-weight models (Qwen3.5-9B with our adapter,
   Qwen3.8-27B with and without our adapter, Qwen3.5-397B-A17B-FP8) on Kaggle notebooks or rented GPU machines, by our CPU
   steps (orientation network, blank-photo rule, character-height rule, export of notes, assembly), or are earlier
   submission files of the same kind. None of them was produced by an API.
@@ -56,13 +63,13 @@ labels may appear under role names in this repository (with new checksums where 
 **(2) Inputs whose producing script or configuration is not in the repository, or whose production had a manual
 step.** No input was produced by hand. The following were produced by scripts that are not (yet) part of this
 repository or were produced without a recorded configuration (details in section 9):
-- the blank-photo list (script exists, not exported);
 - the two combined run folders of the M3 draws d1 and d2 (combined locally from fold runs; no script exported);
 - part of draw d2 (three folds) computed from a separate working copy of the code, whose model code is identical to the
   repository; its configuration was added afterwards;
 - the zero-shot scorer's test runs (configuration in the repository; the code version was not recorded);
 - the band rows of the reasoning gates (written by ad-hoc scripts after a recorded rule; the repository reconstructs the
-  lists with `tools/replay/gates.py`);
+  lists with `tools/replay/gates.py`, which checks the test-side lists bit for bit with the A40 outputs in the private
+  package);
 - the stored verdicts of the 397B parity check and of the posterior step of the M3 evaluation (scripts exist, not
   exported);
 - the measurement files of the column fidelity check of the column sources (scripts exist, not exported; the build
@@ -72,7 +79,9 @@ repository or were produced without a recorded configuration (details in section
 
 **(3) Training inputs that are not in the input sets** (the assembly starts behind the model outputs): the M3 training
 targets, the inputs of the 9B training, the training photos and pool photos of the orientation network, the training-side
-gate lists and rotation lists, and the image statistics of the character-height rule. See section 8.
+gate lists and rotation lists, and the image statistics of the character-height rule. The private package holds the M3
+training targets, the training-side gate lists and rotation lists and the row lists of the protocol-answer runs; the
+image statistics table is not included. See section 8.
 
 **(4) Is every API-derived input covered by a statement of the host?** Yes; see section 4.
 
@@ -96,16 +105,20 @@ competition rules (competition use only, no redistribution).
 | `Qwen/Qwen3.5-397B-A17B-FP8` | Hugging Face, pinned revision | Alibaba Cloud (Qwen) | Apache 2.0 | revision `ea5b4f81096f3901c91dea97f81324302495781d`; file list with SHA-256 in [weights_manifest.json](weights_manifest.json) | rescore (397B channel) |
 | `Qwen/Qwen3.8-27B` | Hugging Face, pinned revision | Alibaba Cloud (Qwen) | Apache 2.0 | revision `1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0` | rescore (all 27B steps; base of M3) |
 | `Qwen/Qwen3.5-9B` | Hugging Face, pinned revision | Alibaba Cloud (Qwen) | Apache 2.0 | revision `c202236235762e1c871ad0ccb60c8ee5ba337b9a` | rescore (9B scorer) |
-| M3 adapter, full fit (`m3_train_full/adapter/adapter_model.safetensors`) | private Kaggle model and private dataset | our LoRA training of the 27B on all 1,500 training rows (configuration `m3_fullte_rp`, job `m3_train_full`) | ours (Apache 2.0 for the code; weights trained on competition data, competition use only) | `85c34f5c396ec21ecb6de28356a631f4261264402b7a03283ad8fc168e334527` | check (checksum); rescore (all M3 test steps) |
-| M3 fold adapters f0–f4 (`m3_train_f0` … `f4`) | private dataset | LoRA training on the 1,200 rows of the other folds (`m3_pilot_rp` folds 1, 2; `m3_f034_rp` folds 0, 3, 4) | as above | f0 `b64aa0b7a7a89ddf85cf2f7c7de6b05336995a879920435f7a4f7c90e7dc1917`, f1 `3d48b2e7a81f3950e5c5d022fd0c7446499d011b100a428101eeb325bc7c8e65`, f2 `4b1b978d98b77b03c03fcc5166d4e61a30d14ce818307cfda607789bcb016532`, f3 `83bc2df70456c4ff330e29fb4c3682b4be69a4e932c017cece3ebb232e26d879`, f4 `4651477fdf50ebe49fdc015cf1bc19b5023f02b4753a95f361164b66de2ba86e` | check (checksums); training side only |
-| 9B adapter `v1_full` | private Kaggle model, private dataset | LoRA training of the 9B on all 1,500 training rows (`ft_v1c_rp`) | as above | `321108733ee1ae9eafe14d98047eb592f2f8084df372f600aa46f4a0f0f1d9ca` | rescore (9B test runs); not read by the assembly |
+| M3 adapter, full fit (`m3_train_full/adapter/adapter_model.safetensors`) | private input package: `weights/m3_full/` (same file in `artifacts/runs/m3_fullte_rp/m3_fullte_rp/m3_train_full/`) | our LoRA training of the 27B on all 1,500 training rows (configuration `m3_fullte_rp`, job `m3_train_full`) | ours (Apache 2.0 for the code; weights trained on competition data, competition use only) | `85c34f5c396ec21ecb6de28356a631f4261264402b7a03283ad8fc168e334527` | check (checksum); rescore (all M3 test steps) |
+| M3 fold adapters f0–f4 (`m3_train_f0` … `f4`) | private input package: `artifacts/runs/m3_pilot_rp/m3_pilot_rp/m3_train_f{1,2}/`, `artifacts/runs/m3_f034_rp/m3_f034_rp/m3_train_f{0,3,4}/` | LoRA training on the 1,200 rows of the other folds (`m3_pilot_rp` folds 1, 2; `m3_f034_rp` folds 0, 3, 4) | as above | f0 `b64aa0b7a7a89ddf85cf2f7c7de6b05336995a879920435f7a4f7c90e7dc1917`, f1 `3d48b2e7a81f3950e5c5d022fd0c7446499d011b100a428101eeb325bc7c8e65`, f2 `4b1b978d98b77b03c03fcc5166d4e61a30d14ce818307cfda607789bcb016532`, f3 `83bc2df70456c4ff330e29fb4c3682b4be69a4e932c017cece3ebb232e26d879`, f4 `4651477fdf50ebe49fdc015cf1bc19b5023f02b4753a95f361164b66de2ba86e` | check (checksums); training side only |
+| 9B adapter `v1_full` | private input package: `weights/v1_full/` | LoRA training of the 9B on all 1,500 training rows (`ft_v1c_rp`) | as above | `321108733ee1ae9eafe14d98047eb592f2f8084df372f600aa46f4a0f0f1d9ca` | rescore (9B test runs); not read by the assembly |
 | 9B fold adapters `v1_f0` … `v1_f4` | private input package (`weights/v1_folds/`) | LoRA training of the 9B on the 1,200 rows of the other folds (`ft_v1a_rp` folds 0, 2; `ft_sum1_rp` fold 1; `ft_v1b_rp` folds 3, 4) | as above | f0 `05f2aea57f07a2661e51deeb3972ecd959de83440d9579a7fbfbef7a902aaaf3`, f1 `a80afb910c4a89f54bb80a11723f51fae4373531f9e4d425cbbe007e9906783e`, f2 `bbf6040a79fdad94d6c336f113e8b3bfac926ffa78ff96c41d6fe9f445a967be`, f3 `0084a8c24538d6258b8a10566dfd74d14e545a35afb65314e9a701e07dd3446a`, f4 `7739fbcb08baf7875da13b75037a87597c702a1c9419b164754750c607145e58` | rescore of the training side (OOF of `v1`, the rotation run `v1rot_t4`) and the check job `check_f1` of the 9B test configurations (`v1_f1`); not read by the assembly |
-| Orientation network (`artifacts/orient/orient_cnn.pt`, `.json`) | private Kaggle model, private dataset | `tools/orient_net.py train --seed 0 --threads 2` on the CPU | as above | `83cc1224da0edbea0af640a8682ecb0b882f33b107cf89de9a7673ce19223abe` (weights), `f411f0d437208057b5cfafd29e96fcbf6cda76de95590abc468b1aff0c3ba365` (description as read by this repository; its four descriptive text fields are translated, every value equals the first stored description `5a5437d2d378fd74fcd5341cb59054b8b692886e6ee021f06c0a5e0c9b5931c1`) | check (the rotation list must be the network's output) |
+| Orientation network (`artifacts/orient/orient_cnn.pt`, `.json`) | private input package: `weights/orient_cnn/` (same files in `artifacts/orient/`) | `tools/orient_net.py train --seed 0 --threads 2` on the CPU | as above | `83cc1224da0edbea0af640a8682ecb0b882f33b107cf89de9a7673ce19223abe` (weights), `f411f0d437208057b5cfafd29e96fcbf6cda76de95590abc468b1aff0c3ba365` (description as read by this repository; its four descriptive text fields are translated, every value equals the first stored description `5a5437d2d378fd74fcd5341cb59054b8b692886e6ee021f06c0a5e0c9b5931c1`) | check (the rotation list must be the network's output) |
 
-Each M3 adapter has a training recipe (`sft_recipe.json`) that records the base model, the revision, the SHA-256 of its
-training targets, the number of rows used and `"teacher_derived": false`. The full-fit adapter is flagged as test-derived
-in the input manifest only because the same run continued with the first test draw; it was trained on the training rows
-only. GPU training is not bit-reproducible; the delivered adapters are the ones that produced the submissions.
+Each M3 adapter has a training recipe (`sft_recipe.json`) that records the base model with its revision, the SHA-256 of
+its training targets and the number of rows used. The recipes of folds 0, 3, 4 and of the full fit also record
+`"pool": null` and `"teacher_derived": false`. The two pilot recipes (folds 1 and 2, `m3_pilot_rp`) were written before
+these fields existed; their `targets_sha256` identifies the gold-only targets `data/derived/sft/m3_fold1_targets.jsonl`
+and `m3_fold2_targets.jsonl`, which `python -I tools/make_m3_targets.py --full --check` rebuilds byte for byte. Our
+internal traced input set flagged the full-fit adapter as test-derived only because the same run continued with the
+first test draw. `PACKAGE_INDEX.tsv` flags it `no`: it was trained on the training rows only. GPU training is not
+bit-reproducible; the delivered adapters are the ones that produced the submissions.
 
 ## 4. (c) Inputs produced through external APIs during development
 
@@ -162,7 +175,7 @@ file of either section concerns a test row (754757). Both are frozen and part of
 | M3 draw h (photo at 2,048 px) per fold | 45 files: `artifacts/runs/m3ha_oof_rp` (folds 1, 2, 0), `m3hb_oof_rp` (folds 3, 4): generated notes `m3h_gen_f*/gen_notes.jsonl`, rankings `m3h_rank_f*/bench_proto_rank.npy` (f0 `6742b19c64a3ce3427cc4fd7055fa78df45e23b63f57be6b8413e26ce8da68b4`, f1 `c40782f2ded272ff4be329987c15ecd9fcb015acca170ae63492f057af266aef`, f2 `1b2961ef0ff0683a2502d973e2b969be27c3b0227b4eeb36b503ce3692d1686d`, f3 `189e0cd6855392b5064be52c9a03d9419854368e46ac57eedc82c9c1b9523b18`, f4 `108bb80dfedfeec00710bc666656718108ace6ad5bb7fbd44272d7161a4574c9`), recipes and merge summaries | the M3 fold adapters on the 27B in BF16, photo at long side 2,048 px in generation and ranking; vLLM generation (sampled with the settings of the model card, seed 5), exact ranking; RTX PRO 6000 96 GB | `configs/vlm/m3ha_oof_rp.yaml`, `m3hb_oof_rp.yaml` (`merge`, `sft_gen`, `bench` with probe `proto_rank`) | possible | generation no; ranking behind fixed text yes | assembly of submission A (rankings of the list rows; the build pins one digest over 42 files: the shard, generation and recipe files of the five folds and the two list files) |
 | Row list "character height ≤ 20 px" (training side) | `data/derived/charsize/train_h20_rows.npy` (1,001 rows, `11afce9af96fca09032153b566ee81725f466ab927e782fcdad4324b55d18e77`), `charsize_h20.meta.json` (`4a48a02b00a53aaf022a48d3031ef2ad7cd8f1fc10052139cbb875c3431007df`) | `tools/make_charsize_rows.py --max-height 20 --name h20` (CPU) on the stored per-image statistics of `eda/i5_01_image_stats.py` (median connected-component height in the photo at long side 1,024 px); the threshold is the lower two-thirds quantile of the training photos; label-free | — | possible (CPU) | yes | assembly and checks of submission A |
 | 397B parity run | `artifacts/runs/q397p_rp/q397p_rp/proto_p/proto_raw.jsonl` (64 training rows, `d200e569ea9ea180f7568b2d0a86918033d7cf8c989d61c06a40a4c4edad721c`) | `Qwen3.5-397B-A17B-FP8` on 4 × H200, vLLM | `q397p_rp.yaml` (`proto_gen`) | possible | no | check (parity of the column sources; optional) |
-| Frozen training-side notes and row lists | `data/derived/proto_notes/train_pr27.jsonl` (`d615b707778e1e7b685ff4a9b28c0b2b756b46aba7ce149c295f99527dea388d`), `data/derived/sft_m3px27/m3px27_train_notes.jsonl` (`907bdf35fa10ac06fb07eebef5f441d5a3eeae186193ae561ea451a457457816`), `data/derived/sft/q397m3_train_notes.jsonl` and its copy in `sft_q397m3/` (`5a8fb7358bf9a25bcd4f6b12b28c02b31e5ad345a3ee21f9d94bc182bf180d52`), `data/derived/m3x3_full_rows.npy` (`c83e7d6eb3bd6a2aa38bb7c9594f24e282d781b8f144c5f403c011b2004b6aed`), with meta files | `tools/export_proto_notes.py`, `tools/make_m3px27_notes.py`, `tools/make_q397m3_notes.py` (CPU, from the raw answers above and section 4.2) | — | verified (rebuilt byte for byte by the build checks) | yes | assembly, checks |
+| Frozen training-side notes and row lists | `data/derived/proto_notes/train_pr27.jsonl` (`d615b707778e1e7b685ff4a9b28c0b2b756b46aba7ce149c295f99527dea388d`), `data/derived/sft_m3px27/m3px27_train_notes.jsonl` (`907bdf35fa10ac06fb07eebef5f441d5a3eeae186193ae561ea451a457457816`), `data/derived/sft/q397m3_train_notes.jsonl` and its copy in `sft_q397m3/` (`5a8fb7358bf9a25bcd4f6b12b28c02b31e5ad345a3ee21f9d94bc182bf180d52`), `data/derived/m3x3_full_rows.npy` (`c83e7d6eb3bd6a2aa38bb7c9594f24e282d781b8f144c5f403c011b2004b6aed`), with meta files | `tools/export_proto_notes.py`, `tools/make_m3px27_notes.py`, `tools/make_q397m3_notes.py` (CPU, from the raw answers above and section 4.2) | — | verified (the protocol notes are rebuilt byte for byte by the build checks; the 397B notes by `tools/make_q397m3_notes.py` from section 4.2, which is not part of the build) | yes | assembly, checks |
 
 The untrained 27B channels (`zs27q`, `think18nb`) and the 9B (`v1r`) enter through their OOF matrices only; their run
 folders are not read by the build (section 8 lists them).
@@ -180,7 +193,7 @@ No file of this section is inspected row by row; the build scripts print only ag
 | `m3x4_full` (B) / `m3x5h` (A) (M3, four draws d1–d4; A adds draw h on the list rows) | 45 files in `artifacts/runs/m3_fullte_rp` (d1), `m3d2te_rp`, `m3d3te_rp`, `m3d4te_rp` (generation `gen_notes.jsonl`, rankings `test_proto_rank.npy`: d1 `69f45474b330d9e71805c2f94033cec2743b358648996e0d180f9704b8369e73`, d2 `3304bedb5604e8548fb87ee057dd836a5d1be64790da137c1aaa3347f730e9ea`, d3 `d69460b944e8ea6e71fad3281fb9841acc314e08204df38b24153b42a21119f5`, d4 `fb86be66cab450aeacb999bf872a1043de06e685edb57c1ad971f501a1b4d5fb`); frozen texts `data/derived/sft/m3_d{1,2,3}_test_frozen_notes.jsonl`, `data/derived/sft_k2/m3_d4_test_frozen_notes.jsonl` | M3 full-fit adapter merged into the 27B (BF16); vLLM generation with the settings of the corresponding OOF draw (d1, d2 greedy; d3, d4 sampled with temperature 0.6, top-p 0.95, top-k 20, seeds 3 and 4), exact ranking; RTX PRO 6000 | `m3_fullte_rp.yaml`, `m3d2te_rp.yaml`, `m3d3te_rp.yaml`, `m3d4te_rp.yaml` (`merge`, `sft_gen`, `predict`); texts frozen by `tools/freeze_m3_texts.py` | possible | generation no; ranking behind the frozen texts yes | assembly (rankings, metadata); the second stage reads the frozen texts of d1–d3 |
 | `m3x5h`, draw h (submission A only) | 18 files (16 test-derived) in `artifacts/runs/m3hte_a_rp`, `m3hte_b_rp` (two shards: every second row of the list): generated notes (`gen_notes.jsonl`: a `2147aaa36aec5746a4e0abaf3e2f5f91d61c19a658b2ec847e81e5ce0e17e11e`, b `67dc296a197ce608c07e4a5796f693e1091087a3bc8e280b237df0b2df916252`), rankings (`test_proto_rank.npy`: a `8955b4c6f79bcaadf2dbee26eac6dd38b0a608374620c10c9ae92707ee1fdf14`, b `b09e9c9f4b565729beb6acc652d74c7977294b1e07bbe7bb36097a8c7b1e3d76`), recipes, completeness files | M3 full-fit adapter merged into the 27B (BF16), photo at long side 2,048 px; generation with the settings of the OOF draw h (seed 5, sampled), exact ranking; RTX PRO 6000 | `m3hte_a_rp.yaml`, `m3hte_b_rp.yaml` (`merge`, `sft_gen`, `predict`), rows only from the test list | possible | generation no; ranking behind the texts yes | assembly of submission A (digest of all shard files pinned); the second stage does not read draw h |
 | `q397m3` (397B notes, M3 behind them) | 15 files: answers `artifacts/runs/q397te_rp/…/proto_te/proto_raw.jsonl` (`824724105f1b4abb05147db26794bdd3b1b2c030725554a7126c4fba888a6493`) and `proto_labels.jsonl` (`82e29b9663f0dd2c6f32cb7e52676f4e8fa9e6e27c5b03a2d6c99e1720d27be0`); notes `data/derived/sft/q397m3_test_notes.jsonl` and copy (`4b29f057d50c7decfc3db73ddb37182d26b51326e3af05683d4665a56f20eb60`); M3 ranking `artifacts/runs/q397m3te_rp/…/test_proto_rank.npy` (`65eae425af6f4a4c4289517ab6d384fb28d1cfe8a1077d3f409b8a083a6cd398`) | `Qwen3.5-397B-A17B-FP8` on 4 × H200 (vLLM, tensor parallel 4) for the answers; M3 full-fit adapter on the 27B for the ranking (RTX PRO 6000) | `q397te_rp.yaml` (`proto_gen`), `q397m3te_rp.yaml`; notes by `tools/make_q397m3_notes.py --test-from …` (CPU) | possible (see [INFERENCE.md](INFERENCE.md#10-recomputing-the-397b-channel-on-the-test-rows)); notes verified | answers no; notes and ranking yes | assembly; submission B also reads the answers as column sources |
-| Row lists | 15 files: test list of the character-height rule `data/derived/charsize/test_h20_rows.npy` (2,459 rows, `9b1a1837bc2cf399e2e221c49def4b4ae11d666b5346ecb1eddc076622c8340a`; submission A); blank photos `data/derived/blank/test_rows.npy` (`3ba899ac881a4ceb27c5204ab54dfd427bc889009670f8a81187af2b99f2db2d`), rotation list of the released network `data/derived/orient_repro/test_c80_rows.npy` (`aa6515c8bf17bf593c5c90aa90d9240e9992d84f650c5445a37a5f015dbbff1d`) and its JSON/meta files, the first-version rotation lists (checks), reasoning gates `data/derived/think_rows/test.npy` (`952e05f862f6c19ae6e42ac9b169438f4cd66f4a24825f5320756e0a89a5d8ef`), `test_tb_q.npy` (`1d4f2a25c49f75e479e0f0453952392be04c7769da0eb4bfc29c9685ba42fdff`), `test_n3.npy` and `band.meta.json` | `tools/make_charsize_rows.py` (CPU, stored image statistics, threshold from the training photos); brightness rule (its script is not exported); `tools/orient_net.py infer` (CPU); gates from the A40 versions of the fast channels (section 9) | — | possible (CPU). The build checks the rotation list against the checksum recorded by the stored network; the network and its lists were rebuilt bit for bit before. Gates: reconstruction checked where its inputs exist | yes | assembly, checks |
+| Row lists | 15 files: test list of the character-height rule `data/derived/charsize/test_h20_rows.npy` (2,459 rows, `9b1a1837bc2cf399e2e221c49def4b4ae11d666b5346ecb1eddc076622c8340a`; submission A); blank photos `data/derived/blank/test_rows.npy` (`3ba899ac881a4ceb27c5204ab54dfd427bc889009670f8a81187af2b99f2db2d`), rotation list of the released network `data/derived/orient_repro/test_c80_rows.npy` (`aa6515c8bf17bf593c5c90aa90d9240e9992d84f650c5445a37a5f015dbbff1d`) and its JSON/meta files, the first-version rotation lists (checks), reasoning gates `data/derived/think_rows/test.npy` (`952e05f862f6c19ae6e42ac9b169438f4cd66f4a24825f5320756e0a89a5d8ef`), `test_tb_q.npy` (`1d4f2a25c49f75e479e0f0453952392be04c7769da0eb4bfc29c9685ba42fdff`), `test_n3.npy` and `band.meta.json` | `tools/make_charsize_rows.py` (CPU, stored image statistics, threshold from the training photos); brightness rule `tools/make_blank_list.py` (CPU); `tools/orient_net.py infer` (CPU); gates from the A40 versions of the fast channels (section 9) | — | possible (CPU). The build checks the rotation list against the checksum recorded by the stored network; the network and its lists were rebuilt bit for bit before. `tools/make_blank_list.py check` recomputes the blank-photo list and compares it with the frozen list; `tools/replay/gates.py` checks the test-side gate lists bit for bit with the A40 outputs in the private package | yes | assembly, checks |
 | Earlier submissions | 9 files: seven earlier submission files and two test matrices (`artifacts/submissions/…`, `artifacts/test_…`) | earlier builds of the same scripts | — | verified (rebuilt in the same chain) | yes | reference (pinned checksums) |
 
 ## 7. (f) Fitted deployment files and stored reports
@@ -216,7 +229,7 @@ Commands and checks are in [TRAINING.md](TRAINING.md); here only what a retraini
 | Orientation network | training photos and 10,000 pool photos (fixed sample, seed 20261010), labelled by the rotations applied in training | `tools/orient_net.py maps`, `train --seed 0 --threads 2` | CPU | yes: needs only competition data; bit-identical over three trainings |
 | Teacher pool labels | pool rows | `tools/teacher_api.py` (paid API) | — | yes (frozen, section 4.1) |
 | 397B answers on training rows | training rows | `tools/open_teacher.py` (hosted API) | — | yes (frozen, section 4.2) |
-| OOF of the untrained 27B channels | training rows; same-question examples of the other folds; teacher labels (task block) | `zs27q_oof_rp`, `zs27q2_f1_rp`; reasoning draws g (`zs27v_all_rp`, `zs27v_f2_rp`, `zs27v_cut_rp`, `zs27v_te_rp`) and n (`zs27v_n_rp`, `zs27v_n3_rp`); protocol `pr27_rp`, `px27_rp` | A40; RTX PRO 6000 | run outputs in the internal store; the OOF matrices are frozen; the reasoning texts of the training rows are frozen in the private dataset |
+| OOF of the untrained 27B channels | training rows; same-question examples of the other folds; teacher labels (task block) | `zs27q_oof_rp`, `zs27q2_f1_rp`; reasoning draws g (`zs27v_all_rp`, `zs27v_f2_rp`, `zs27v_cut_rp`, `zs27v_te_rp`) and n (`zs27v_n_rp`, `zs27v_n3_rp`); protocol `pr27_rp`, `px27_rp` | A40; RTX PRO 6000 | the OOF matrices are frozen and in the private package; the run folders, including the reasoning texts of the training rows, are in our internal store and not in the package |
 | M3 training targets | `train.csv` (gold code and the annotators' explanation of the root finding), folds, frozen protocol notes `train_pr27.jsonl`, `oof_pr27` (where the notes carry loss) | `tools/make_m3_targets.py --full` → `data/derived/sft/m3_fold{0..4}_targets.jsonl`, `m3_full_targets.jsonl` (full fit `b685a7b3da67822280ca51b8a1cf0c47e7ba41f0d6c561a33a7e7dfb855e35aa`; the recipe of every adapter pins its target file; `--check` rebuilds all six byte for byte) | CPU | yes: the six target files with their meta files and the stored list the builder checks against (`artifacts/eda/private/m3_targets/sft_manifest.json`) |
 | M3 adapters | targets above, photos, diagrams | `m3_pilot_rp`, `m3_f034_rp`, `m3_fullte_rp` (LoRA r 32, α 64, layers 40–63, 2 epochs, lr 1e-4, seed 42) | RTX PRO 6000 | yes (adapters and targets) |
 | M3 OOF draws, M3 behind notes | adapters; frozen notes | section 5 | RTX PRO 6000 | yes |
@@ -228,19 +241,20 @@ new texts and therefore new checksums downstream, with scores within the measure
 
 ## 9. Open items of this list
 
-- **Scripts not exported** although they exist: the blank-photo list, the combination of the
-  fold runs of draws d1 and d2, the 397B parity check, the posterior step of the M3 evaluation, the measurement scripts of
-  the column fidelity check and of the bundle test of the column sources, the evaluation script of the five-draw rule.
+- **Scripts not exported** although they exist: the combination of the fold runs of draws d1 and d2, the 397B parity
+  check, the posterior step of the M3 evaluation, the measurement scripts of the column fidelity check and of the bundle
+  test of the column sources, the evaluation script of the five-draw rule.
 - **Frozen texts of draw h on the test side:** the generated texts stay in the two run folders (`gen_notes.jsonl`, pinned
   through the digest of the shard files), which the build reads. Copies in the frozen-notes format of d1–d4
   (`data/derived/sft/m3_h_test_{a,b}_frozen_notes.jsonl`, written by `tools/freeze_m3_texts.py`) are part of the private input
   package for the model steps; the second stage does not read them.
 - **Code version not recorded** for the two test runs of `zs27q`; **package list not recorded** for the text generation
   of reasoning draw g on the test rows (the machine was reused).
-- **Reasoning gates:** the band part of the gate lists was written by ad-hoc scripts following the recorded rule;
-  `tools/replay/gates.py` reconstructs the training-side lists bit for bit and checks the test-side lists only where the
-  A40 outputs it needs are available (they are not in the private package).
-- **Hosted 397B:** the revision and number format behind the hosted API are not documented by us; the licence file of
-  the served revision is still to be confirmed (Apache 2.0 according to the model card).
+- **Reasoning gates:** the band part of the gate lists was written by ad-hoc scripts following the recorded rule.
+  `tools/replay/gates.py` reconstructs the training-side lists bit for bit and checks the test-side lists bit for bit with
+  the A40 outputs in the private package (role `check`).
+- **Hosted 397B:** the revision and number format behind the hosted API are not documented by us. The Hub repository
+  states Apache 2.0 (licence file at main `8472618…`, checked 2026-11-20); the revision served by the provider was not
+  recorded.
 - **Parity row list** `data/derived/open_teacher/rows_parity64_397b.npy` (needed to repeat the parity probe) and the outputs
   of the parity run are part of the private input package; the script of the parity check is not exported (above).

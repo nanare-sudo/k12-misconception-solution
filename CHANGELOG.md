@@ -1,9 +1,81 @@
 # Changelog
 
-This file records notable changes to the solution repository. Dates are UTC. The repository is a living document until
-the final solution package is delivered.
+This file records the changes of each version of the solution repository. Dates are UTC. Version 0.6 is the state
+delivered for the host's verification.
 
-## v0.5 (build branch) — 2026-11-17
+## v0.6 — 2026-11-21
+
+Seventh version, the state delivered for the host's verification. It adds one command for the CPU check and the GPU
+steps of inference from the delivered weights without retraining. The private input package is completed.
+
+### Added
+
+- `reproduce.sh`: one command for the CPU check. `bash reproduce.sh <package-dir>` checks the private package with its
+  `MANIFEST.sha256`, copies its `artifacts/` (writable) and links its `data/derived/`, runs the two `make_submission`
+  calls of the quick check and compares both files with their checksums (about 2 min). `--full` also runs the build
+  chain (about 2 h).
+- `tools/gpu_inference.sh rescore|full <package-dir> [--out DIR] [--dry-run]`: runs the test-side GPU jobs in order,
+  copies their outputs to where the CPU tools read them, writes `new_A.csv` and `new_B.csv` with the two calls of the
+  quick check and prints only aggregates. `--dry-run` prints every command and checks that each configuration and input
+  folder exists.
+- `configs/vlm/test_side/` and `configs/vlm/rescore/`: the test-side jobs of the reference configurations, unchanged and
+  under the same run and job names; `rescore/` holds no job that generates text. Written by
+  `tools/make_inference_configs.py` (`--check` compares) and checked by `tests/test_inference_configs.py`.
+- `tools/repin_test_side.py` (`--check`, `--write`): re-records the pinned checksums of new protocol and 397B answers on
+  the test rows in the deployment files of A and B and in `meta_m3px27xm.json`; it keeps the old files and refits
+  nothing. Tests `tests/test_repin_test_side.py`.
+- `tools/make_blank_list.py` (`check`, `write --out DIR`): the blank-photo rule, which was only delivered as a frozen
+  list. Tests `tests/test_make_blank_list.py`.
+- `docs/GLOSSARY.md`: the internal names of channels, runs and scripts, and the naming schemes of files and folders.
+
+### Changed
+
+- `docs/VERIFICATION.md`, `README.md` and `docs/WRITEUP.md` rewritten in plain English. VERIFICATION §5 starts with the
+  quick check and gives the GPU modes `rescore` and `full` step by step.
+- Private input package: the metadata of our own files are cleaned (English descriptions, no internal references). The
+  numbers in these files are unchanged, and the build scripts pin the new checksums. Model outputs and run logs are
+  unchanged.
+- Private input package completed with the inputs of the training side (first-version rotation lists of the training
+  rows, row lists of the protocol-answer runs, the raw 397B answers on the training rows, the training-side gate lists,
+  `artifacts/oof_v1.npy`) and with the inputs of the checks (the A40 test outputs behind the gate lists). The zip file
+  has writable file permissions.
+- Reference documents (METHOD, INFERENCE, TRAINING, VALIDATION, RESULTS, CODEMAP, PROVENANCE, DATA_AND_COMPLIANCE,
+  MODEL_SIZES): version 0.6, storage locations, run status, the new tools, the reference CPU and its OpenBLAS kernel, the
+  complete offline settings and the blank-photo rule. `docs/weights_manifest.json` lists the five M3 fold adapters and
+  names the folders of the private package. ROADMAP shows the state of the delivery.
+
+### Fixed
+
+- GPU inference from the delivered weights. Followed as written, the earlier instructions retrained M3 and overwrote the
+  delivered adapter (`m3_fullte_rp.yaml` starts with training jobs), stopped at a pre-check job of `v1rot_t4.yaml` whose
+  inputs were not in the package, and regenerated every M3 text in `rescore`. The new configuration folders fix all three.
+- Assembly after a `full` rerun. The deployment files pin the checksums of the frozen protocol and 397B answers on the
+  test rows; the documentation said that a file from new answers could not be assembled. `tools/repin_test_side.py`
+  re-records these checksums.
+- Read-only copies. The files of the previous zip were read-only, so a copy made with `cp -r` stopped the build with a
+  permission error. `reproduce.sh` makes its copy writable, and the new zip has writable permissions.
+- CPU class. On a CPU on which OpenBLAS selects another kernel than on the reference CPU, the refitted weights differ by
+  about 1e-8 and the build chain stops at its first refit check. The documentation names the reference CPU and kernel,
+  `reproduce.sh --full` sets `OPENBLAS_CORETYPE=Haswell`, and the quick check refits nothing.
+- Offline settings. The documented list lacked `HF_DATASETS_OFFLINE`, `HF_HUB_DISABLE_TELEMETRY`, `VLLM_DO_NOT_TRACK`,
+  `VLLM_HOST_IP` and the socket interfaces of Gloo and NCCL; without `VLLM_HOST_IP`, vLLM makes a UDP connect to a public
+  address. The removal of the image's `torchao` package is documented.
+- Documentation. Storage locations named private Kaggle resources that the host cannot open; the reference documents now
+  name the private input package. `docs/CODEMAP.md` listed `q397te8_rp` among the configurations that are not included.
+  `docs/PROVENANCE.md` said that every M3 recipe records `teacher_derived`; the two pilot recipes do not.
+  `docs/INFERENCE.md` said that M3 uses exactly three draws, and that `m3x3_full_rows.npy` is rewritten by
+  `s029_m3x3.sh`; that script writes it only when the metadata file of the channel is absent.
+
+### Known gaps
+
+The following items are tracked in [docs/ROADMAP.md](docs/ROADMAP.md#2-open-steps):
+- runs without network access for the GPU model steps other than the 9B scorer, including the 397B path (step 2);
+- hashes for every pin and an offline wheelhouse (step 4);
+- the scripts that are not exported (step 6);
+- a complete `rescore` or `full` run in one go, which has never been done;
+- the private-leaderboard scores (step 8).
+
+## v0.5 — 2026-11-17
 
 Sixth version: the first build of both final submissions with the code of this repository, the checksums it learned, the
 private input package for the host's verification, pinned requirements, the M3 target builder and an inference-only
@@ -27,7 +99,7 @@ configuration of the first M3 draw.
   the files that the quick start read and did not write itself (464 files), the 11 pinned files written by the version-0.4
   code, the frozen inputs of the GPU model steps that the assembly does not read, the M3 training targets and our weights:
   545 files, 3.61 GB, 153 of them derived from test rows; each with its SHA-256 in the package manifest.
-- **Second build.** A second fresh copy of this branch, with the same package linked read-only, rebuilt every file byte for
+- **Second build.** A second fresh copy of this version, with the same package linked read-only, rebuilt every file byte for
   byte and passed every checksum check (the quick start took 1 h 48 min, the first 1 h 52 min, both on a machine shared
   with other jobs and with every file access traced). It read no file outside the package except the competition CSV files
   and the taxonomy, wrote nothing into the package, and made no network connection (its only network system calls were the
@@ -47,6 +119,8 @@ configuration of the first M3 draw.
   command (versions only; hashes and an offline wheelhouse are still open).
 - `configs/vlm/m3d1te_rp.yaml`: draw d1 of M3 on the test rows with the delivered adapter of the full fit, without training
   (the test jobs of `m3_fullte_rp.yaml`); test in `tests/test_m3_sft.py`.
+- `docs/VERIFICATION.md`: the host's checklist, item by item, including the expected deviation of a full rerun (§8.1:
+  about ±0.003 MAP@3, 1 sd); `docs/WRITEUP.md`; `THIRD_PARTY.md` with links, licences and API cost.
 
 ### Changed
 
@@ -64,8 +138,7 @@ The following items are tracked in [docs/ROADMAP.md](docs/ROADMAP.md#2-open-step
 - smoke tests without network access for the GPU model steps of both final submissions, including the 397B path;
 - hashes for every pin, an offline wheelhouse and a single entry point per line;
 - a mode that re-records the checksums of newly computed test-side files;
-- the scripts that are not yet exported (listed in [docs/PROVENANCE.md](docs/PROVENANCE.md#9-open-items-of-this-list));
-- an estimate of the rerun variance of the generated texts.
+- the scripts that are not yet exported (listed in [docs/PROVENANCE.md](docs/PROVENANCE.md#9-open-items-of-this-list)).
 
 ## v0.4 — 2026-11-15
 

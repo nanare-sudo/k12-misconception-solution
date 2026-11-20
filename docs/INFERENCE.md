@@ -1,11 +1,14 @@
 # Inference
 
-*Status: 2026-11-15 (version 0.4). Planned items are marked **Planned** and listed in [ROADMAP.md](ROADMAP.md).*
+Reference document. To reproduce the submissions, start with [VERIFICATION.md](VERIFICATION.md).
+
+*Status: 2026-11-21 (version 0.6). Parts that are not built are marked **Not built**; the open steps are listed in
+[ROADMAP.md](ROADMAP.md).*
 
 The final solution is built to run **without network access and without any human step**. No external API is called at
-inference time, and all models in the inference path are open-weight models whose weights, including our trained
-adapters, are part of the delivered package. Smoke tests without network access for every model step are on the
-[roadmap](ROADMAP.md).
+inference time. All models in the inference path are open-weight models. The base models are pinned by revision and
+file checksum, and our trained adapters are part of the delivered package. The CPU assembly and the 9B scorer on Kaggle
+T4 have run without network access; the other GPU model steps have not yet ([ROADMAP.md](ROADMAP.md), step 2).
 
 **Contents:**
 1. [Three modes](#1-three-modes)
@@ -159,9 +162,14 @@ frozen artifacts refer to them, so they are kept.
   three version-0.3 files and of their predecessors (by `safety_ndr.sh` and `primary_m3px27.sh`; `safety_nd.sh` compares the
   test matrix of its copy null point with that of `safety_final`).
 
-> **Planned.** A single entry point that reads a line definition (sources, floors, last step, expected checksums), verifies
-> every input checksum and calls `tools/make_submission.py` directly, without the chain of earlier builds. The build
-> scripts stay in the repository as the record of how each file was produced.
+**One command.** `bash reproduce.sh <package-dir>` checks the private package against its `MANIFEST.sha256`, sets up
+`artifacts/` and `data/derived/`, runs the two `make_submission` calls of submissions B and A (§5) and compares both files
+with the checksums above. With `--full` it also runs the build chain of §5. Details:
+[VERIFICATION.md §5.1](VERIFICATION.md#51-assemble-cpu).
+
+> **Not built.** An entry point that reads a line definition (sources, floors, last step, expected checksums) and calls
+> `tools/make_submission.py` for any line without the chain of earlier builds. The build scripts stay in the repository as
+> the record of how each file was produced.
 
 ## 3. Data layout
 
@@ -173,14 +181,18 @@ data/                                   K12_DATA may point to another folder wit
 │   └── images/train/  images/test/  images/questions/  (images/unlabelled/ only for training the orientation network)
 └── derived/                                     private: frozen derived inputs
     ├── blank/            blank-photo list
+    ├── charsize/         row lists "character height ≤ 20 px" of draw h (submission A)
     ├── orient/           first-version rotation lists (c50: photos turned upright; c80: rows using the upright reading)
     ├── orient_repro/     rotation lists of the released orientation network (test_c80_rows.npy, test_c80.json, .meta.json)
     ├── think_rows/       gate lists of the reasoning channels
     ├── sft/              frozen M3 test texts and training notes (draws d1–d3), 397B notes for M3, M3 training targets
+    ├── sft_k2/           frozen M3 test texts of draw d4
     ├── sft_q397m3/  sft_q397m3te/   copies of the 397B notes for M3 as read by the model runs (primary line)
     ├── sft_m3px27/  sft_m3px27te/   protocol notes in the M3 format, behind which M3 ranks for `m3px27xm` (primary line)
-    ├── open_teacher/     frozen 397B answers on the training rows (primary line)
-    ├── m3x3_full_rows.npy  training rows with all three M3 draws (rewritten identically by s029_m3x3.sh)
+    ├── open_teacher/     frozen 397B answers on the training rows (primary line); row list of the 397B parity probe
+    ├── proto_rows/       row lists of the protocol-answer runs on the training rows (model runs only)
+    ├── m3x3_full_rows.npy  training rows with all three M3 draws (read only; s029_m3x3.sh writes it only when
+    │                       artifacts/meta_m3x3_full.json is absent)
     ├── proto_notes/  proto_notes_test/   frozen protocol notes of the training rows (two draws) and of the test rows
     └── teacher/          teacher pool labels (primary line; model runs only)
 artifacts/                              private
@@ -200,10 +212,12 @@ also read by `assemble`: by the regex note columns of the safety candidate and b
 **Inputs per line** (in addition to the competition CSV files and `taxonomy_v1.csv`). The list was taken from a trace of
 every file the build scripts open in a fresh copy of the repository with the frozen inputs; it covers the assembly and
 all checks and fits that the scripts run on the way. "Safety line" covers both of its forms (the strictly inductive form
-and the final candidate with the alignment over the test set); they read the same frozen inputs. The private input package of
-version 0.5 was cut to exactly the files that the README quick start of both final submissions reads (traced file by file),
-plus the files the build scripts pin, the frozen inputs of the model steps, the M3 training targets and our weights; its
-`PACKAGE_INDEX.tsv` lists each of its 545 files with size, SHA-256, role and whether it is derived from test rows.
+and the final candidate with the alignment over the test set); they read the same frozen inputs. The private input package
+holds every file that the build of both final submissions reads (traced file by file). It also holds the files that the
+build scripts pin, the frozen inputs of the model steps, the inputs of the training side and of the checks in
+[VERIFICATION.md §5.2](VERIFICATION.md#52-rescore-and-full-gpu), the M3 training targets and our weights. Its
+`PACKAGE_INDEX.tsv` lists every file with size, SHA-256, role and whether it is derived from test rows;
+[VERIFICATION.md §9](VERIFICATION.md#9-private-weights-and-inputs) gives the counts per role.
 
 | Input | Safety line | Primary line |
 |---|---|---|
@@ -231,14 +245,15 @@ plus the files the build scripts pin, the frozen inputs of the model steps, the 
 | Earlier files as references (`submissions/`): `sub_v1r_zs27t_think18sb_pr27xm_m3x2_ar_ia_t4.csv` | yes | — |
 | Earlier files as references (`submissions/`): `sub_s029_best_m3x3.csv`, `sub_v1r_zs27q_think18nb_pr27xm_m3x3_full_w14_ar_ra_t4.csv` | — | yes |
 
-**Additional inputs of the final submissions (version 0.4)**, on top of the primary line above (complete per-file list with
-size, SHA-256, producer and network status: [PROVENANCE.md](PROVENANCE.md); 494 files, 2.66 GB for both submissions):
+**Additional inputs of the final submissions (version 0.4)**, on top of the primary line above (producer and network
+status: [PROVENANCE.md](PROVENANCE.md); every file with size and SHA-256: `PACKAGE_INDEX.tsv` of the private input
+package):
 
 | Input | Submission B (`primary_m3x4`) | Intermediate (`primary_cols`) | Submission A (`primary_m3x5h`) |
 |---|---|---|---|
 | Fourth M3 draw: `artifacts/runs/m3d4_oof_rp/` (training rows, five folds), `artifacts/runs/m3d4te_rp/` (test rows), frozen test texts `data/derived/sft_k2/m3_d4_test_frozen_notes.jsonl` | yes | yes | yes |
 | `data/derived/m3x3_full_rows.npy` (rows with all M3 draws; all 1,500) | yes | yes | yes |
-| Column sources (training side): protocol answers `artifacts/runs/pr27_rp/pr27_rp/proto_a/`, `proto_b/` (`proto_raw.jsonl`, `proto_labels.jsonl`, `proto_meta.json`), 397B answers through the hosted API `artifacts/runs/q397_tinker/q397_tinker/proto_t/proto_labels.jsonl` and `data/derived/open_teacher/qwen35-397b/raw.jsonl`, the frozen notes `data/derived/proto_notes/train_pr27.jsonl`, `data/derived/sft_q397m3/q397m3_train_notes.jsonl` and their meta files | — | yes | yes |
+| Column sources (training side): protocol answers `artifacts/runs/pr27_rp/pr27_rp/proto_a/`, `proto_b/` (`proto_raw.jsonl`, `proto_labels.jsonl`, `proto_meta.json`), 397B answers through the hosted API `artifacts/runs/q397_tinker/q397_tinker/proto_t/proto_labels.jsonl`, the frozen notes `data/derived/proto_notes/train_pr27.jsonl` and `data/derived/sft_q397m3/q397m3_train_notes.jsonl` (made from `data/derived/open_teacher/qwen35-397b/raw.jsonl` by `tools/make_q397m3_notes.py`; the build reads the notes, not `raw.jsonl`) and their meta files | — | yes | yes |
 | Column sources (test side, pinned by SHA-256 in the deployment file): `artifacts/runs/pr27te_rp/pr27te_rp/proto_te/` and `artifacts/runs/q397te_rp/q397te_rp/proto_te/` (answers and parsed answers), `data/derived/proto_notes_test/test_pr27.jsonl`, `data/derived/sft/q397m3_test_notes.jsonl` and their meta files | — | yes | yes |
 | Draw h (photo at 2,048 px): `artifacts/runs/m3ha_oof_rp/`, `m3hb_oof_rp/` (training rows), `artifacts/runs/m3hte_a_rp/`, `m3hte_b_rp/` (test rows, two shards) | — | — | yes |
 | Row lists "character height ≤ 20 px": `data/derived/charsize/train_h20_rows.npy`, `test_h20_rows.npy`, `charsize_h20.meta.json` (`tools/make_charsize_rows.py`) | — | — | yes |
@@ -258,23 +273,23 @@ The build scripts of the safety line also read the OOF matrices of the teacher-b
 but only to verify their checksums (a shared loading function checks all base channels); these channels enter neither
 the blend nor the test side of the safety line.
 
-The competition data come from the competition page. All other inputs are private and available to the competition host
-for verification ([DATA_AND_COMPLIANCE.md](DATA_AND_COMPLIANCE.md)): the frozen derived inputs, the channel outputs, the
-OOF matrices with their metadata, the stored reports and the earlier submission files used as references in the private
-Kaggle dataset `k12-derived`, and the trained adapters, the orientation network and the blend and second-stage files in
-the private Kaggle model `k12-weights`. Every file is referenced by relative path, the pinned files also by SHA-256
-([VALIDATION.md](VALIDATION.md#6-checks-before-a-submission)). The private copies are being brought to the state
-of this version (updated text fields of the stored reports, the released rotation lists and the new deployment files);
-see [ROADMAP.md](ROADMAP.md).
+The competition data come from the competition page. All other inputs are private. They are delivered to the competition
+host for verification in the private input package (download link in our email;
+[VERIFICATION.md](VERIFICATION.md#9-private-weights-and-inputs), [DATA_AND_COMPLIANCE.md](DATA_AND_COMPLIANCE.md)): the
+frozen derived inputs, the channel outputs, the OOF matrices with their metadata, the stored reports, the earlier
+submission files used as references, the blend and second-stage files, our trained adapters and the orientation network
+(`weights/`). Every file is referenced by relative path, the pinned files also by SHA-256
+([VALIDATION.md](VALIDATION.md#6-checks-before-a-submission)).
 
-> **Planned.** A machine-readable manifest of all frozen inputs per line and a weights manifest (base-model revisions and
-> file checksums).
+Machine-readable lists: `PACKAGE_INDEX.tsv` and `MANIFEST.sha256` in the private package (every file with size, SHA-256
+and role), [PROVENANCE.md](PROVENANCE.md) and [weights_manifest.json](weights_manifest.json).
 
 ## 4. Environments
 
 The main pins are listed here. The complete pin set of each environment is in `env/requirements-cpu.txt`,
 `env/requirements-gpu.txt`, `env/requirements-vllm.txt` and `env/requirements-kaggle-t4.txt` (each with its Python and CUDA
-version); lock files with hashes for every pin and an offline wheelhouse are **planned**.
+version). Lock files with hashes for every pin and an offline wheelhouse are **not built** ([ROADMAP.md](ROADMAP.md),
+step 4).
 
 | Environment | Main pins |
 |---|---|
@@ -283,27 +298,45 @@ version); lock files with hashes for every pin and an offline wheelhouse are **p
 | Text generation (separate virtual environment) | vllm 0.31.0, transformers 5.17.0, torch 2.13.0, flashinfer-python 0.7.0.post1 |
 | Kaggle T4 path | accelerate 1.15.0, bitsandbytes 0.50.2, peft 0.21.2, transformers 5.15.1 on top of the Kaggle GPU image |
 
-**Settings for runs without network access:** `HF_HUB_OFFLINE=1`, `TRANSFORMERS_OFFLINE=1`; vLLM usage statistics
-disabled (`VLLM_NO_USAGE_STATS=1`, `DO_NOT_TRACK=1`); the vLLM server bound to 127.0.0.1.
+**Settings for runs without network access:** `HF_HUB_OFFLINE=1`, `TRANSFORMERS_OFFLINE=1`, `HF_DATASETS_OFFLINE=1`,
+`HF_HUB_DISABLE_TELEMETRY=1`, `VLLM_NO_USAGE_STATS=1`, `DO_NOT_TRACK=1`, `VLLM_DO_NOT_TRACK=1`,
+`VLLM_HOST_IP=127.0.0.1`, `GLOO_SOCKET_IFNAME=lo` and `NCCL_SOCKET_IFNAME=lo`. Without `VLLM_HOST_IP`, vLLM looks up its own
+address with a UDP connect to a public address. The vLLM server is bound to 127.0.0.1. Install the environments and
+download the base models before the network is cut. With `PIP_NO_INDEX=1` and `UV_OFFLINE=1`, an accidental install
+attempt fails at once.
 
-**Kaggle T4 runs.** The configurations `v1te_a_t4`, `v1te_b_t4` and `v1rot_t4` attach private notebook outputs with the
-9B weights and the offline wheels, a private dataset with the adapters and the private dataset `k12-derived`;
-`px27_t4zt0` and `px27_t4zt1` attach the notebook output with the wheels and read the 27B weights from a public mirror
-([THIRD_PARTY.md](../THIRD_PARTY.md)).
+**GPU base image.** Remove the `torchao` package of the base image ([TRAINING.md](TRAINING.md#2-environment)) before
+installing the pins: `python -m pip uninstall -y torchao`. Our job script did this, because the older version in the
+image conflicts with the pinned packages.
+
+**Kaggle T4 runs.** The configurations `v1te_a_t4`, `v1te_b_t4` and `v1rot_t4` name private Kaggle resources of our
+account in the keys `kernel_sources` and `dataset_sources`: notebook outputs with the 9B weights and the offline wheels,
+and datasets with the adapters and the frozen inputs. `px27_t4zt0` and `px27_t4zt1` name the notebook output with the
+wheels and read the 27B weights from a public mirror ([THIRD_PARTY.md](../THIRD_PARTY.md)). These keys only describe our
+Kaggle notebook runs. The runner does not read them, so on other GPUs these steps run with the runner like the others.
 
 ## 5. Mode `assemble`
+
+There are two ways to rebuild the files on the CPU. Both are run by `reproduce.sh`
+([VERIFICATION.md §5.1](VERIFICATION.md#51-assemble-cpu)):
+- **Quick check** (`bash reproduce.sh <package-dir>`, about two minutes): the two `make_submission` calls of submissions
+  B and A shown below. They read the frozen channel outputs and the delivered blend and second-stage files and refit
+  nothing.
+- **Build chain** (`bash reproduce.sh <package-dir> --full`, about 2 h): the six commands of the following block.
+  They refit or verify every blend and second-stage file and rebuild every predecessor in the chain of A and B.
 
 ```bash
 # 1. Python 3.13 environment with the versions of section 4 (env/requirements-cpu.txt)
 # 2. Competition data under data/, private inputs under data/derived/ and artifacts/ (section 3)
 export OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=2
+export OPENBLAS_CORETYPE=Haswell   # OpenBLAS kernel of the reference CPU (section 6.3)
 python -I tools/make_folds.py --check || python -I tools/make_folds.py   # artifacts/folds.npy from configs/folds.parquet
 
 # 3. Historical files with the first-version rotation list (references of the released-list builds)
 ORIENT=legacy bash tools/builds/s029_m3x3.sh safe          # strictly inductive line
 ORIENT=legacy bash tools/builds/s034_stage2_main.sh best   # primary line: file without second stage, fallback form, main form
 
-# 4. Final candidates and their fallbacks (released rotation list)
+# 4. Candidates of version 0.3 and their fallbacks (released rotation list); the primary chain checks their files
 bash tools/builds/safety_ndr.sh       # safety line; builds sub_s030n_safe, sub_s036…, sub_safety_final, the primary chain up to
                                       #   sub_primary_final, and sub_safety_nd on the way
 bash tools/builds/primary_m3px27.sh   # primary line; runs primary_final.sh again and checks the files of the safety chain
@@ -346,7 +379,10 @@ files only the blend file of the inductive line, `stack_v1r_zs27t_think18sb_pr27
 `s030n_safe.sh` and `s036_safe_stage2.sh`). A build that stops with an error can leave reports that describe the
 failed attempt; the next successful run rewrites them.
 
-The final `make_submission` call of each candidate is shown for reference. Its arguments name the frozen channel outputs.
+The last `make_submission` call of each build script is shown below. The calls of submissions B and A are the quick
+check of [VERIFICATION.md §5.1](VERIFICATION.md#51-assemble-cpu), there with the output names `check_B.csv` and
+`check_A.csv`. They refit nothing, so they reproduce both files byte for byte with any OpenBLAS kernel (section 6.3). The
+arguments name the frozen channel outputs:
 - A source `<run>/<job>/<tag>` (after `--test`) or `runs/<run>/<job>/<tag>` (after `--proto`, `--rank`, `--rank-only`)
   resolves to `artifacts/runs/<run>/<run>/<job>/`.
 - Several shards of one draw are joined with `+`, and several draws of one channel with `,`.
@@ -456,34 +492,40 @@ read the first three M3 draws (d1–d3) as on the training rows, while the chann
 ### 6.1 Test-side steps
 
 Every model step is a configuration in `configs/vlm/`, run as described in [TRAINING.md](TRAINING.md#2-environment)
-(`python -u -m vlm.runner --config … --out …`). In `rescore` only the scoring and ranking jobs run, behind the frozen
-texts, notes and gate lists. In `full` the generation jobs run as well.
+(`python -u -m vlm.runner --config … --out …`). The runner runs every job of a file. `configs/vlm/rescore/` holds the
+scoring and ranking jobs only (`rescore`). `configs/vlm/test_side/` holds the test-side jobs with generation (`full`).
+Both keep the run and job names of the reference runs, so that the outputs land where the CPU tools read them
+([VERIFICATION.md §5.2](VERIFICATION.md#52-rescore-and-full-gpu)). `tools/make_inference_configs.py` writes the two
+folders from the reference configurations. `tools/gpu_inference.sh rescore|full <package-dir>` runs the model steps of
+the table in the order of [VERIFICATION.md §5.2](VERIFICATION.md#52-rescore-and-full-gpu) and then writes A and B with
+the two calls of §5. `--dry-run` only prints the commands and checks that every configuration and input folder exists.
+The CPU rows that recompute or check a row list (blank photos, rotation, gates, character height) are separate commands.
 
 | Step | Channel | Configuration (job) or script | Reference hardware | Lines |
 |---|---|---|---|---|
-| Blank photos | all | frozen list `data/derived/blank/test_rows.npy` (its script is not part of this repository) | CPU | both |
+| Blank photos | all | frozen list `data/derived/blank/test_rows.npy`; `python -I tools/make_blank_list.py check` recomputes it from the photos and compares (`write --out data/derived/blank_repro` writes a new list) | CPU | both |
 | Rotation lists | `v1r` | `python -I tools/orient_net.py infer --from-images --tables test --weights artifacts/orient/orient_cnn.pt --out data/derived/orient_repro` | CPU | both |
 | 9B scorer | `v1` | `v1te_a_t4`, `v1te_b_t4` (two shards of the test set) | Kaggle T4×2, fp16 | both |
-| Rotation-corrected 9B | `v1r` | `v1rot_t4` (`rot_test`) | Kaggle T4×2, fp16 | both |
+| Rotation-corrected 9B | `v1r` | `test_side/v1rot_t4` (`rot_test`) | Kaggle T4×2, fp16 | both |
 | 27B zero-shot, task block | `zs27q` | `zs27q_test0_rp`, `zs27q_test1_rp` | A40 48 GB, 4-bit | primary |
 | 27B zero-shot, topic block | `zs27t` | `px27_t4zt0`, `px27_t4zt1` | Kaggle T4×2, 4-bit | inductive |
-| Gates | reasoning | frozen gate lists `data/derived/think_rows/` (checked with `python -I tools/replay/gates.py check --table test --line <line>` where the A40 outputs are available, see below) | CPU | both |
-| Reasoning draw g | `think18nb` | `zs27v_te_rp` (`think_te`) | RTX PRO 6000 96 GB | primary |
-| Reasoning draw n | `think18nb`, `think18sb` | `zs27v_n3_rp` (`think_nte`) | RTX PRO 6000 96 GB | both |
-| Protocol answers | `pr27xm` | `pr27te_rp` (`proto_te`) | RTX PRO 6000 96 GB | both |
+| Gates | reasoning | frozen gate lists `data/derived/think_rows/`, checked with `python -I tools/replay/gates.py check --table test --line all --sources a40` (inputs `artifacts/oof_v1.npy` and the A40 test outputs in the private package, see below) | CPU | both |
+| Reasoning draw g | `think18nb` | `test_side/zs27v_te_rp` (`gen_te`, `think_te`; `full`), `rescore/zs27v_te_rp` (`think_te`; `rescore`) | RTX PRO 6000 96 GB | primary |
+| Reasoning draw n | `think18nb`, `think18sb` | `test_side/zs27v_n3_rp` (`gen_nte`, `think_nte`; `full`), `rescore/zs27v_n3_rp` (`think_nte`; `rescore`) | RTX PRO 6000 96 GB | both |
+| Protocol answers | `pr27xm` | `pr27te_rp` (`proto_te`; `full` only) | RTX PRO 6000 96 GB | both |
 | Protocol notes | `pr27xm`, `m3px27xm`, second stage of the safety candidate | frozen notes `data/derived/proto_notes_test/test_pr27.jsonl` (`python tools/export_proto_notes.py --name test_pr27 --from pr27te_rp/proto_te/proto --allow-test`) | CPU | both |
-| Exact ranking behind the notes | `pr27xm` | `n1_rp` (`rank_test`) | RTX PRO 6000 96 GB | both (primary: fallbacks) |
+| Exact ranking behind the notes | `pr27xm` | `test_side/n1_rp` (`rank_test`) | RTX PRO 6000 96 GB | both (primary: fallbacks) |
 | Notes for M3 behind the protocol notes | `m3px27xm` | `tools/make_m3px27_notes.py` (test table) → `data/derived/sft_m3px27te/` | CPU | primary |
 | M3 behind the protocol notes | `m3px27xm` | `m3px27te_rp` (full-fit adapter of M3) | RTX PRO 6000 96 GB | primary |
-| M3 merge and draw d1 | `m3x3_full` | `m3_fullte_rp` (trains the adapter first); inference only with the delivered adapter: `m3d1te_rp` | RTX PRO 6000 96 GB | both |
-| M3 draws d2 and d3 | `m3x3_full` | `m3d2te_rp`, `m3d3te_rp` | RTX PRO 6000 96 GB | both |
-| M3 draw d4 | `m3x4_full`, `m3x5h` | `m3d4te_rp` | RTX PRO 6000 96 GB | final submissions |
-| Row list "character height ≤ 20 px" | `m3x5h` | `python -I tools/make_charsize_rows.py --max-height 20 --name h20` (stored per-image statistics of `eda/i5_01_image_stats.py`; no photo is read by this step) | CPU | submission A |
-| M3 draw h (photo at 2,048 px, listed rows only) | `m3x5h` | `m3hte_a_rp`, `m3hte_b_rp` (two halves of the list) | RTX PRO 6000 96 GB | submission A |
+| M3 merge and draw d1 | `m3x3_full` | `test_side/m3_fullte_rp` (`full`), `rescore/m3_fullte_rp` (`rescore`); `m3d1te_rp` computes a new draw d1 in a fresh folder | RTX PRO 6000 96 GB | both |
+| M3 draws d2 and d3 | `m3x3_full` | `m3d2te_rp`, `m3d3te_rp` (`full`); `rescore/m3d2te_rp`, `rescore/m3d3te_rp` (`rescore`) | RTX PRO 6000 96 GB | both |
+| M3 draw d4 | `m3x4_full`, `m3x5h` | `m3d4te_rp` (`full`), `rescore/m3d4te_rp` (`rescore`) | RTX PRO 6000 96 GB | final submissions |
+| Row list "character height ≤ 20 px" | `m3x5h` | `python -I tools/make_charsize_rows.py --max-height 20 --name h20` (stored per-image statistics of `eda/i5_01_image_stats.py`, which are not in the package; no photo is read by this step) | CPU | submission A |
+| M3 draw h (photo at 2,048 px, listed rows only) | `m3x5h` | `m3hte_a_rp`, `m3hte_b_rp` (two halves of the list; `full`), `rescore/m3hte_a_rp`, `rescore/m3hte_b_rp` (`rescore`) | RTX PRO 6000 96 GB | submission A |
 | Frozen M3 texts | `m3x3_full`, second stage | `tools/freeze_m3_texts.py` (test rows); the frozen training notes of the safety candidate's similarity reference are part of the training side (`eda/c129_safety_nd.py export-notes`) | CPU | both |
-| 397B protocol notes | `q397m3` | `q397te_rp` (`proto_te`) | 4×H200, tensor parallel 4, FP8 | primary |
+| 397B protocol notes | `q397m3` | `q397te_rp` (`proto_te`; `full` only) | 4×H200, tensor parallel 4, FP8 | primary |
 | 397B parity check (64 training rows) | `q397m3` | `q397p_rp`; the stored verdict `eda/private/q397_deploy/c109_parity.json` is read by the build scripts | 4×H200 | primary |
-| Notes for M3 | `q397m3` | `tools/make_q397m3_notes.py` | CPU | primary |
+| Notes for M3 | `q397m3` | `tools/make_q397m3_notes.py --test-from runs/q397te_rp/proto_te/proto` (`full` only) | CPU | primary |
 | M3 behind the 397B notes | `q397m3` | `q397m3te_rp` | RTX PRO 6000 96 GB | primary |
 
 - **Rotation lists.** `--weights` must be given exactly as `artifacts/orient/orient_cnn.pt`: the network writes this path
@@ -491,12 +533,15 @@ texts, notes and gate lists. In `full` the generation jobs run as well.
 - **Gates.** The frozen gate lists were computed from the A40 versions of the 9B and `zs27t` test outputs (`v1_test_rp`,
   `zs27t_all_rp`), while the submitted files use the offline Kaggle T4 versions of these two channels. Recomputing the
   gates from the T4 outputs therefore shifts some rows between gates. In `rescore` the gate lists are taken as frozen
-  inputs. `gates.py check` confirms them only where the A40 outputs are available; these two runs are not part of the
-  private dataset.
+  inputs. `gates.py check --sources a40` confirms them bit for bit; these two runs are in the private package (role
+  `check`).
 
 ### 6.2 Stage order
 
-> **Planned.** A stage-wise runner for the three modes.
+The table gives the stages and the check after each stage. `tools/gpu_inference.sh` runs the model steps in the order of
+[VERIFICATION.md §5.2](VERIFICATION.md#52-rescore-and-full-gpu), not stage by stage.
+
+> **Not built.** A runner that runs the stages and their checks in one go.
 
 | Stage | Content | Rule |
 |---|---|---|
@@ -511,7 +556,7 @@ texts, notes and gate lists. In `full` the generation jobs run as well.
 | S8 | Exact rankings | Reference hardware: identical |
 | S9 | Assembly | `assemble`: checksum equals the submitted file |
 
-In `full` mode, S5 and S6 run first because they are the most fragile steps.
+When the steps of `full` are run by hand, run S5 and S6 first: they are the most fragile steps.
 
 ### 6.3 Reference hardware and expected agreement
 
@@ -532,31 +577,38 @@ In `full` mode, S5 and S6 run first because they are the most fragile steps.
   | 9B test side on T4 | complete |
   | `zs27t` on T4 | top-code agreement 0.944 |
   | M3 draw d1 ranking on T4 in 4-bit | agreement 0.971 |
-  | M3 draw d2 ranking on T4 | half done, agreement 0.978 on 1,750 rows |
-  | M3 draw d3 ranking, reasoning ranking | pending |
+  | M3 draw d2 ranking on T4 | agreement 0.978 on 1,750 of 3,498 rows (the run was not completed) |
+  | M3 draw d3 ranking, reasoning ranking | not run on a second hardware class |
 
 - **Rerun of a generated text:** a rerun of the protocol answers changed the blend's top code on about 8–9 % of rows of
   an error-heavy sample, without a change in MAP@3.
-- **CPU fits of the assembly** (blend weights, second stage) are bit-identical on the reference CPU class with two BLAS
-  threads; on another CPU class the last bits of fitted weights, and with them single ranks, can differ.
+- **CPU fits of the assembly** (blend weights, second stage) are bit-identical on the reference CPU (Intel Core
+  i5-8250U, OpenBLAS kernel `Haswell`) with two BLAS threads. With another OpenBLAS kernel the refitted weights differ by
+  about 1e-8, and the build scripts stop at their first refit check. The two calls of §5 do not refit and still reproduce
+  both files. Details: [VERIFICATION.md §5.1](VERIFICATION.md#51-assemble-cpu).
 
 ## 7. Run times, cost and package size
 
-**Assembly on the CPU** (two BLAS threads, measured in a fresh copy of the repository with the frozen inputs, from which
-every file the build paths write had been deleted): the two historical builds take about 1.3 minutes (strictly inductive
-line) and 5.6 minutes (primary line, main form, including the fallback form and the file without second stage); the guard
-form of the primary line, including the chain of its released-list builds, about 8 minutes; the strictly inductive form
-with second stage, including its released-list build, about 2 minutes. The build scripts added in version 0.2 run their
-predecessors again and were measured with a second copy of the repository running in parallel: `primary_i1.sh` about 18
-minutes and `primary_final.sh` about 20 minutes, each including 4–7 minutes for its 20 meta-splits when these are absent;
-the probe run of variant b of the safety line about 9 minutes (including its meta-splits) and `safety_final.sh` with the
-override about 5 minutes. With the complete private package (meta-splits and deployment files present, so the scripts
-verify them), the README quick start took about 32 minutes. The build scripts added in version 0.3 were measured in the
-same way on a machine shared with other jobs, on which the version-0.2 scripts ran two to four times slower than above:
-`safety_nd.sh` about 42 minutes and `safety_ndr.sh` about 78 minutes, each without its step 0 and including its
-meta-splits (and, for `safety_ndr.sh`, the draw swap) when these are absent, and `primary_m3px27.sh` about 8 minutes
-without its step 0 (its steps 2–4 recompute the mean channel, the blend and the second stage on every run). On that
-machine the README quick start of version 0.3 took about 3.3 hours.
+**Final submissions, code of this repository.** The two direct calls of section 5 take about 30 s per file. The build
+chain of section 5 (six commands; `bash reproduce.sh <package-dir> --full` runs them) took 1 h 48 min, 1 h 52 min and
+1 h 59 min in three runs on an Intel Core i5-8250U laptop (4 cores, 8 threads, 15 GB RAM, two BLAS threads, shared with
+other jobs). The measurements below (versions 0.2–0.4) are history.
+
+**Assembly on the CPU, earlier versions** (two BLAS threads, measured in a fresh copy of the repository with the frozen
+inputs, from which every file the build paths write had been deleted): the two historical builds take about 1.3 minutes
+(strictly inductive line) and 5.6 minutes (primary line, main form, including the fallback form and the file without
+second stage); the guard form of the primary line, including the chain of its released-list builds, about 8 minutes; the
+strictly inductive form with second stage, including its released-list build, about 2 minutes. The build scripts added
+in version 0.2 run their predecessors again and were measured with a second copy of the repository running in parallel:
+`primary_i1.sh` about 18 minutes and `primary_final.sh` about 20 minutes, each including 4–7 minutes for its 20
+meta-splits when these are absent; the probe run of variant b of the safety line about 9 minutes (including its
+meta-splits) and `safety_final.sh` with the override about 5 minutes. With the complete private package (meta-splits and
+deployment files present, so the scripts verify them), the README quick start took about 32 minutes. The build scripts
+added in version 0.3 were measured in the same way on a machine shared with other jobs, on which the version-0.2 scripts
+ran two to four times slower than above: `safety_nd.sh` about 42 minutes and `safety_ndr.sh` about 78 minutes, each
+without its step 0 and including its meta-splits (and, for `safety_ndr.sh`, the draw swap) when these are absent, and
+`primary_m3px27.sh` about 8 minutes without its step 0 (its steps 2–4 recompute the mean channel, the blend and the
+second stage on every run). On that machine the README quick start of version 0.3 took about 3.3 hours.
 
 **Test side per channel** (3,498 rows unless stated):
 
@@ -573,27 +625,27 @@ machine the README quick start of version 0.3 took about 3.3 hours.
 | M3 behind the 397B notes | RTX PRO 6000 | about 3.4 s per row | about 10 USD |
 | M3 behind the protocol notes (`m3px27`) | RTX PRO 6000 | 4.9 s per row, about 4.8 h | about 12 USD |
 
-**Totals.** The following estimates are preliminary. They were made for the two lines before the 397B channel and the
-second stages were added and will be updated.
+**Totals.** For the final submissions see [VERIFICATION.md §3](VERIFICATION.md#3-hardware-and-run-times) (`rescore`
+roughly 25–30 h, `full` about 55 h for A on one 96 GB card). The following earlier estimates were made for the two lines
+before the 397B channel and the second stages were added:
 - `rescore` of both lines: about 9.4–10.6 h on an RTX PRO 6000, 3.5 h on an A40 and 25 T4 hours, about 25–29 USD.
 - `full` of both lines: about 29.7 h on an RTX PRO 6000, 3.5 h on an A40 and 25 T4 hours, about 76–79 USD.
 - The 397B steps add about 27–42 USD.
 
-**Final submissions (version 0.4).** The CPU build of submission A including its whole chain took about 45 minutes on the
-development machine (two BLAS threads; about 15 minutes without step 0) and 3,987 s in the netless Kaggle CPU rebuild of
-both submissions from the frozen inputs (internal code version, see [PROVENANCE.md](PROVENANCE.md)). With the code of this
-repository the whole README quick start (all six commands, which build every file of the chain) took 1 h 52 min on the first
-build and 1 h 48 min on the second, on a machine shared with other jobs and with every file access traced. Test side of the new draws: M3
-draw d4 about 7.4 h on an RTX PRO 6000 (about 17 USD); draw h on the 2,459 listed test rows in two halves of about 4 h each
-(generation about 5.8 s, ranking about 4.8 s per row; about 21.5 USD together).
+**Final submissions (version 0.4), internal code.** The CPU build of submission A including its whole chain took about
+45 minutes on the development machine (two BLAS threads; about 15 minutes without step 0) and 3,987 s in the netless
+Kaggle CPU rebuild of both submissions from the frozen inputs, with the internal code version
+([PROVENANCE.md](PROVENANCE.md)). Test side of the new draws: M3 draw d4 about 7.4 h on an RTX PRO 6000 (about 17 USD);
+draw h on the 2,459 listed test rows in two halves of about 4 h each (generation about 5.8 s, ranking about 4.8 s per
+row; about 21.5 USD together).
 
 **Weights.** Counted as deployed (each base model once, adapters as adapters): **481.53 GB** (448.46 GiB), 30.5 GB below
 512 GB; counted at 8 bit per stored value: **440.94 GB**; parameters: 397 B nominal (403.4 B stored values) for the largest
 model, 434.4 B (440.9 B) for all models together, below 550 B. Details, the counting rule and the risks of other counts:
 [MODEL_SIZES.md](MODEL_SIZES.md); file list with checksums: [weights_manifest.json](weights_manifest.json). The 397B FP8
 weights alone take 406.20 GB (378.30 GiB; the runner's log prints GiB as "GB"). The base models are referenced by pinned
-revision and file checksums; M3 is shipped as an adapter (300.5 MB) and merged at run time. The frozen inputs of both
-submissions take 2.66 GB ([PROVENANCE.md](PROVENANCE.md)).
+revision and file checksums; M3 is shipped as an adapter (300.5 MB) and merged at run time. Files and sizes of the
+private input package: [VERIFICATION.md §9](VERIFICATION.md#9-private-weights-and-inputs).
 
 ## 8. Operating rules
 
@@ -602,8 +654,9 @@ submissions take 2.66 GB ([PROVENANCE.md](PROVENANCE.md)).
   processes each row on its own.
 - **Override only by the recorded decision.** The safety candidate is built only with `OVERRIDE_CV_II=override_cv_condition_ii`
   and only while `decisions/override_cv_condition_ii.json` matches the checksum pinned in `eda/c123_safety_set.py`.
-- **Fixed draws.** M3 uses exactly three draws with fixed settings. Each test draw must match the generation settings of
-  its OOF draw; the checks reject any mismatch.
+- **Fixed draws.** M3 uses a fixed set of draws with fixed settings: three in the earlier candidates, four in submission
+  B and five in submission A (the fifth only on the listed rows). Each test draw must match the generation settings of its
+  OOF draw; the checks reject any mismatch.
 - **Fixed rotation list.** The released-list builds reject the first-version list; the first-version list is used only to
   rebuild the historical files.
 - **Aggregates only.** Model outputs for test rows are written to files and never printed. Logs contain counts, shares
@@ -624,8 +677,8 @@ fitted on the 1,500 training rows stays as delivered, and only the test side is 
 2. **Test side.** The new `test.csv` and photos go into the layout of §3, and the test-side steps of §6.1 run for every
    channel of the line in the stage order of §6.2, in mode `full` (every generated text is a new draw). The three inputs
    that §6.1 takes as frozen lists are made anew: the rotation lists (`tools/orient_net.py infer`), the gate lists
-   (`python -I tools/replay/gates.py write --out <folder> --table test --line all --sources t4`) and the blank-photo list,
-   whose script is not part of this repository ([CODEMAP.md](CODEMAP.md#10-steps-whose-scripts-are-not-part-of-this-repository)).
+   (`python -I tools/replay/gates.py write --out <folder> --table test --line all --sources t4`) and the blank-photo list
+   (`python -I tools/make_blank_list.py write --out <folder>`).
 3. **Assembly.** The build scripts are not used: they compare every input and output with the checksums of the competition
    test set. `tools/make_submission.py` is called directly, with the arguments of the reference calls of §5 or of the calls
    below; the run folders named there then hold the runs on the new photos.
@@ -638,12 +691,13 @@ fitted on the 1,500 training rows stays as delivered, and only the test side is 
    calls below read none of them. **The two final submissions carry more such records:** besides `mech27.test` (both), the
    second stage of submission A pins the SHA-256 of every test-side column source in `extra_columns.test.files_sha256`
    (protocol answers of the 27B and of the 397B, their parsed answers and notes; a check that cannot be skipped), and its
-   channel metadata `meta_m3x5h.json` pins the test list of draw h (`rank.row_list_draws[].test`). A rebuild of the two
-   final files is therefore possible only from the frozen test-side outputs (mode `assemble`). A mode that refits nothing
-   but re-records the checksums of newly computed test-side files (a copy of each deployment file with the new test-side
-   checksums, the training side unchanged, and a regression check that the frozen path stays byte-identical) is not built.
-   On a new test set the row list of draw h is made anew with `tools/make_charsize_rows.py` from the image statistics of
-   the new photos (the threshold of 20 px is fixed).
+   channel metadata `meta_m3x5h.json` pins the test list of draw h (`rank.row_list_draws[].test`). On the competition test
+   set, A and B are assembled from rescored or regenerated outputs with the two calls of §5. After new protocol answers or
+   397B answers, `tools/repin_test_side.py --write` first re-records their checksums; it keeps the old files under
+   `artifacts/repin_backup/` and refits nothing ([VERIFICATION.md §5.2](VERIFICATION.md#52-rescore-and-full-gpu)). It does
+   not touch the test list of draw h. On a new test set that list is made anew with `tools/make_charsize_rows.py` from the
+   image statistics of the new photos (the threshold of 20 px is fixed); recording the new list in `meta_m3x5h.json` is not
+   built.
 5. **Guards.** The second stages compare aggregates of the test rows with values from the training rows
    ([METHOD.md](METHOD.md#92-test-side-guards), §9.10 and §9.11). They are meant to stop on a set that does not look like
    the training rows:
@@ -791,7 +845,7 @@ Two Python environments on the same machine:
 
 **Lock files.** `env/requirements-vllm.txt` pins the same 199 packages (versions only; a private lock file carries hashes for
 130 of them). The package list of the reference run differs from it in one package: `openai==3.42.0` (file: 3.41.0; a
-dependency of vLLM, not used by the job). Hashes for every pin and an offline wheelhouse are still to be produced (section
+dependency of vLLM, not used by the job). Hashes for every pin and an offline wheelhouse are not built (section
 10.12).
 
 ### 10.5 Server start
@@ -825,7 +879,9 @@ caching and chunked prefill on (8,192 batched tokens), engine seed 0, CUDA graph
 FlashAttention 3, Triton FP8 expert kernels, Cutlass block-scaled FP8 linear kernels.
 
 **Required in addition for a run without network access** (not set in the reference run, which kept vLLM's usage
-reporting on): `VLLM_NO_USAGE_STATS=1` and `DO_NOT_TRACK=1`.
+reporting on): the settings of section 4, among them `VLLM_NO_USAGE_STATS=1`, `DO_NOT_TRACK=1`, `VLLM_DO_NOT_TRACK=1`,
+`VLLM_HOST_IP=127.0.0.1`, `GLOO_SOCKET_IFNAME=lo` and `NCCL_SOCKET_IFNAME=lo`. With tensor parallelism 4, the two socket
+settings have not been tested.
 
 ### 10.6 Data and job
 
@@ -857,8 +913,8 @@ never been run.
 | 0 | — | Check GPUs, driver, disk (≥ 600 GB free) and host memory | four cards of the H200 class as in the reference run, or see section 10.12 |
 | 1 | allowed | Copy the model revision into `$K12_MODELS/Qwen3.5-397B-A17B-FP8/` with the call the runner itself uses: `python -c "from huggingface_hub import snapshot_download as d; d('Qwen/Qwen3.5-397B-A17B-FP8', revision='ea5b4f81096f3901c91dea97f81324302495781d', local_dir='/workspace/models/Qwen3.5-397B-A17B-FP8', max_workers=32)"` | size and SHA-256 of all 107 files equal [weights_manifest.json](weights_manifest.json) |
 | 2 | allowed | `uv venv /workspace/vllm_env --python <base interpreter>`, then install from the wheelhouse of the lock: `uv pip install --offline --no-index --require-hashes --find-links <wheelhouse> --python /workspace/vllm_env/bin/python -r vllm.lock`; write any text into `/workspace/vllm_env/.k12_ready` | with this marker present, the runner uses the environment and installs nothing (`runner.ensure_vllm_env`). Requires the completed lock (section 10.12) |
-| 3 | **off** | Export `HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 VLLM_NO_USAGE_STATS=1 DO_NOT_TRACK=1`; run in a container without a network interface | — |
-| 4 | off | Parity probe: runner with `q397p_rp.yaml`, then the parity check against the training-side answers of the hosted API (its script is not yet part of this repository; the build scripts read its stored verdict) | valid answers ≥ 97 % of the 64 rows; first-pass input tokens within 1 % of the reference count in ≥ 95 % of rows; same top code as the reference in ≥ 70 % of rows. Otherwise stop |
+| 3 | **off** | Export the settings of section 4 (`HF_HUB_OFFLINE=1`, `TRANSFORMERS_OFFLINE=1`, `VLLM_NO_USAGE_STATS=1`, `DO_NOT_TRACK=1`, `VLLM_HOST_IP=127.0.0.1` and the others); run in a container without a network interface | — |
+| 4 | off | Parity probe: runner with `q397p_rp.yaml`, then the parity check against the training-side answers of the hosted API (its script is not part of this repository; the build scripts read its stored verdict) | valid answers ≥ 97 % of the 64 rows; first-pass input tokens within 1 % of the reference count in ≥ 95 % of rows; same top code as the reference in ≥ 70 % of rows. Otherwise stop |
 | 5 | off | Test side: runner with `q397te_rp.yaml` | job completes; 3,498 rows answered |
 | 6 | off | `python -I eda/c110_q397_deploy.py test-status runs/q397te_rp/proto_te/proto` | 3,498 rows; valid answers ≥ 97 %; share of `NONE` at the top within the training value ± 0.06; model and settings equal those of the training side |
 | 7 | off | Downstream: `python -I tools/make_q397m3_notes.py --test-from runs/q397te_rp/proto_te/proto`, then the M3 ranking `q397m3te_rp`, then the assembly | sections 5 and 9 |
@@ -931,18 +987,20 @@ private package. The build scripts read the frozen files and reproduce both subm
 needs only a CPU. Running sections 10.5–10.7 again produces a new draw of every answer: statistically equivalent, not
 identical. Its files have new checksums, which the build scripts reject by design, because the deployment files record
 the checksums of the frozen test-side inputs (submission A: the field `extra_columns.test.files_sha256` of its
-second-stage file). A file assembled from a new draw is therefore a new file; how it would be assembled is described in
-section 9, and that path does not yet cover the column sources of submission A.
+second-stage file). How such a draw is assembled into A and B:
+[VERIFICATION.md §5.2](VERIFICATION.md#52-rescore-and-full-gpu).
 
 ### 10.12 Open points
 
 These are not verified and are therefore not claimed above:
 - **A run without network access** of sections 10.5–10.7 has not been performed. The reference run downloaded weights and
-  packages at run time and kept vLLM's usage reporting on. Planned: steps 1–2 with network, steps 3–6 in a container
-  without a network interface, empty compiler caches, on 4 × H200.
+  packages at run time and kept vLLM's usage reporting on. The check would run steps 1–2 with network and steps 3–6 in a
+  container without a network interface, with empty compiler caches, on 4 × H200.
 - **Other hardware.** 8 × H100 (80 GB) with tensor parallelism 8 has a configuration but has never run. Four cards with
   96 GB (89.4 GiB each) cannot even hold the 93.35 GiB of weights per card at tensor parallelism 4 (arithmetic, not
   tested). No 4-bit or other smaller release of the model has been tested; it would give different texts.
 - **Driver version** of the reference machine (not recorded).
 - **Complete lock file** with hashes for all pins and an offline wheelhouse.
-- **Rerun variance of the submitted files** when all generated texts are replaced at once (not measured).
+- **Rerun variance of the submitted files** when all generated texts are replaced at once: not measured directly;
+  estimated at about ±0.003 MAP@3 (1 sd) on the private rows
+  ([VERIFICATION.md §8.1](VERIFICATION.md#81-how-close-a-full-rerun-should-come)).

@@ -1,6 +1,8 @@
 # Validation
 
-*Status: 2026-11-15 (version 0.4).*
+Reference document. To reproduce the submissions, start with [VERIFICATION.md](VERIFICATION.md).
+
+*Status: 2026-11-21 (version 0.6).*
 
 Every model decision in this project was made on cross-validation with the 1,500 labelled rows; the public leaderboard
 was never used to choose between variants. This document describes the protocol: folds, leakage controls, the three
@@ -61,7 +63,7 @@ therefore reported in up to three forms:
 | **Without the last step** | Blend (and reranker) without the alignment | Diagnosis only |
 | **As one set** | The alignment applied to all 1,500 OOF rows at once, as on the test set | Deployment form of the primary line |
 
-- For the primary line, a change of the channels or of the blend is called robust only if it holds in all three forms.
+- For the primary line, a change of the channels or of the blend counts as stable only if it holds in all three forms.
   The `q397m3` channel is a warning example. Without the second stage it was ahead per fold (+0.0034 ± 0.0028), but
   behind without the last step (−0.0033) and as one set (−0.0014). It entered the primary line only after it was ahead
   in all three forms together with the arithmetic share and the reranker, by small and uncertain margins (+0.0021 /
@@ -158,14 +160,14 @@ form of the reranker:
 | 80 new meta-splits | Per fold +0.0016, positive in 71 of 80; as one set +0.0014, positive in 73 of 80 |
 | 300 placebo sets: identifiers of five random codes, without the guard | 95 % quantile +0.0010 per fold and +0.0012 as one set; the component lies above both |
 | Stricter placebo: random identifiers with the same NONE guard | 95 % quantile +0.0016 per fold and +0.0031 as one set; the component does **not** lie above (10 % and 6 % of the placebo sets are at least as good) |
-| Placebo with the same leverage: the real identifier columns with candidate blocks permuted across rows within each fold, without the guard | 95 % quantile +0.0013 per fold and +0.0016 as one set; the component is level with it per fold and above it as one set |
+| Placebo with the same columns: the real identifier columns with candidate blocks permuted across rows within each fold, without the guard | 95 % quantile +0.0013 per fold and +0.0016 as one set; the component is level with it per fold and above it as one set |
 | Parts | NONE guard alone +0.0010 (mean of both forms), positive in 80 of 80 meta-splits; identifiers on top of the guard +0.0004, positive in 54 of 80 |
 | Copy null points | Identifiers 0 and guard off reproduce the main form bit for bit on the OOF rows. On the test side, the null model reproduces the file without second stage, and the main-form weights with identifier weights 0 and the guard off reproduce the main-form file, both byte for byte; with the guard on, exactly the guarded rows change |
 | File swap | Notes of another draw in place of draw d1, with consistent provenance: the note guard triggers, and the fallback-form file results byte for byte |
 | Test side (aggregates) | Other top code than the main-form file in 0.94 % of test rows (OOF 1.27 %); guard (c) 0.0254 within 0.0183–0.0733 |
 
 The rule as written, with placebo sets without the guard, is met; the stricter reading is not, and against placebo sets
-with the same leverage the component is only level per fold. The robust part is the NONE guard, while the identifiers
+with the same columns the component is only level per fold. The stable part is the NONE guard, while the identifiers
 add a small positive expectation. The expected gain over the main form is about +0.0013 to
 +0.0016. This estimate is optimistic rather than conservative: the guard was found in an error analysis of the same
 1,500 labels, and it acts on few rows.
@@ -291,9 +293,10 @@ is at most 5 %: P(θ < −0.002) ≤ 0.05.
 
   The rule is met at τ_d = 0 and fails if the between-draw spread is about 0.0017 or larger. Averaged over a flat
   uncertainty of τ_d, P lies between 0.09 and 0.21, depending on the assumed upper bound.
-- **Consequence.** Under the rule as written, the second stage with NONE guard is the current candidate of the inductive
-  line, and the line without second stage is its fallback. The final choice of the inductive slot weighs this
-  sensitivity against the expected gain of +0.002 to +0.003. A further M3 draw on the training rows would narrow τ_d.
+- **Consequence.** Under the rule as written, the second stage with NONE guard became the candidate of the inductive
+  line (version 0.1), with the line without second stage as its fallback. The choice of an inductive slot was to weigh
+  this sensitivity against the expected gain of +0.002 to +0.003; in the final selection both slots went to the primary
+  line. A further M3 draw on the training rows would narrow τ_d.
 - **Use in the note-feature forms of the safety line.** The rules of §9.10 and §9.11 of [METHOD.md](METHOD.md) use the same
   posterior with the same prior (12 measurements of this class, `eda/risk_rule.py`; selection correction with 6 variants,
   correlation 0.5, spread 0.0015). For the note mentions and the example similarity τ_d = 0 decides (P = 0.0001; τ_d 0.001 is
@@ -394,7 +397,8 @@ counts, shares and checksums. No per-row test output is displayed or inspected.
 - An existing output CSV file is replaced only by a byte-identical rebuild, except by `s029_m3x3.sh` with
   `ORIENT=legacy` and `s029_q397.sh`, which overwrite their outputs. Test matrices written next to an unchanged CSV
   file are not compared; only the test matrix of the inductive file without second stage is pinned.
-- If a build stops at the checksum of a file it has just written, the file stays on disk but does not count as built.
+- If a build stops at the checksum of a file it has written in the same run, the file stays on disk but does not count
+  as built.
   Delete it before running the build again: an existing file is only replaced by a byte-identical rebuild, so the next
   run would otherwise stop at the comparison with it.
 
@@ -411,8 +415,10 @@ counts, shares and checksums. No per-row test output is displayed or inspected.
 - **Dependence on generated texts.** About two thirds of the blend weight lies on channels that generate text, and
   components that read the M3 draws depend on which texts were generated. Their test-side gain is an expectation over
   draws.
-- **CPU class.** The CPU fits of the blend and of the second stages are bit-identical on the same CPU class with two BLAS
-  threads. On another CPU class the last bits of fitted weights, and with them single ranks, can differ.
+- **CPU class.** The CPU fits of the blend and of the second stages are bit-identical on the reference CPU (Intel Core
+  i5-8250U, OpenBLAS kernel `Haswell`) with two BLAS threads. With another OpenBLAS kernel the refitted weights differ by
+  about 1e-8, and the build scripts stop at their first refit check. The two direct calls of the quick check refit nothing
+  and reproduce both files byte for byte ([VERIFICATION.md §5.1](VERIFICATION.md#51-assemble-cpu)).
 - **CV versus public leaderboard.** Recent files scored higher on the public leaderboard than in cross-validation: the
   three reranker files of the primary line by +0.004 to +0.007 against their as-one-set values (the file before the
   reranker by +0.011), the inductive line by +0.008 to +0.011 against its per-fold value. A plausible cause is that test

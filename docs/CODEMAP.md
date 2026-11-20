@@ -1,7 +1,10 @@
 # Code map
 
-*Status: 2026-11-15 (version 0.4). Every script and module of this repository with its role. How to run the steps is in
-[TRAINING.md](TRAINING.md) and [INFERENCE.md](INFERENCE.md); the method is in [METHOD.md](METHOD.md).*
+Reference document. To reproduce the submissions, start with [VERIFICATION.md](VERIFICATION.md).
+
+*Status: 2026-11-21 (version 0.6). Every script and module of this repository with its role. How to run the steps is in
+[TRAINING.md](TRAINING.md) and [INFERENCE.md](INFERENCE.md); the method is in [METHOD.md](METHOD.md); the internal names
+are explained in [GLOSSARY.md](GLOSSARY.md).*
 
 **Contents:**
 1. [Conventions](#1-conventions)
@@ -111,6 +114,11 @@
 
 | Tool | Role |
 |---|---|
+| `reproduce.sh` (repository root) | One command for the CPU check: `bash reproduce.sh <package-dir>` checks the private package with its `MANIFEST.sha256`, copies its `artifacts/` (writable), links its `data/derived/`, runs the two `make_submission` calls of the quick check and compares both files with their checksums; `--full` also runs the build chain ([VERIFICATION.md §5.1](VERIFICATION.md#51-assemble-cpu)) |
+| `tools/gpu_inference.sh` | GPU modes: `tools/gpu_inference.sh rescore\|full <package-dir> [--out DIR] [--dry-run]` runs the test-side jobs in order, copies their outputs to where the CPU tools read them, and writes `new_A.csv` and `new_B.csv` with the two calls of the quick check; it prints only aggregates against `check_A.csv` and `check_B.csv`. `--dry-run` prints every command and checks that each configuration and input folder exists ([VERIFICATION.md §5.2](VERIFICATION.md#52-rescore-and-full-gpu)) |
+| `tools/make_inference_configs.py` | Writes `configs/vlm/test_side/` and `configs/vlm/rescore/` from the reference configurations (§7); `--check` compares the files present |
+| `tools/repin_test_side.py` | After new protocol or 397B answers on the test rows: `--check` reports which pinned test-side checksums in the deployment files of A and B and in `meta_m3px27xm.json` differ; `--write` re-records them and keeps the old files under `artifacts/repin_backup/`; nothing is refitted |
+| `tools/make_blank_list.py` | Blank-photo list (a photo is blank if, in grey scale at 256 × 256, its mean is below 12 and its standard deviation below 8): `check` recomputes it and compares with `data/derived/blank/` (counts and checksums only); `write --out DIR` writes a new list |
 | `tools/make_submission.py` | Assembly of a submission from frozen channel outputs: draws, floors, blend, alignment, second stage (`--stage2`), `REL-01` for blank photos, checks; writes the CSV, a JSON record and the test matrix |
 | `tools/make_folds.py` | Writes or checks `artifacts/folds.npy` from `configs/folds.parquet` (recorded among the input checksums of the second stage) |
 | `tools/orient_list.py` | Rotation list of the `v1r` test side: `spec`, `check` (rejection of the first-version list, coverage, rotation, provenance), `verify-sub`, `compare` |
@@ -178,10 +186,16 @@ output with the legacy-list file of the same line, so the legacy-list files must
 | `q397` / `q397m3` | `q397p_rp` (fidelity check), `q397m3_oof_rp`; never run: `q397p8_rp` | `q397te_rp`, `q397m3te_rp`; never run: `q397te8_rp` (8×H100 variant) |
 | CPU smoke tests | `local_cpu_test`, `local_m3_test`, `local_proto_rank` | — |
 
+**Inference-only copies.** `configs/vlm/test_side/` and `configs/vlm/rescore/` hold the test-side jobs of the reference
+configurations, unchanged and under the same run and job names, so that their outputs land where the CPU tools read them.
+`test_side/` (for `full`) leaves out the training jobs and the jobs on training rows, except short pre-check jobs.
+`rescore/` also leaves out every job that generates text. `tools/make_inference_configs.py` writes both folders, and
+`tests/test_inference_configs.py` checks that each job equals the job of the same name in the reference file. Do not run
+`m3_fullte_rp.yaml` itself for inference: its training jobs retrain M3 and overwrite the delivered adapter.
+
 Some scripts and comments name runs of variants that are not part of the delivered lines; their configurations are not
-included: `q397te8_rp` (an alternative 8×H100 configuration of the 397B test side that was not used; the build scripts
-look for its output next to `q397te_rp`), `zs27v_n2_rp` (an earlier run of reasoning draw n, whose gate lists
-`tools/replay/gates.py` still describes), `m3p_f1_rp`, `m3p_f2_rp` and `m3p_pool` (M3 trained with pool rows, evaluated by `eda/c98b_pool_eval.py` and not
+included: `zs27v_n2_rp` (an earlier run of reasoning draw n, whose gate lists `tools/replay/gates.py` still describes),
+`m3p_f1_rp`, `m3p_f2_rp` and `m3p_pool` (M3 trained with pool rows, evaluated by `eda/c98b_pool_eval.py` and not
 adopted), and `pool_ans_t4` (an early run on pool photos whose row order the teacher plan reuses).
 
 ## 8. Tests
@@ -208,6 +222,9 @@ adopted), and `pool_ans_t4` (an early run on pool photos whose row order the tea
 | `test_primary_m3x5h.py` | `c166`: five-draw channel with row list, guards and controls of draw h, the row-list draw of `make_submission`, pins of `primary_m3x5h.sh` |
 | `test_primary_m3px27.py` | Note guard and comparison form of the mean channel in `make_submission`, `c118.build_stage2` with a given deployment form, `c133` checks, checksums of `primary_m3px27.sh` |
 | `test_make_m3_targets.py` | Record format and loss rule of the M3 target builder, mapping to the adapter recipes; with the private files the byte-identical rebuild of the six target files |
+| `test_inference_configs.py` | `configs/vlm/test_side/` and `configs/vlm/rescore/`: every job equals the job of the same name in the reference configuration, no training job, no generation job in `rescore/` |
+| `test_repin_test_side.py` | `tools/repin_test_side.py` on a temporary copy with synthetic files: `--check` without change, `--write` after a change, backup written, nothing else changed |
+| `test_make_blank_list.py` | `tools/make_blank_list.py` on a synthetic black and a normal image; the test on the competition photos skips without the data |
 | `test_answer_match.py` | Mechanical answer comparison (number formats, fractions, LaTeX, units, no `eval`) |
 | `test_orient_list.py` | Choice and checks of the rotation list (`orient_list.sh`, `tools/orient_list.py`) |
 | `test_orient_repro.py` | Orientation network and rotation lists |
@@ -227,6 +244,8 @@ adopted), and `pool_ans_t4` (an early run on pool photos whose row order the tea
 | `pr27`, `pr27xm` | 27B protocol channel: named codes / mean with the exact ranking | both (`pr27xm`; in the primary line only in the fallbacks) |
 | `m3px27`, `m3px27xm` | M3 ranking behind the protocol notes / mean of the named protocol codes with it | primary (`m3px27xm`, final candidate) |
 | `m3x3_full` | M3, mean of three draws | both |
+| `m3x4_full` | M3, mean of four draws (d1–d4) | primary (submission B) |
+| `m3x5h` | M3, mean of the draws that cover a row: d1–d4, and draw h at 2,048 px on the rows with small script | primary (submission A) |
 | `q397`, `q397m3` | 397B answers / M3 scoring behind the 397B notes | primary (`q397m3`) |
 
 | File | Format |
@@ -253,7 +272,6 @@ still write the files that were delivered.
 
 | Step | Frozen output | Consumed by |
 |---|---|---|
-| Blank-photo list | `data/derived/blank/test_rows.npy` | `tools/make_submission.py --blank-rows` |
 | Combination of fold runs of M3 draws d1 and d2 | `artifacts/runs/m3_5f/`, `artifacts/runs/m3long_comb/` | `eda/a9_m3_draws_oof.py` |
 | 397B fidelity check on 64 training rows | `artifacts/eda/private/q397_deploy/c109_parity.json` | the build scripts of the primary line (stored verdict) |
 | Posterior step of the M3 decision rule | `artifacts/eda/private/m3_draws_eval/c108_m3_three_draws.json` | the build scripts (stored verdict) |

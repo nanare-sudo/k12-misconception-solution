@@ -1,5 +1,5 @@
 {
- "note": "Weights manifest of the two final submissions (solution repository version 0.4). Base models: public Hugging Face metadata of the pinned revisions (file list, size, LFS SHA-256 or git blob id), retrieved anonymously on 2026-11-14. Own weights: size and SHA-256 computed from the stored files; delivered in a private Kaggle model and in the private input package (weights/). Sizes and the counting rule: docs/MODEL_SIZES.md.",
+ "note": "Weights manifest of the two final submissions (solution repository version 0.6). Base models: public Hugging Face metadata of the pinned revisions (file list, size, LFS SHA-256 or git blob id), retrieved anonymously on 2026-11-14. Own weights: size and SHA-256 computed from the stored files; delivered in the private input package (folder weights/; the five M3 fold adapters lie with their training runs under artifacts/runs/; download link in our email to the host). Sizes and the counting rule: docs/MODEL_SIZES.md.",
  "base_models": [
   {
    "repo": "Qwen/Qwen3.5-397B-A17B-FP8",
@@ -986,7 +986,7 @@
  "own_weights": [
   {
    "name": "m3_full adapter (LoRA on Qwen3.8-27B)",
-   "delivered_as": "k12-weights: transformers/m3-full/1",
+   "delivered_as": "private input package: weights/m3_full/adapter/ (same file under artifacts/runs/m3_fullte_rp/m3_fullte_rp/m3_train_full/adapter/)",
    "file": "adapter_model.safetensors",
    "bytes": 300456960,
    "sha256": "85c34f5c396ec21ecb6de28356a631f4261264402b7a03283ad8fc168e334527",
@@ -995,7 +995,7 @@
   },
   {
    "name": "v1_full adapter (LoRA on Qwen3.5-9B)",
-   "delivered_as": "k12-weights: transformers/v1-full/1",
+   "delivered_as": "private input package: weights/v1_full/",
    "file": "adapter_model.safetensors",
    "bytes": 110906720,
    "sha256": "321108733ee1ae9eafe14d98047eb592f2f8084df372f600aa46f4a0f0f1d9ca",
@@ -1004,7 +1004,7 @@
   },
   {
    "name": "orientation network (two small CNNs)",
-   "delivered_as": "k12-weights: pyTorch/orient-cnn/1",
+   "delivered_as": "private input package: weights/orient_cnn/ (same files under artifacts/orient/)",
    "file": "orient_cnn.pt",
    "bytes": 3436615,
    "sha256": "83cc1224da0edbea0af640a8682ecb0b882f33b107cf89de9a7673ce19223abe",
@@ -1055,6 +1055,51 @@
    "sha256": "7739fbcb08baf7875da13b75037a87597c702a1c9419b164754750c607145e58",
    "format": "F32, 27,721,728 parameters",
    "role": "training side only: out-of-fold 9B scores and the rotation run v1rot_t4; v1_f1 also in the check job check_f1 of the 9B test configurations; not used for any test prediction and not counted in docs/MODEL_SIZES.md"
+  },
+  {
+   "name": "m3_f0 adapter (LoRA on Qwen3.8-27B, fold 0)",
+   "delivered_as": "private input package: artifacts/runs/m3_f034_rp/m3_f034_rp/m3_train_f0/adapter/",
+   "file": "adapter_model.safetensors",
+   "bytes": 300456960,
+   "sha256": "b64aa0b7a7a89ddf85cf2f7c7de6b05336995a879920435f7a4f7c90e7dc1917",
+   "format": "F32, 75,104,256 parameters",
+   "role": "training side only: out-of-fold M3 draws (d1-d4, h) and the M3 rankings behind the protocol and 397B notes of the training rows; the assembly compares its checksum; not used for any test prediction and not counted in docs/MODEL_SIZES.md"
+  },
+  {
+   "name": "m3_f1 adapter (LoRA on Qwen3.8-27B, fold 1)",
+   "delivered_as": "private input package: artifacts/runs/m3_pilot_rp/m3_pilot_rp/m3_train_f1/adapter/",
+   "file": "adapter_model.safetensors",
+   "bytes": 300456960,
+   "sha256": "3d48b2e7a81f3950e5c5d022fd0c7446499d011b100a428101eeb325bc7c8e65",
+   "format": "F32, 75,104,256 parameters",
+   "role": "training side only: out-of-fold M3 draws (d1-d4, h) and the M3 rankings behind the protocol and 397B notes of the training rows; the assembly compares its checksum; not used for any test prediction and not counted in docs/MODEL_SIZES.md"
+  },
+  {
+   "name": "m3_f2 adapter (LoRA on Qwen3.8-27B, fold 2)",
+   "delivered_as": "private input package: artifacts/runs/m3_pilot_rp/m3_pilot_rp/m3_train_f2/adapter/",
+   "file": "adapter_model.safetensors",
+   "bytes": 300456960,
+   "sha256": "4b1b978d98b77b03c03fcc5166d4e61a30d14ce818307cfda607789bcb016532",
+   "format": "F32, 75,104,256 parameters",
+   "role": "training side only: out-of-fold M3 draws (d1-d4, h) and the M3 rankings behind the protocol and 397B notes of the training rows; the assembly compares its checksum; not used for any test prediction and not counted in docs/MODEL_SIZES.md"
+  },
+  {
+   "name": "m3_f3 adapter (LoRA on Qwen3.8-27B, fold 3)",
+   "delivered_as": "private input package: artifacts/runs/m3_f034_rp/m3_f034_rp/m3_train_f3/adapter/",
+   "file": "adapter_model.safetensors",
+   "bytes": 300456960,
+   "sha256": "83bc2df70456c4ff330e29fb4c3682b4be69a4e932c017cece3ebb232e26d879",
+   "format": "F32, 75,104,256 parameters",
+   "role": "training side only: out-of-fold M3 draws (d1-d4, h) and the M3 rankings behind the protocol and 397B notes of the training rows; the assembly compares its checksum; not used for any test prediction and not counted in docs/MODEL_SIZES.md"
+  },
+  {
+   "name": "m3_f4 adapter (LoRA on Qwen3.8-27B, fold 4)",
+   "delivered_as": "private input package: artifacts/runs/m3_f034_rp/m3_f034_rp/m3_train_f4/adapter/",
+   "file": "adapter_model.safetensors",
+   "bytes": 300456960,
+   "sha256": "4651477fdf50ebe49fdc015cf1bc19b5023f02b4753a95f361164b66de2ba86e",
+   "format": "F32, 75,104,256 parameters",
+   "role": "training side only: out-of-fold M3 draws (d1-d4, h) and the M3 rankings behind the protocol and 397B notes of the training rows; the assembly compares its checksum; not used for any test prediction and not counted in docs/MODEL_SIZES.md"
   }
  ]
 }

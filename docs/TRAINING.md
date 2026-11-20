@@ -1,14 +1,16 @@
 # Training
 
-*Status: 2026-11-15 (version 0.4). This document lists every component that is trained or fitted on the labelled data:
+Reference document. To reproduce the submissions, start with [VERIFICATION.md](VERIFICATION.md).
+
+*Status: 2026-11-21 (version 0.6). This document lists every component that is trained or fitted on the labelled data:
 inputs, command, hardware, duration and the values to check. Model details are in [METHOD.md](METHOD.md); inference is
 in [INFERENCE.md](INFERENCE.md); every script is listed in [CODEMAP.md](CODEMAP.md).*
 
 **The trained weights are delivered, not retrained.** The host has said that both the training and the inference pipeline
 of the winners will be requested and verified; this document therefore lists every training step with its inputs, and
 [PROVENANCE.md](PROVENANCE.md) where each input came from. GPU training is not bit-reproducible (see §15), so a retrained
-model is a new model with a new test file. The adapters used for the
-submissions are stored privately with their checksums ([DATA_AND_COMPLIANCE.md](DATA_AND_COMPLIANCE.md)).
+model is a new model with a new test file. The adapters used for the submissions are delivered in the private input
+package with their checksums ([weights_manifest.json](weights_manifest.json)).
 
 ## 1. Overview
 
@@ -35,15 +37,16 @@ train.csv + training photos + question diagrams + taxonomy
 
 | Component | Kind | Hardware | Deterministic |
 |---|---|---|---|
-| Folds, OOF assembly, blend weights, second stages, orientation network | fitting on CPU | CPU | yes, bit-identical on the reference CPU class |
+| Folds, OOF assembly, blend weights, second stages, orientation network | fitting on CPU | CPU | yes, bit-identical on the reference CPU ([VERIFICATION.md §5.1](VERIFICATION.md#51-assemble-cpu)) |
 | 9B adapter | LoRA fine-tuning | A40 48 GB | no (GPU) |
 | M3 adapter | LoRA fine-tuning | RTX PRO 6000 96 GB | no (GPU) |
 | OOF of the untrained channels and of M3 | inference: exact scoring behind generated texts | A40, RTX PRO 6000 | scoring yes on given hardware; text generation no |
 | Teacher labels, 397B training side | paid APIs, frozen | — | no; delivered as frozen files |
 
-**Channels of the final candidates.** Every training-side step of the channels that the three candidates use
-(`primary_m3px27`, `safety_ndr` and its fallback `safety_nd`), with the section that gives its command, configuration and
-checks. All configurations are files in `configs/vlm/`, run with the runner of §2.
+**Channels of the candidates of version 0.3.** Every training-side step of the channels that the three candidates of
+version 0.3 use (`primary_m3px27`, `safety_ndr` and its fallback `safety_nd`), with the section that gives its command,
+configuration and checks. Both final submissions use the channels of `primary_m3px27`, with M3 as `m3x4_full` in B and
+`m3x5h` in A (next table and §16). All configurations are files in `configs/vlm/`, run with the runner of §2.
 
 | Channel | Used by | Trained here | Section, configurations | Inputs besides `train.csv`, photos, diagrams and taxonomy | Hardware |
 |---|---|---|---|---|---|
@@ -88,7 +91,8 @@ assembly ([METHOD.md](METHOD.md#8-class-marginal-alignment)); it uses no label.
 The complete pin set of every environment is in `env/requirements-gpu.txt`, `env/requirements-vllm.txt`,
 `env/requirements-cpu.txt` and `env/requirements-kaggle-t4.txt` (exact versions as installed in the reference runs; each file
 names its Python and CUDA version and how it is installed). Lock files with hashes for every pin and an offline wheelhouse
-are **planned** ([ROADMAP.md](ROADMAP.md)).
+are not built ([ROADMAP.md](ROADMAP.md), step 4). Remove the `torchao` package of the GPU base image before installing the
+pins (`python -m pip uninstall -y torchao`); the older version in the image conflicts with the pinned packages.
 
 **Base models** (fixed revisions; all Apache 2.0):
 
@@ -143,7 +147,7 @@ is identical, and its OOF probabilities enter the blend in that form.
 | Ink maps | `python -I tools/orient_net.py maps --tables train,test,unlabelled` (CPU) |
 | Training | `python -I tools/orient_net.py train --seed 0 --threads 2 --weights artifacts/orient/orient_cnn.pt`. Training photos plus a fixed sample of 10,000 pool photos (seed 20261010); details in [METHOD.md](METHOD.md#6-orientation-network). Writes the description `artifacts/orient/orient_cnn.json` next to the weights |
 | Rotation lists | `python -I tools/orient_net.py infer --from-images --tables train,test --weights artifacts/orient/orient_cnn.pt --out data/derived/orient_repro`. This writes a `c50` list (photos turned upright for the 9B run, with their rotation) and a `c80` list (rows on which the upright reading replaces the plain one), in the format of `tools/make_orient.py`. Give `--weights` exactly in this form: the path is written into the meta file of each list, and `tools/orient_list.py check` requires it |
-| Rotated 9B reading | Configuration `v1rot_t4` (Kaggle T4×2, fp16): the fold adapters read the rotated training photos (jobs `rot_f0` … `rot_f4`) and the rotated test photos (`rot_test`) |
+| Rotated 9B reading | Configuration `v1rot_t4` (Kaggle T4×2, fp16): the fold adapters read the rotated training photos (jobs `rot_f0` … `rot_f4`) and the rotated test photos (`rot_test`; for inference only: `configs/vlm/test_side/v1rot_t4.yaml`). Its pre-check job `smoke` and the fold jobs read the frozen first-version training lists `data/derived/orient/train_c50.json` and `train_c50_rows.npy` (private package), not the lists that `infer` writes to `orient_repro/`; the OOF assembly reads `data/derived/orient/train_c80_rows.npy`. The first version cannot be recomputed. To use the released network's lists instead, replace `orient/` by `orient_repro/` in `v1rot_t4.yaml` and in the OOF assembly (238/132 instead of 248/124 rows; `oof_v1r` 0.6471 instead of 0.6474) |
 | OOF assembly | `python -I eda/a6_assemble_oof.py v1r --mean --fill v1 v1rot_t4/rot_f0/oof0+v1rot_t4/rot_f1/oof1+v1rot_t4/rot_f2/oof2+v1rot_t4/rot_f3/oof3+v1rot_t4/rot_f4/oof4@derived/orient/train_c80_rows.npy` |
 | Hardware and time | CPU, minutes for the network. Rotated reading on Kaggle T4 |
 | Checks | `orient_cnn.pt` SHA-256 `83cc1224da0edbea0af640a8682ecb0b882f33b107cf89de9a7673ce19223abe`, bit-identical over three training runs. Released lists: 132 training rows and 344 test rows in the `c80` lists; the test list has SHA-256 `aa6515c8bf17bf593c5c90aa90d9240e9992d84f650c5445a37a5f015dbbff1d`. `oof_v1r` MAP@3 0.6474 |
@@ -184,7 +188,7 @@ No training is involved. Same-question examples and topic blocks are drawn from 
 
 | | |
 |---|---|
-| Gates | `python -I tools/replay/gates.py write --out <new folder> --table train --line all`. This reconstructs the row lists of [METHOD.md](METHOD.md#43-27b-reason-then-name-think18nb-think18sb); the training-side lists are bit-identical to the frozen ones |
+| Gates | The private package holds the frozen training-side lists `data/derived/think_rows/train.npy`, `train_n3.npy`, `train_tb_q.npy` and `train_tb_t.npy` (rules: [METHOD.md](METHOD.md#43-27b-reason-then-name-think18nb-think18sb)). `python -I tools/replay/gates.py check --table train --line all` reconstructs them bit for bit. After a retraining of the 9B scorer (§4, §5) or of the zero-shot scorers (§7), rebuild them with `python -I tools/replay/gates.py write --out data/derived/think_rows_new --table train --line all` and copy the four files into `data/derived/think_rows/`: the reasoning configurations and the OOF assembly read that folder, and `write` never writes into it. `--line all` also reads `data/derived/orient/train_v50_rows.npy` |
 | Draw g (task-block prompt) | `zs27v_all_rp` (fold 1); `zs27v_f2_rp` and `zs27v_cut_rp` (fold 2, generated longer and cut to 1,800 tokens); `zs27v_te_rp` (job `think_tr`, remaining rows) |
 | Draw n (teacher-free prompt) | `zs27v_n_rp` (folds 1 and 2); `zs27v_n3_rp` (job `think_ntr`, remaining rows) |
 | Hardware and time | RTX PRO 6000 96 GB; vLLM text generation about 2.1 s per row, exact scoring 1.6–1.7 s per row |
@@ -196,7 +200,7 @@ No training is involved. Same-question examples and topic blocks are drawn from 
 
 | | |
 |---|---|
-| Protocol answers | `pr27_rp` (jobs `proto_a`, `proto_b`; thinking up to 2,500 tokens, then a completion without thinking). RTX PRO 6000, 3.3–3.5 s per row, about 4.3 USD for the 1,500 training rows |
+| Protocol answers | `pr27_rp` (jobs `proto_a`, `proto_b`; thinking up to 2,500 tokens, then a completion without thinking). RTX PRO 6000, 3.3–3.5 s per row, about 4.3 USD for the 1,500 training rows. The row lists of the private package split the training rows into the two jobs that the later scripts read: `data/derived/proto_rows/train_sample.npy` (860 rows, job `proto_a`; SHA-256 `3eaeefefd8266385de47775af9262958224c17c9459fb4b5e288f37861c80a9a`) and `train_rest.npy` (640 rows, `proto_b`; `fc6a7c39dcf554b8c0b472ea6b7de6c01d005cc2fa12a4a215668c0aa74f9b75`); `train_api27.npy` (70 rows; `dc7f8813dbf087578696505855e813c57b5af6e0abfea088f34b764a1a5e9f16`) only makes 70 of them run first |
 | Stated-codes channel | `python -I eda/a8_proto_oof.py pr27 runs/pr27_rp/proto_a/proto+runs/pr27_rp/proto_b/proto` |
 | Frozen notes | `data/derived/proto_notes/train_pr27.jsonl`: the first-pass reasoning of the protocol answers, exported per row (`python tools/export_proto_notes.py --name train_pr27 --from pr27_rp/proto_a/proto --from pr27_rp/proto_b/proto`; the test notes with `--allow-test` into `data/derived/proto_notes_test/`). The files are delivered frozen with their checksums; `eda/c130_safety_ndr.py export-notes --verify` re-exports them from the raw answers byte for byte |
 | Exact ranking behind the notes | `px27_rp` (job `rank_tr`), about 2.8 USD for the training side |
@@ -223,15 +227,15 @@ python -I tools/make_m3_targets.py --full --check    # writes nothing: rebuilds 
                                                      #   present and with targets_sha256 of the six adapter recipes
 ```
 
-It recomputes from `oof_pr27` and the notes the rows on which the notes carry loss and stops unless they equal the stored
-list `artifacts/eda/private/m3_targets/sft_manifest.json` (field `pr27_ok` per fold; SHA-256 pinned in the tool). Token
-lengths in the meta files use the tokenizer of Qwen3.5-0.8B (`--tokenizer`, default `data/models/Qwen3.5-0.8B`) and the
-headers of the training photos; the meta files record their creation time and are therefore not byte-reproducible, the target
-files are, and an existing target file is never overwritten by a different one. The six target files, their meta files and
-the stored list are part of the private input package. Their checksums are recorded in the training recipe of every adapter
-(`sft_recipe.json`: `targets_sha256`; full fit `b685a7b3da67822280ca51b8a1cf0c47e7ba41f0d6c561a33a7e7dfb855e35aa`); a rebuild
-from the frozen inputs with the tool of this repository is byte-identical for all six files. `src/vlm/sft.py` reads and checks
-them at training time.
+It recomputes from `oof_pr27` and the notes the rows on which the notes carry loss and stops unless they equal the
+stored list `artifacts/eda/private/m3_targets/sft_manifest.json` (field `pr27_ok` per fold; SHA-256 pinned in the tool).
+Token lengths in the meta files use the tokenizer of Qwen3.5-0.8B (`--tokenizer`, default `data/models/Qwen3.5-0.8B`;
+`--check` needs no tokenizer) and the headers of the training photos; the meta files record their creation time and are
+therefore not byte-reproducible, the target files are, and an existing target file is never overwritten by a different
+one. The six target files, their meta files and the stored list are part of the private input package. Their checksums
+are recorded in the training recipe of every adapter (`sft_recipe.json`: `targets_sha256`; full fit
+`b685a7b3da67822280ca51b8a1cf0c47e7ba41f0d6c561a33a7e7dfb855e35aa`); a rebuild from the frozen inputs with the tool of
+this repository is byte-identical for all six files. `src/vlm/sft.py` reads and checks them at training time.
 
 **10.2 Adapters and first draw.**
 
@@ -277,10 +281,10 @@ development helper that is not part of this repository, so the stored report is 
 
 | Step | Command | Notes |
 |---|---|---|
-| 397B protocol answers on training rows | `tools/open_teacher.py` (Tinker sampling API, `Qwen/Qwen3.5-397B-A17B`, training rows only) | 1,496 of 1,500 valid, about 0.03 USD per row. Frozen; it cannot be regenerated without the API |
+| 397B protocol answers on training rows | `tools/open_teacher.py` (Tinker sampling API, `Qwen/Qwen3.5-397B-A17B`, training rows only) | 1,496 of 1,500 valid, about 0.03 USD per row. Frozen as `data/derived/open_teacher/qwen35-397b/labels.jsonl` (parsed answers) and `raw.jsonl` (raw texts); they cannot be regenerated without the API |
 | Copy into the run layout | `python -I eda/c110_q397_deploy.py source` | byte-identical copy of the frozen answers |
 | 397B answer channel (reference) | `python -I eda/a8_proto_oof.py q397 runs/q397_tinker/proto_t/proto` | MAP@3 0.7432 |
-| Notes for M3 | `tools/make_q397m3_notes.py` | first-pass reasoning notes without the answer text |
+| Notes for M3 | `tools/make_q397m3_notes.py` | first-pass reasoning notes without the answer text, read from `raw.jsonl`. Check without the tokenizer and without touching the frozen files: `python -I tools/make_q397m3_notes.py --tokenizer '' --no-upload --out "$PWD/q397m3_train_notes_check.jsonl"`; its SHA-256 must be `5a8fb7358bf9a25bcd4f6b12b28c02b31e5ad345a3ee21f9d94bc182bf180d52`, the checksum of `data/derived/sft_q397m3/q397m3_train_notes.jsonl`. Without these switches the tool needs the tokenizer and overwrites the frozen files |
 | M3 scores behind the notes | configuration `q397m3_oof_rp` (fold adapters, one shard per fold) | about 3.4 s per row, about 5.4 USD |
 | Channel | `python -I eda/c117_q397m3_deploy.py oof --save` | MAP@3 0.7442 |
 
@@ -492,7 +496,7 @@ are marked; their outputs are frozen inputs ([CODEMAP.md](CODEMAP.md#10-steps-wh
 
 | Channel | Training and OOF side | Test side |
 |---|---|---|
-| all | `tools/make_folds.py` (fold array), `src/vlm/runner.py` (all model runs) | `tools/make_submission.py` (assembly), `tools/builds/*.sh` (build scripts); blank-photo list (frozen, script not included) |
+| all | `tools/make_folds.py` (fold array), `src/vlm/runner.py` (all model runs) | `tools/make_submission.py` (assembly), `tools/builds/*.sh` (build scripts), `tools/make_blank_list.py` (blank-photo list; `check` compares with the frozen list) |
 | `v1` | runner (`train`, `bench`), `eda/a6_assemble_oof.py` | runner (`bench` on the test table) |
 | `v1r` | `tools/orient_net.py` (maps, training), `tools/make_orient.py`, runner (`rot_f*`), `eda/a6_assemble_oof.py` | `tools/orient_net.py infer`, `tools/orient_list.py` (choice and checks), runner (`rot_test`) |
 | `zs27q`, `zs27t` | runner (`bench`), `eda/a6_assemble_oof.py` | runner (`bench`) |
@@ -533,8 +537,9 @@ are marked; their outputs are frozen inputs ([CODEMAP.md](CODEMAP.md#10-steps-wh
     retrainings are compared with the paired bootstrap of [VALIDATION.md](VALIDATION.md#51-paired-comparisons), not by
     their difference alone.
 
-  A complete retraining of the adapters has not been measured, and the spread of a rerun with all generated texts replaced
-  at once is still open ([ROADMAP.md](ROADMAP.md)).
+  A complete retraining of the adapters has not been measured. The spread of a rerun with all generated texts replaced at
+  once is estimated at about ±0.003 MAP@3 (1 sd) on the private rows
+  ([VERIFICATION.md §8.1](VERIFICATION.md#81-how-close-a-full-rerun-should-come)).
 
 ## 16. Final submissions (version 0.4)
 
@@ -562,9 +567,10 @@ python -I eda/c135_primary_m3x4.py bank --seeds orig,$(seq -s, 1000 1019) && pyt
 `tools/builds/primary_cols.sh`).** Submission B plus nine columns from eight sources at the end of the main model of the
 second stage; the blend is unchanged. The columns are computed on the CPU from frozen files:
 - the protocol answers of our 27B (training rows `artifacts/runs/pr27_rp`, test rows `pr27te_rp`) and of the 397B (training
-  rows through the hosted sampling API, frozen as `artifacts/runs/q397_tinker/…/proto_labels.jsonl` and
-  `data/derived/open_teacher/qwen35-397b/raw.jsonl`; test rows by our own FP8 run `q397te_rp`, parsed with the parser of the
-  training side);
+  rows through the hosted sampling API, frozen as `artifacts/runs/q397_tinker/…/proto_labels.jsonl` (parsed answers) and
+  `data/derived/open_teacher/qwen35-397b/raw.jsonl` (raw texts), from which `tools/make_q397m3_notes.py` builds the
+  training notes `data/derived/sft_q397m3/q397m3_train_notes.jsonl` byte for byte (§11); test rows by our own FP8 run
+  `q397te_rp`, parsed with the parser of the training side);
 - the blend channels and the M3 draws of the line, the taxonomy (sections, default severity) and, for the label-dependent
   columns, the training labels of the reference rows only (the other folds for a training row; all 1,500 rows for a test
   row).

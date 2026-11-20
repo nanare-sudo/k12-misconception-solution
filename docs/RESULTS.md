@@ -1,10 +1,12 @@
 # Results
 
-*Status: 2026-11-15 (version 0.4). Cross-validated (CV) values are out-of-fold MAP@3 on the 1,500 labelled rows; "±" is
+Reference document. To reproduce the submissions, start with [VERIFICATION.md](VERIFICATION.md).
+
+*Status: 2026-11-21 (version 0.6). Cross-validated (CV) values are out-of-fold MAP@3 on the 1,500 labelled rows; "±" is
 the standard error of a paired difference from a bootstrap over questions. The measurement forms (per fold, without the
 last step, as one set) are defined in [VALIDATION.md](VALIDATION.md#4-three-measurement-forms). Public leaderboard values
 come from 1,000 test rows and are reported as observations only; the private leaderboard (2,498 rows) decides the
-competition. Final scores will be added after the competition closes.*
+competition. Private-leaderboard scores will be added when the host publishes them after verification.*
 
 **Contents:**
 1. [Headline results](#1-headline-results)
@@ -31,7 +33,7 @@ competition. Final scores will be added after the competition closes.*
 | Primary line, reranker main form | 0.83756 | 0.83011 | 0.83456 | 0.84166 |
 | Primary line, reranker fallback form ¹ | 0.83556 | 0.82989 | 0.83378 | 0.84033 |
 | Primary line before the reranker (same channels, β = 0.2) | 0.83267 | 0.81844 | 0.82533 | 0.83616 |
-| **Safety line, reranker with note mentions, example similarity and regex note columns** (current safety candidate) ⁴ | 0.83156 | — | 0.82844 | 0.83716 |
+| **Safety line, reranker with note mentions, example similarity and regex note columns** (last safety candidate) ⁴ | 0.83156 | — | 0.82844 | 0.83716 |
 | Safety line, reranker with note mentions and example similarity ⁴ | 0.83111 | — | 0.82744 | 0.83750 |
 | Safety line, alignment over the test set, reranker with interactions (variant b) ³ | 0.82778 | 0.82411 | 0.82167 | 0.83516 |
 | Safety line, alignment over the test set, reranker without interactions (variant a) ³ | 0.82556 | 0.82267 | 0.82122 | — |
@@ -85,7 +87,7 @@ shows a small loss for the fifth draw. The single values of the original split d
   alignment.
 - **NONE guard and general-code identifiers** over the main form: +0.0013 ± 0.0014 per fold and +0.0031 ± 0.0015 as one
   set (+0.0051 ± 0.0016 without the last step, reported only). Over 80 new meta-splits: +0.0016 per fold and +0.0014 as
-  one set. The robust part is the NONE guard (+0.0010, positive in 80 of 80 meta-splits); the identifiers add +0.0004.
+  one set. The stable part is the NONE guard (+0.0010, positive in 80 of 80 meta-splits); the identifiers add +0.0004.
 - **Main form** over the fallback form: +0.0020 ± 0.0014 per fold, +0.0002 ± 0.0019 without the last step,
   +0.0008 ± 0.0016 as one set.
 - **Second stage with NONE guard in the inductive line:** +0.0049 ± 0.0022 per fold, positive in 40 of 40 new
@@ -269,14 +271,14 @@ A null result holds only for the role and form in which it was measured. The tab
 | Residual head on hidden states | Channel | Worse than plain code scores in every form |
 | `OTH-00` as a hedge at rank 3 | Post-processing rule | −0.0022 ± 0.0013 |
 | A general code always at rank 2 | Post-processing rule | −0.0029 ± 0.0011 |
-| 397B notes named by M3, without the reranker | Channel replacement | Not robust across the measurement forms ([VALIDATION.md](VALIDATION.md#4-three-measurement-forms)) |
+| 397B notes named by M3, without the reranker | Channel replacement | Does not hold in all three measurement forms ([VALIDATION.md](VALIDATION.md#4-three-measurement-forms)) |
 | Rotation correction for the 27B channels | Input | No rotation penalty for these channels |
 
 ## 6. Error analysis
 
 Basis: the primary line with the reranker main form, measured as one set (MAP@3 0.83456, loss 1 − MAP@3 = 0.1654).
-Standard errors are bootstrapped over questions. The NONE guard and the identifiers of the current candidate change the
-top code of 1.3 % of the OOF rows and do not alter the picture.
+Standard errors are bootstrapped over questions. The NONE guard and the identifiers of the guard form change the top code
+of 1.3 % of the OOF rows and do not alter the picture.
 
 **By group**
 
@@ -343,7 +345,7 @@ top code of 1.3 % of the OOF rows and do not alter the picture.
 | Anthropic API | Teacher pool labels (≈ 31 USD), teacher measurements on training rows, a rationale experiment, a description experiment and one further experiment on training rows that was not deployed | ≈ 46 USD |
 | Tinker API | Open-model measurements on training rows, including the training side of the 397B channel | ≈ 63 USD |
 | Kaggle (free GPU quota) | T4×2: offline inference of the 9B scorer and the 4-bit 27B, second-hardware checks, the key-free reader probe on training rows | within the weekly free quota |
-| Local machine | 8-core CPU, 15 GB RAM, no GPU: blending, second stages, analysis, assembly | — |
+| Local machine | Laptop with an Intel Core i5-8250U (4 cores, 8 threads), 15 GB RAM, no GPU: blending, second stages, analysis, assembly | — |
 | **Total paid** | | **≈ 0.6–0.8 kUSD** |
 
 Per-component run times are listed in [TRAINING.md](TRAINING.md) and [INFERENCE.md](INFERENCE.md).

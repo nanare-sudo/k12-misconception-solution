@@ -1,6 +1,8 @@
 # Model sizes
 
-*Version 0.4. Covers every model needed at **inference** to produce the two final submissions of the primary line
+Reference document. To reproduce the submissions, start with [VERIFICATION.md](VERIFICATION.md).
+
+*Version 0.6. Covers every model needed at **inference** to produce the two final submissions of the primary line
 (primary submission A: five M3 draws, the fifth with the large photo on the rows with small script, plus the extra
 second-stage columns; primary submission B: four M3 draws, no extra columns). Both submissions use exactly the same
 models. Sizes of the base models come from the public file lists of the pinned Hugging Face revisions (retrieved
@@ -30,8 +32,8 @@ the total size of the weights against 512 GB, in two readings: the files as depl
 | 9B adapter `v1_full` (LoRA r 32 on layers 20–31 of the 9B) | `adapter_model.safetensors` + `adapter_config.json` | F32 | FP16 with the base | 27,721,728 | 110,908,078 | the 9B scorer on the test rows (plain and rotation-corrected reading) |
 | Orientation network (two small CNNs) | `orient_cnn.pt` | F32 | CPU | 853,080 (2 × 426,540) | 3,436,615 | rotation list of the test photos |
 
-Our adapters and the orientation network are stored in a private Kaggle model; the base models are public under
-Apache 2.0 and are referenced by revision and file checksum.
+Our adapters and the orientation network are delivered in the private input package (`weights/`, download link in our
+email to the host); the base models are public under Apache 2.0 and are referenced by revision and file checksum.
 
 **Not models:** the blend weights and the second-stage files (JSON, under 0.2 MB in total), the rule that marks blank photos
 (a brightness threshold), the row list "character height ≤ 20 px" (a threshold on a stored image statistic), the extra
@@ -110,6 +112,6 @@ limit.
 **How we count.** Each set of base weights once, in the release we use; adapters as adapters; run-time copies and the
 development-only models not at all. Under this count reading (i) is 481.5 GB and reading (ii) 440.9 GB.
 
-The margin is made robust without changing any file by stating the count explicitly (this document), by delivering M3
-strictly as base model plus adapter (as it is stored), and by quoting both readings, since the host's original wording
-refers to "512 GB weights in 8-bit or lower quants", under which the total is about 441 GB.
+We keep the margin without changing any file: this document states the count, M3 is delivered strictly as base model
+plus adapter (as it is stored), and both readings are quoted. The host's original wording refers to "512 GB weights in
+8-bit or lower quants", under which the total is about 441 GB.

@@ -1,6 +1,8 @@
 # Data and compliance
 
-*Status: 2026-11-15 (version 0.4).*
+Reference document. To reproduce the submissions, start with [VERIFICATION.md](VERIFICATION.md).
+
+*Status: 2026-11-21 (version 0.6).*
 
 This document states which data the solution uses and where each part is kept. It also explains why some parts are not in
 this repository, how external APIs were used, and how the solution meets the competition's requirements for the final
@@ -23,20 +25,22 @@ submission.
 | Item | Why it is not here | Where it is kept |
 |---|---|---|
 | Competition data | Competition rules | Kaggle competition page |
-| Per-row derived inputs: frozen reasoning texts, protocol answers and notes, M3 texts (test and training rows), 397B notes, notes in the M3 format, rotation, gate and blank-photo lists, training targets | Derived from competition data, row by row | Private Kaggle dataset `k12-derived` (frozen inputs for `assemble` and `rescore`); locally under `data/derived/` |
-| Teacher pseudo-labels for the unlabelled pool | Derived from competition data; to be used only for this competition | Private (`data/derived/teacher/`), with checksums |
-| OOF and test probability matrices, channel outputs, stored reports | Per-row predictions | Private Kaggle dataset `k12-derived` (the files the build scripts read); locally under `artifacts/` |
-| Blend and second-stage files | Fitted weights, partly with row positions | Private Kaggle model `k12-weights`; locally under `artifacts/` |
-| Trained weights: 9B adapter `v1_full`, M3 adapter `m3_full`, orientation network | Trained on competition data | Private Kaggle model `k12-weights` |
-| Submission files | Per-row test predictions | Private; the earlier files that the build scripts read as references are part of `k12-derived` |
+| Per-row derived inputs: frozen reasoning texts, protocol answers and notes, M3 texts (test and training rows), 397B notes, notes in the M3 format, rotation, gate and blank-photo lists, training targets | Derived from competition data, row by row | Private input package, folder `data/derived/` (frozen inputs for `assemble`, `rescore` and the training side) |
+| Teacher pseudo-labels for the unlabelled pool | Derived from competition data; to be used only for this competition | Private input package, folder `data/derived/teacher/`, with checksums |
+| OOF and test probability matrices, channel outputs, stored reports | Per-row predictions | Private input package, folder `artifacts/` |
+| Blend and second-stage files | Fitted weights, partly with row positions | Private input package, folder `artifacts/` |
+| Trained weights: 9B adapter `v1_full`, M3 adapter `m3_full`, orientation network, and the fold adapters | Trained on competition data | Private input package, folder `weights/`; the M3 fold adapters lie with their training runs under `artifacts/runs/` ([weights_manifest.json](weights_manifest.json)) |
+| Submission files | Per-row test predictions | Private; the earlier files that the build scripts read as references are in the private input package (`artifacts/submissions/`) |
 | Base models (Qwen3.5-9B, Qwen3.8-27B, Qwen3.5-397B-A17B-FP8) | Public and very large | Hugging Face at pinned revisions, with every file's size and checksum in [weights_manifest.json](weights_manifest.json); copied into the solution package for the host on request |
 | API keys and credentials | Secrets | Never stored in the repository |
 
 The code refers to these files by relative path; the build scripts and the metadata files record and check the SHA-256
-of the pinned ones ([VALIDATION.md](VALIDATION.md#6-checks-before-a-submission)). All private files are available to the
-competition host for verification. The private copies are being brought to the state of this repository version
-([ROADMAP.md](ROADMAP.md)). The repository's `.gitignore` excludes `data/`, `artifacts/`, model weights and row-level
-file formats.
+of the pinned ones ([VALIDATION.md](VALIDATION.md#6-checks-before-a-submission)). All private files that the build and the
+model steps read are delivered to the competition host in the private input package (download link in our email;
+[VERIFICATION.md](VERIFICATION.md#9-private-weights-and-inputs)). `README_PACKAGE.md` in the package says where each folder
+goes, and `MANIFEST.sha256` checks every file. The Kaggle T4 configurations also name private Kaggle resources of our
+account; the host does not need them ([INFERENCE.md](INFERENCE.md#4-environments)). The repository's `.gitignore`
+excludes `data/`, `artifacts/`, model weights and row-level file formats.
 
 ## 3. Test data policy
 
@@ -77,12 +81,12 @@ the frozen files. Total API cost was about 0.11 kUSD (Anthropic about 46 USD, Ti
 
 | Requirement | How the solution meets it |
 |---|---|
-| No external API and no internet access at inference time | All inference steps use open-weight models on local hardware; the text-generation server is bound to 127.0.0.1. Offline settings are listed in [INFERENCE.md](INFERENCE.md#4-environments). The offline package and a smoke test without network access for every model step are being completed ([ROADMAP.md](ROADMAP.md)) |
-| No human step | `assemble` runs as single commands, with checks that stop on any deviation; `rescore` and `full` run configured jobs (a stage-wise runner is planned) |
+| No external API and no internet access at inference time | All inference steps use open-weight models on local hardware; the text-generation server is bound to 127.0.0.1. Offline settings are listed in [INFERENCE.md](INFERENCE.md#4-environments). The CPU assembly and the 9B scorer on Kaggle T4 have run without network access; the other GPU model steps have not yet ([ROADMAP.md](ROADMAP.md), step 2) |
+| No human step | `bash reproduce.sh <package-dir>` runs `assemble` with one command and stops on any deviation; `tools/gpu_inference.sh` runs the configured jobs of `rescore` or `full` and assembles both files |
 | Self-contained: model weights and all labels made for the unlabelled data | Adapters and the orientation network are delivered with checksums; base models are pinned by revision; the teacher pseudo-labels are delivered frozen |
 | Model size: "Any model of the same size or smaller than Nemotron 550B."; on the total: "We would consider any model up-to 512 GB weights in 8-bit or lower quants irrespective of VRAM required for inference" and (2026-11-10) "Combined model together need to be ~512GB" | The largest model is Qwen3.5-397B-A17B (397 B parameters nominal, 17 B active); all models together 434.4 B parameters nominal (440.9 B stored values). Weights as deployed 481.53 GB (each base model once, adapters as adapters), at 8 bit per stored value 440.94 GB; both below 512 GB ([MODEL_SIZES.md](MODEL_SIZES.md), with the counting rule and the counts that would exceed the limit) |
 | Compute | The host sets no compute limit and reproduces inference for the top 10 of the final leaderboard. Reference hardware and run times are in [INFERENCE.md](INFERENCE.md) |
-| The delivered solution must reproduce the submitted file | `assemble` reproduces each candidate file byte for byte from the frozen channel outputs (both final submissions were rebuilt on a CPU without network access from the frozen inputs, and with the code of this repository in two fresh copies from the private input package, [ROADMAP.md](ROADMAP.md)); `rescore` and `full` regenerate the channel outputs ([INFERENCE.md](INFERENCE.md#1-three-modes)); no GPU model step has yet been run without network access. The rotation correction of the 9B channel uses the list of the released orientation network, which the delivered weights reproduce; the earlier list of a first network whose weights were not stored is used only to rebuild historical files |
+| The delivered solution must reproduce the submitted file | `assemble` reproduces each candidate file byte for byte from the frozen channel outputs (both final submissions were rebuilt on a CPU without network access from the frozen inputs, and with the code of this repository in two fresh copies from the private input package and once more from a fresh clone, [VERIFICATION.md](VERIFICATION.md#51-assemble-cpu)); `rescore` and `full` regenerate the channel outputs ([INFERENCE.md](INFERENCE.md#1-three-modes)); apart from the 9B scorer on Kaggle T4, no GPU model step has yet been run without network access. The rotation correction of the 9B channel uses the list of the released orientation network, which the delivered weights reproduce; the earlier list of a first network whose weights were not stored is used only to rebuild historical files |
 
 ## 6. The two lines and the techniques that rest on interpretation
 
@@ -95,8 +99,9 @@ section 5. Submission B is the fallback of submission A: it lacks the two compon
 fifth M3 draw), and its file was not changed by them. The transductive alignment over the test set is used in both. The
 rest of this section records the earlier design.
 
-Two final submissions may be selected. We use them to keep the techniques that depend on external APIs during development
-out of one of the two lines, and to keep one file that holds under the strictest reading of the rules.
+Two final submissions may be selected. Until the final selection, the plan was to keep the techniques that depend on
+external APIs during development out of one of the two lines, and to keep one file that holds under the strictest reading
+of the rules.
 
 | Technique | Basis | Line |
 |---|---|---|
@@ -104,8 +109,8 @@ out of one of the two lines, and to keep one file that holds under the strictest
 | Teacher pseudo-labels of the unlabelled pool (task block) | API pseudo-labels on unlabelled rows are explicitly allowed for this competition | Primary line only |
 | Blend weight of the 397B channel fitted on API outputs for training rows | API use on training rows is allowed; the test side is computed locally with the same open model (FP8 release) | Primary line only |
 
-Until 2026-11-05 the transductive alignment was kept out of the second line as well. On 2026-11-06 the entrant admitted
-it in both final submissions: the inductive alignment had missed the class masses of the test side (L1 0.087 from the
+Until 2026-11-05 the transductive alignment was kept out of the second line as well. On 2026-11-06 we admitted it in both
+final submissions: the inductive alignment had missed the class masses of the test side (L1 0.087 from the
 target, against 0.028 for the alignment over the test set), and the host's statement above raises no objection to it.
 
 The **safety line** uses neither the teacher pseudo-labels, nor API-derived inputs, nor the 397B channel. Its final
@@ -131,12 +136,12 @@ missed by one sixth in 9,000; the decision is recorded with its scope in
 |---|---|
 | Our code and documentation | Apache License 2.0 ([LICENSE](../LICENSE)) |
 | Qwen3.5-9B, Qwen3.8-27B, Qwen3.5-397B-A17B-FP8 (inference path) | Apache 2.0; licence files read at the pinned revisions |
-| Qwen3.5-397B-A17B served through the Tinker API (training-side outputs only) | Apache 2.0 according to the model card; the licence file of the served revision is still to be confirmed |
+| Qwen3.5-397B-A17B served through the Tinker API (training-side outputs only) | Hub repository Apache 2.0 (licence file at main `8472618…`, checked 2026-11-20); the revision served by the provider was not recorded |
 | Teacher model (closed, through a commercial API) | Not part of the solution; used during development only, under the provider's commercial terms |
 | Python packages and system libraries | See [THIRD_PARTY.md](../THIRD_PARTY.md) |
 
 ## 8. Publication
 
-This repository stays private while the competition rules do not allow publication. It will be published when the rules
-allow it or when the sponsor requests it. The trained weights and all files derived from the competition data remain
-private unless the rules and the sponsor allow otherwise.
+This repository is private. After the verification it may be published; the host allows code, configuration files and
+the write-up to be public. The competition data, the pseudo-labels, all other files derived from the competition data and
+the trained weights stay private, as the host asks (competition forum, 2026-11-17).

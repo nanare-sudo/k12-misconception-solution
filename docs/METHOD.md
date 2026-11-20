@@ -1,6 +1,8 @@
 # Method
 
-*Status: 2026-11-15 (version 0.4). Numbers are out-of-fold (OOF) MAP@3 on the 1,500 labelled training rows unless stated
+Reference document. To reproduce the submissions, start with [VERIFICATION.md](VERIFICATION.md).
+
+*Status: 2026-11-21 (version 0.6). Numbers are out-of-fold (OOF) MAP@3 on the 1,500 labelled training rows unless stated
 otherwise. "±" is the standard error from a bootstrap over questions; see [VALIDATION.md](VALIDATION.md).*
 
 **Contents:**
@@ -125,7 +127,7 @@ The assembly is implemented in `tools/make_submission.py`; the steps follow the 
 
 ### 3.2 Exact scoring of all codes
 
-Most channels do not just generate a code. They score every candidate:
+Most channels do not only generate a code. They score every candidate:
 1. The prompt ends in an answer prefix such as `Root:`. For reasoning channels, the prefix is the model's own text
    followed by `Root:`.
 2. The engine (`src/vlm/engine.py`) computes the exact log-probability of each of the 74 classes with a training example
@@ -153,7 +155,7 @@ work with probabilities for every class, including codes that a model would rare
 Text-generating channels write their reasoning with a local vLLM server. The server is bound to 127.0.0.1 and serves
 64 concurrent requests. The exact scoring of §3.2 then runs on our own Hugging Face path, behind the generated text. This
 split has two advantages. Texts can be frozen with checksums. Given a frozen text and the same hardware, the scoring is
-deterministic, so the expensive and non-deterministic generation never has to be repeated just to rebuild a channel.
+deterministic, so the expensive and non-deterministic generation never has to be repeated to rebuild a channel.
 
 ## 4. Channels
 
@@ -245,8 +247,8 @@ fixed marking protocol.
   roughly one third of workings are `NONE`. This matches the training frequency and the host's published description.
   It also asks for a topic-specific code wherever one fits, and for the five general codes only when no specific code
   fits. After the instruction come the full taxonomy, the question, the answer key and the photo. **No labelled example
-  and no topic or task block** are included. The channel therefore depends on no fold, can be evaluated honestly on all
-  training rows, and is strictly inductive.
+  and no topic or task block** are included. The channel therefore depends on no fold, can be evaluated without
+  leakage on all training rows, and is strictly inductive.
 - **Generation.** The model thinks for up to 2,500 tokens. A second request without further thinking then completes the
   answer from the model's own notes (median about 340 tokens). The result is a JSON object with three codes and their
   probabilities. It also holds fields such as the final-answer check, the student's final answer, a transcription and
@@ -298,7 +300,7 @@ then name the code.
   for the 397B's own stated answers. MAP@3 is about the same (0.7442 against 0.7432).
 - **Contribution.** As a sixth channel next to M3 with three draws, the 397B's own answers added +0.0040 ± 0.0029. In
   the earlier recipe with two M3 draws they had added +0.0082 ± 0.0029, so part of their value overlaps with M3.
-  Replacing them with `q397m3` was not robust on its own across the three measurement forms: per fold +0.0034 ± 0.0028,
+  Replacing them with `q397m3` did not hold on its own in all three measurement forms: per fold +0.0034 ± 0.0028,
   without the last step −0.0033, as one set −0.0014. Together with the arithmetic share and the second stage, `q397m3`
   is ahead of the 397B answers in all three forms, by small and uncertain margins (per fold +0.0021, without the last
   step +0.0027, as one set +0.0050, each ± 0.0028); a cross-check over six base pairs gave +0.0011 to +0.0043 as one
@@ -368,7 +370,7 @@ reranker was fitted with.
   share of `NONE` at the top inside the band of d1–d3. Against `primary_m3px27` the top code changes in 74 test rows.
 
 **Fifth draw with the large photo on the rows with small script (`m3x5h`, submission A).**
-- **Finding.** Among 164 label-free image statistics, the only robust driver of the loss is the character height: the
+- **Finding.** Among 164 label-free image statistics, the only clear driver of the loss is the character height: the
   photos are resized to a long side of 1,024 px (one image token per 32 × 32 px), the median character height is about
   17 px, and MAP@3 of the line by thirds of the character height was 0.805 / 0.850 / 0.867. Photometric normalisation of the
   photo made no difference. A larger input (long side 2,048 px) lifts the untrained exact-scoring channel by +0.029 ± 0.006
@@ -385,7 +387,7 @@ reranker was fitted with.
   mean of the draws that cover the row (five on the list, four elsewhere); outside the list it is `m3x4_full` bit for bit.
   Blend and second stage (with the nine extra columns of §9.12) are refitted.
 - **Rule** (pre-registered): deploy the best of the roles "fifth member of the mean", "replacement of a 1,024-px member",
-  "own channel" — each also restricted to the rows with small script — only if, over 20 untouched meta-splits, it is above 0
+  "own channel" (each also restricted to the rows with small script) only if, over 20 untouched meta-splits, it is above 0
   in the as-one-set form and in ½(F+M) and above the same role filled with a 1,024-px draw (copy null point: one of the four
   draws twice). Result (meta-splits 11000–11019, against the intermediate form): fifth member on the listed rows +0.00083 ±
   0.00017 in ½(F+M) and +0.00108 ± 0.00030 as one set (positive in 85 % and 75 % of the meta-splits); on all rows +0.0007;
@@ -418,7 +420,7 @@ of the primary line (§3.3) and nothing else.
 | Choice of setting | Measured on 120 training rows without notes: Haiku 5.5 at effort `high` 0.76, `xhigh` 0.81, `max` 0.79 (at seven times the cost); Sonnet 5.5 at `high` 0.76. With annotator notes in the prompt Sonnet 5.5 scored 0.838 against 0.759 without. The notes act as hidden same-question examples, so the pool was labelled without them |
 | Teacher on all 1,500 training rows | About 0.77 (measurement only), 0.643 on rows whose code was never seen for the question. This was below our blend of the time (0.785) |
 | Value | The task block helped the zero-shot 27B by +0.008 ± 0.007 over all folds, by shifting probability mass: +0.080 where the code was never seen for the question, −0.042 where it was seen. After M3 joined, the teacher-derived share of the primary line was +0.004 ± 0.005 |
-| Frozen files | `pool_a` (SHA-256 `44fd2e1b…`) and `pool_b` (`0f561932…`), kept privately |
+| Frozen files | `pool_a` (SHA-256 `44fd2e1b…`) and `pool_b` (`0f561932…`), delivered in the private input package |
 
 Using the pool as *training data* did not help, so it is not part of the solution. A 9B student trained on the teacher
 labels changed the blend by +0.0001 ± 0.0032 over 5 folds. M3 trained on teacher rationales as targets lost
@@ -611,7 +613,7 @@ Only aggregates are used; see [VALIDATION.md](VALIDATION.md#6-checks-before-a-su
   `ANS-01`, `CAL-01` and `WOP-01`, positive for `FRM-01` and about zero for `OTH-00`.
 - **Effect.** On top of the NONE guard +0.0004, positive in 54 of 80 new meta-splits. Against random code identifiers
   that also receive the guard, the gain is not above the placebo 95 % quantile. The identifiers are a small positive
-  expectation, not a robust effect; the robust part of the guard form is the NONE guard.
+  expectation, not a stable effect; the stable part of the guard form is the NONE guard.
 
 ### 9.5 Forms in the primary line
 
@@ -810,8 +812,8 @@ Only aggregates are used; see [VALIDATION.md](VALIDATION.md#6-checks-before-a-su
 
   Reference rows: the other folds for a training row (inside a training block of the nested evaluation also without the outer
   fold), all 1,500 training rows for a test row. A ninth source (novelty of `OTH-00` with a count of reference rows per task)
-  was part of the measured bundle but failed the test guard — the count is not transferable, because training rows count
-  reference rows of four folds and test rows of five — and is not deployed.
+  was part of the measured bundle but failed the test guard, and it is not deployed. The count is not transferable,
+  because training rows count reference rows of four folds and test rows of five.
 - **Transfer risk of the 397B.** The training side of the 397B columns comes from the hosted API, the test side from our own
   FP8 run with the parser of the training side. A test guard per column and source (fixed in advance: band ±15 % relative
   or |z| ≤ 3 against the training statistics, valid answers per source ≥ 0.97) runs in every assembly and aborts without a
@@ -829,18 +831,20 @@ Only aggregates are used; see [VALIDATION.md](VALIDATION.md#6-checks-before-a-su
 ## 10. Blank photos
 
 A black or empty photo shows no working. The only such training row carries the meta code `REL-01` (upload does not
-match the question), while the channels tend to describe an error-free working. Photos detected as blank (a property
-of the single image; the list is delivered frozen, its script is not part of this repository) get `REL-01` at rank 1;
-the order of the other candidates is kept. This applies to 1 training row and 6 test photos and is worth about +0.001.
+match the question), while the channels tend to describe an error-free working. A photo counts as blank if, converted to
+grey scale and resized to 256 × 256, its mean is below 12 and its standard deviation below 8 (pixel values 0–255). This is
+a property of the single image. Blank photos get `REL-01` at rank 1; the order of the other candidates is kept. This
+applies to 1 training row and 6 test photos and is worth about +0.001. The list is delivered frozen;
+`python -I tools/make_blank_list.py check` recomputes it from the photos and compares it with the frozen list.
 
 ## 11. The two lines
 
 **Final selection (version 0.4).** Both final submissions come from the primary line: primary submission A (five M3 draws
 with the large photo on the rows with small script, extra columns; §4.8, §9.12) and primary submission B (four M3 draws;
-§4.8). The host confirmed in the forum that the techniques that separate the primary from the safety line — pseudo-labels
-from a paid API on unlabelled and labelled rows, models up to the size of Nemotron 550B with a combined weight of about
-512 GB, and the hosted API that the host recommended — are allowed ([DATA_AND_COMPLIANCE.md](DATA_AND_COMPLIANCE.md)). The
-safety line stays documented below as the earlier design.
+§4.8). The host confirmed in the forum that the techniques that separate the primary from the safety line are allowed:
+pseudo-labels from a paid API on unlabelled and labelled rows, models up to the size of Nemotron 550B with a combined
+weight of about 512 GB, and the hosted API that the host recommended ([DATA_AND_COMPLIANCE.md](DATA_AND_COMPLIANCE.md)).
+The safety line stays documented below as the earlier design.
 
 Some techniques rest on an interpretation of the rules; the transductive alignment is one. Others are explicitly allowed
 but depend on external services during development: the teacher pseudo-labels and the API-generated 397B outputs on
