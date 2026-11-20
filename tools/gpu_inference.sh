@@ -138,8 +138,8 @@ A_ARGS=(
   --stage2 artifacts/stage2_primary_m3x5h.json
 )
 
-show() { printf '+ %s\n' "$*"; }
-cpu() {  # cpu <command...>: print a CPU step, then run it (not in a dry run)
+show() { printf '+'; printf ' %q' "$@"; printf '\n'; }   # print a command, quoted for copy and paste
+cmd() {  # cmd <command...>: print a command, then run it (not in a dry run)
   show "$@"
   [ "$DRY" = 1 ] || "$@" || die "this step failed: $*"
 }
@@ -149,25 +149,31 @@ run() {  # run <configuration>: one configuration with the model runner; skipped
     echo "   $cfg finished earlier ($(cat "$mark")); not run again"
     return 0
   fi
-  show "python -u -m vlm.runner --config configs/vlm/$cfg.yaml --out $OUT"
+  show python -u -m vlm.runner --config "$REPO/configs/vlm/$cfg.yaml" --out "$OUT"
   [ "$DRY" = 1 ] && return 0
   (cd "$REPO/src" && python -u -m vlm.runner --config "$REPO/configs/vlm/$cfg.yaml" --out "$OUT") \
     || die "configuration $cfg failed (worker logs: $OUT/<run>/worker*.log)"
   mkdir -p "$OUT/.done"
   date -u +%Y-%m-%dT%H:%MZ > "$mark"
 }
+replace_dir() {  # replace_dir <source folder> <target parent>: copy the folder there; an existing copy is removed first
+  local name
+  name="$(basename "$1")"
+  if [ "$DRY" = 0 ]; then
+    [ -d "$1" ] || die "not computed: $1"
+    mkdir -p "$2"
+    case "$(realpath "$2")/" in "$PKG"/*) die "$2 lies inside the package folder; the package must not be written to" ;; esac
+  fi
+  show mkdir -p "$2"
+  cmd rm -rf "${2:?}/$name"
+  cmd cp -r "$1" "$2/"
+  cmd chmod -R u+w "$2/$name"
+}
 put() {  # put <run>/<job> ...: replace these job folders where the CPU tools read them (artifacts/runs/<run>/<run>/<job>/)
-  local d r j dst
+  local d
   for d in "$@"; do
-    r=${d%%/*} j=${d#*/} dst="$REPO/artifacts/runs/$r/$r"
-    show "replace artifacts/runs/$r/$r/$j with $OUT/$r/$j"
-    [ "$DRY" = 1 ] && continue
-    [ -d "$OUT/$r/$j" ] || die "not computed: $OUT/$r/$j"
-    mkdir -p "$dst"
-    case "$(realpath "$dst")/" in "$PKG"/*) die "artifacts/runs/$r/$r lies inside the package folder; the package must not be written to" ;; esac
-    rm -rf "${dst:?}/$j"
-    cp -r "$OUT/$r/$j" "$dst/"
-    echo "$(date -u +%Y-%m-%dT%H:%MZ) $d" >> "$OUT/put.log"
+    replace_dir "$OUT/${d%%/*}/${d#*/}" "$REPO/artifacts/runs/${d%%/*}/${d%%/*}"
+    [ "$DRY" = 1 ] || echo "$(date -u +%Y-%m-%dT%H:%MZ) $d" >> "$OUT/put.log"
   done
 }
 
@@ -182,6 +188,7 @@ SETUP=()  # problems of the repository setup (fatal in a real run, listed in a d
 for x in A B; do
   [ -f "artifacts/submissions/check_$x.csv" ] || SETUP+=("artifacts/submissions/check_$x.csv is missing: run bash reproduce.sh $PKG first")
 done
+[ -e data/derived ] || SETUP+=("data/derived is missing: run bash reproduce.sh $PKG first")
 [ -f "$OUT/.k12_mode" ] && [ "$(cat "$OUT/.k12_mode")" != "$MODE" ] \
   && SETUP+=("$OUT holds a run of mode $(cat "$OUT/.k12_mode"); choose another --out")
 if [ "$MODE" = rescore ]; then
@@ -197,6 +204,12 @@ INPUTS_OK=1
 for p in ${SETUP[@]+"${SETUP[@]}"}; do echo "    setup: $p"; done
 if [ "$DRY" = 1 ]; then
   [ -n "${K12_MODELS:-}" ] || echo "    note: K12_MODELS is not set (needed for a real run)"
+  echo "   The commands below run from $REPO with this environment:"
+  show cd "$REPO"
+  show export "K12_MODELS=${K12_MODELS:-/path/to/base/models}" "K12_DATA=$K12_DATA" "K12_ADAPTERS=$K12_ADAPTERS" "PYTHONPATH=$PYTHONPATH" \
+    HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 HF_DATASETS_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 VLLM_NO_USAGE_STATS=1 \
+    DO_NOT_TRACK=1 VLLM_DO_NOT_TRACK=1 VLLM_HOST_IP=127.0.0.1 GLOO_SOCKET_IFNAME=lo NCCL_SOCKET_IFNAME=lo \
+    OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=2 PYTHONUTF8=1
 else
   [ "$INPUTS_OK" = 1 ] || die "inputs are missing (see the list above)"
   [ ${#SETUP[@]} -eq 0 ] || die "the repository is not set up (see the list above)"
@@ -210,46 +223,31 @@ fi
 
 echo "== 2. data/derived as a writable copy"
 if [ -L data/derived ]; then
-  show "replace the link data/derived by a writable copy of $(readlink -f data/derived)"
-  if [ "$DRY" = 0 ]; then
-    src="$(readlink -f data/derived)"
-    rm -rf data/derived.partial
-    cp -r "$src" data/derived.partial
-    chmod -R u+w data/derived.partial
-    rm data/derived
-    mv data/derived.partial data/derived
-  fi
+  SRC_DERIVED="$(readlink -f data/derived)"
+  cmd rm -rf data/derived.partial
+  cmd cp -r "$SRC_DERIVED" data/derived.partial
+  cmd chmod -R u+w data/derived.partial
+  cmd rm data/derived
+  cmd mv data/derived.partial data/derived
 elif [ -d data/derived ]; then
   [ "$DRY" = 1 ] || [ -w data/derived ] || die "data/derived/ is not writable"
   echo "   data/derived/ is a folder; used as it is"
-else
-  echo "    setup: data/derived is missing: run bash reproduce.sh $PKG first"
-  [ "$DRY" = 1 ] || die "data/derived is missing"
 fi
 
 echo "== 3. Delivered M3 adapter$([ "$MODE" = rescore ] && echo ' and frozen texts')"
 M3_DST="$OUT/m3_fullte_rp/m3_train_full"
-show "copy $PKG/weights/m3_full to $M3_DST (adapter/ and sft_recipe.json)"
-if [ "$DRY" = 0 ]; then
-  if [ -d "$M3_DST" ]; then
-    cmp -s "$M3_DST/adapter/adapter_model.safetensors" "$PKG/weights/m3_full/adapter/adapter_model.safetensors" \
-      || die "$M3_DST holds another adapter than the package; remove it or choose another --out"
-  else
-    mkdir -p "$OUT/m3_fullte_rp"
-    cp -r "$PKG/weights/m3_full" "$M3_DST"
-    chmod -R u+w "$M3_DST"
-  fi
+if [ "$DRY" = 0 ] && [ -d "$M3_DST" ]; then
+  cmp -s "$M3_DST/adapter/adapter_model.safetensors" "$PKG/weights/m3_full/adapter/adapter_model.safetensors" \
+    || die "$M3_DST holds another adapter than the package; remove it or choose another --out"
+  echo "   $M3_DST holds the delivered adapter"
+else
+  cmd mkdir -p "$OUT/m3_fullte_rp"
+  cmd cp -r "$PKG/weights/m3_full" "$M3_DST"
+  cmd chmod -R u+w "$M3_DST"
 fi
 if [ "$MODE" = rescore ]; then
   for d in "${FROZEN_TEXTS[@]}"; do
-    r=${d%%/*} j=${d#*/}
-    show "copy $PKG/artifacts/runs/$r/$r/$j to $OUT/$r/$j"
-    if [ "$DRY" = 0 ]; then
-      mkdir -p "$OUT/$r"
-      rm -rf "${OUT:?}/$r/$j"
-      cp -r "$PKG/artifacts/runs/$r/$r/$j" "$OUT/$r/"
-      chmod -R u+w "$OUT/$r/$j"
-    fi
+    replace_dir "$PKG/artifacts/runs/${d%%/*}/${d%%/*}/${d#*/}" "$OUT/${d%%/*}"
   done
 fi
 
@@ -262,11 +260,14 @@ else
   put "${PUT_FULL[@]}"
   # Notes behind which M3 ranks: the new protocol answers of the 27B and the new 397B answers (CPU). The token counts
   # in the meta files are statistics only; --tokenizer '' leaves them out, so no tokenizer is needed here.
-  cpu python tools/export_proto_notes.py --name test_pr27 --from pr27te_rp/proto_te/proto --allow-test
-  PX27_SHA=$([ "$DRY" = 1 ] && echo '<SHA-256 of data/derived/proto_notes_test/test_pr27.jsonl>' \
-             || sha256sum data/derived/proto_notes_test/test_pr27.jsonl | cut -d' ' -f1)
-  cpu python -I tools/make_m3px27_notes.py --table test --tokenizer '' --px27-sha "$PX27_SHA"
-  cpu python -I tools/make_q397m3_notes.py --test-from runs/q397te_rp/proto_te/proto --tokenizer ''
+  cmd python tools/export_proto_notes.py --name test_pr27 --from pr27te_rp/proto_te/proto --allow-test
+  if [ "$DRY" = 1 ]; then
+    echo "+ python -I tools/make_m3px27_notes.py --table test --tokenizer '' --px27-sha \"\$(sha256sum data/derived/proto_notes_test/test_pr27.jsonl | cut -d' ' -f1)\""
+  else
+    cmd python -I tools/make_m3px27_notes.py --table test --tokenizer '' \
+      --px27-sha "$(sha256sum data/derived/proto_notes_test/test_pr27.jsonl | cut -d' ' -f1)"
+  fi
+  cmd python -I tools/make_q397m3_notes.py --test-from runs/q397te_rp/proto_te/proto --tokenizer ''
   for c in "${GPU_STEPS_FULL_AFTER_NOTES[@]}"; do run "$c"; done
   put "${PUT_FULL_AFTER_NOTES[@]}"
 fi
@@ -274,23 +275,23 @@ fi
 echo "== 5. Frozen M3 texts and pinned checksums"
 for entry in "${FREEZE[@]}"; do
   read -r gen rank out <<< "$entry"
-  cpu python -I tools/freeze_m3_texts.py --gen "$gen" --rank "$rank" --out "$out"
+  cmd python -I tools/freeze_m3_texts.py --gen "$gen" --rank "$rank" --out "$out"
 done
 if [ "$MODE" = full ]; then
-  cpu python -I tools/repin_test_side.py --write
+  cmd python -I tools/repin_test_side.py --write
 else
-  cpu python -I tools/repin_test_side.py --check
+  cmd python -I tools/repin_test_side.py --check
 fi
 
 echo "== 6. Submissions from the new outputs"
-[ "$DRY" = 1 ] || mkdir -p artifacts/eda/private/check artifacts/submissions
-cpu python -I tools/make_submission.py "${B_ARGS[@]}" --out artifacts/submissions/new_B.csv --suffix _new_B \
+cmd mkdir -p artifacts/eda/private/check artifacts/submissions
+cmd python -I tools/make_submission.py "${B_ARGS[@]}" --out artifacts/submissions/new_B.csv --suffix _new_B \
   --stage2-report artifacts/eda/private/check/guards_new_B.json
-cpu python -I tools/make_submission.py "${A_ARGS[@]}" --out artifacts/submissions/new_A.csv --suffix _new_A \
+cmd python -I tools/make_submission.py "${A_ARGS[@]}" --out artifacts/submissions/new_A.csv --suffix _new_A \
   --stage2-report artifacts/eda/private/check/guards_new_A.json
 COMPARE=(python -I - artifacts/submissions/new_A.csv artifacts/submissions/check_A.csv
          artifacts/submissions/new_B.csv artifacts/submissions/check_B.csv)
-show "${COMPARE[*]}   (counts and shares only)"
+echo "+ ${COMPARE[*]}   # the short program at the end of tools/gpu_inference.sh; counts and shares only"
 if [ "$DRY" = 1 ]; then
   echo "dry run finished; inputs $([ "$INPUTS_OK" = 1 ] && echo complete || echo INCOMPLETE)"
   [ "$INPUTS_OK" = 1 ] || exit 1
