@@ -1,0 +1,42 @@
+# Made by tools/make_inference_configs.py from configs/vlm/zs27v_te_rp.yaml. Do not edit by hand.
+# Mode `rescore`: the jobs think_te, copied unchanged under the same run and job names, so that
+# the outputs land where the CPU tools read them (docs/VERIFICATION.md, section 5.2).
+run: zs27v_te_rp
+models:
+  q38_27b:
+    repo: Qwen/Qwen3.8-27B
+    revision: 1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0
+    dtype: bf16
+    max_beam_tokens: 600000
+workers:
+- gpu: 0
+  jobs:
+  - name: think_te
+    kind: predict
+    fold: null
+    model: q38_27b
+    taxonomy: full
+    topic_codes: 10
+    topic_none: true
+    teacher_labels:
+    - pool_a
+    - pool_b
+    question_codes: 8
+    image:
+      max_side: 1024
+      question_max_side: 448
+    examples: true
+    max_examples: 4
+    think_from: gen_te/think
+    batch: 6
+    beams: 74
+    prefix_cache_tol: 0.12
+    prefix_cache_check_rows: 4
+    save_every: 25
+    predict:
+    - split: test
+      tag: test
+      probes:
+      - think
+      rows:
+        only: derived/think_rows/test.npy

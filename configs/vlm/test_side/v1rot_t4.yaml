@@ -1,0 +1,49 @@
+# Made by tools/make_inference_configs.py from configs/vlm/v1rot_t4.yaml. Do not edit by hand.
+# Mode `full`: the jobs rot_test, copied unchanged under the same run and job names, so that
+# the outputs land where the CPU tools read them (docs/VERIFICATION.md, section 5.2).
+run: v1rot_t4
+offline: true
+expected_hours: 2.8
+kernel_sources:
+- nanaresudo/k12-assets-q35-4b
+- nanaresudo/k12-assets-q35-9b
+dataset_sources:
+- nanaresudo/k12-misconception-adapters
+- nanaresudo/k12-derived
+models:
+  q35_9b_fp16x2:
+    repo: Qwen/Qwen3.5-9B
+    revision: c202236235762e1c871ad0ccb60c8ee5ba337b9a
+    dtype: fp16
+    device: auto
+    max_memory:
+      0: 10GiB
+      1: 11GiB
+    max_beam_tokens: 36000
+workers:
+- gpu: 0,1
+  jobs:
+  - name: rot_test
+    kind: predict
+    model: q35_9b_fp16x2
+    adapter: v1_full
+    fold: null
+    image:
+      max_side: 1024
+      question_max_side: 448
+      rotate_from: derived/orient/test_c50.json
+    taxonomy: full
+    examples: true
+    max_examples: 4
+    probes:
+    - diag
+    batch: 4
+    exact_chunk: 6
+    save_every: 20
+    predict:
+    - split: test
+      tag: test
+      probes:
+      - diag
+      rows:
+        only: derived/orient/test_c50_rows.npy

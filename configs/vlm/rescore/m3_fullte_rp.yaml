@@ -1,0 +1,45 @@
+# Made by tools/make_inference_configs.py from configs/vlm/m3_fullte_rp.yaml. Do not edit by hand.
+# Mode `rescore`: the jobs m3_merge_full, m3_test_rank, copied unchanged under the same run and job names, so that
+# the outputs land where the CPU tools read them (docs/VERIFICATION.md, section 5.2).
+run: m3_fullte_rp
+models:
+  m3_full:
+    merged: m3_full_merged
+    dtype: bf16
+    max_beam_tokens: 600000
+  q38_27b:
+    repo: Qwen/Qwen3.8-27B
+    revision: 1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0
+    dtype: bf16
+    max_beam_tokens: 600000
+workers:
+- gpu: 0
+  jobs:
+  - name: m3_merge_full
+    kind: merge
+    model: q38_27b
+    adapter_from: m3_train_full
+    out_model: m3_full_merged
+  - name: m3_test_rank
+    kind: predict
+    model: m3_full
+    fold: null
+    sft_from: m3_test_gen/gen
+    probes:
+    - proto_rank
+    predict:
+    - split: test
+      tag: test
+      probes:
+      - proto_rank
+    image:
+      max_side: 1024
+      question_max_side: 448
+    batch: 6
+    beams: 74
+    finish_tokens: 320
+    prefix_cache_tol: 0.12
+    prefix_cache_same_top: false
+    prefix_cache_check_rows: 4
+    save_every: 25
+    drop_model: true

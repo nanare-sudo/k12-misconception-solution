@@ -1,0 +1,53 @@
+# Made by tools/make_inference_configs.py from configs/vlm/n1_rp.yaml. Do not edit by hand.
+# Mode `full`: the jobs rank_smoke, rank_test, copied unchanged under the same run and job names, so that
+# the outputs land where the CPU tools read them (docs/VERIFICATION.md, section 5.2).
+run: n1_rp
+models:
+  q38_27b:
+    repo: Qwen/Qwen3.8-27B
+    revision: 1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0
+    dtype: bf16
+    max_beam_tokens: 600000
+workers:
+- gpu: 0
+  jobs:
+  - name: rank_smoke
+    kind: bench
+    must_pass: true
+    model: q38_27b
+    image:
+      max_side: 1024
+      question_max_side: 448
+    rows:
+      sample: 8
+      seed: 0
+    probes:
+    - proto_rank
+    proto_from: derived/proto_notes/train_pr27.jsonl
+    batch: 6
+    beams: 74
+    prefix_cache_tol: 0.12
+    prefix_cache_same_top: false
+    prefix_cache_check_rows: 4
+    save_every: 25
+  - name: rank_test
+    kind: predict
+    model: q38_27b
+    fold: null
+    proto_from: derived/proto_notes_test/test_pr27.jsonl
+    probes:
+    - proto_rank
+    predict:
+    - split: test
+      tag: test
+      probes:
+      - proto_rank
+    image:
+      max_side: 1024
+      question_max_side: 448
+    batch: 6
+    beams: 74
+    prefix_cache_tol: 0.12
+    prefix_cache_same_top: false
+    prefix_cache_check_rows: 4
+    save_every: 25
