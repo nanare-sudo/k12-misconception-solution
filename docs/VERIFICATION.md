@@ -258,8 +258,8 @@ AVX2, use the quick check.
 
 #### Evidence
 
-Both files were rebuilt byte for byte on a Kaggle CPU with internet disabled, with the development code from which this
-repository was translated. On 2026-11-17 they were rebuilt with the code of this repository in two fresh clones that
+Both files were rebuilt byte for byte on a Kaggle CPU with internet disabled, with our development code; this repository
+is its English translation. On 2026-11-17 they were rebuilt with the code of this repository in two fresh clones that
 read only the competition data and the private package. All 44 CSV and matrix files of the chain were byte-identical. On
 2026-11-20 the build chain ran once more from a fresh clone of the GitHub repository and the package, in 1 h 59 min.
 TODO(final): date and result of the final check of version 0.6 with the delivered package (quick check and `--full`).
