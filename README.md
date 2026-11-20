@@ -65,12 +65,14 @@ score was known ([VERIFICATION §1](docs/VERIFICATION.md#1-which-submission-is-w
    bash reproduce.sh <package-dir>
    ```
 
-   It checks the package against `MANIFEST.sha256`, sets up `artifacts/` and `data/derived/`, rebuilds both submission
-   files from the frozen model outputs and compares them with the submitted files. It ends with exit code 0 and:
+   It checks the four CSV files and the package against their checksums and sets up `artifacts/` and `data/derived/`.
+   It then rebuilds both submission files from the frozen model outputs and compares them with the submitted files. It
+   ends like this, with exit code 0; only the time differs:
 
    ```
    OK A 4505c15950167650a66cdc60eb9c153eebfb9ed6192277bd283045f3797354e7
    OK B 76da786dfdbe6a6ddcbcc93070f385e18870cb5cdaea895d92104aa3565f9973
+   All checks passed (2m01s).
    ```
 
 `bash reproduce.sh <package-dir> --full` also runs the full build chain, which takes about 2 hours. It refits or

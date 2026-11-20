@@ -193,27 +193,32 @@ bash reproduce.sh <package-dir>
 ```
 
 The script does the following, in this order:
-1. It checks the Python version and the versions of the main packages. A mismatch gives a warning, not an error.
-2. It checks every file of the package against `MANIFEST.sha256`. `--skip-manifest` skips this check.
-3. It copies the package's `artifacts/` to `artifacts/` and makes the copy writable, unless `artifacts/` already holds a
-   copy of the same package. It links `data/derived` to the package's `data/derived`. It never changes a file of the
-   package.
-4. It checks the fold array `artifacts/folds.npy` against `configs/folds.parquet`.
-5. It runs the last step of the build scripts of B and A: two calls of `tools/make_submission.py`. They read the frozen
+1. It checks the Python version and the versions of the main packages. A different version gives a warning; a missing
+   package stops the script.
+2. It checks the four competition files by their SHA-256 and every file of the package against `MANIFEST.sha256`.
+   `--skip-manifest` skips the package check.
+3. It copies the package's `artifacts/` to `artifacts/` and makes the copy writable. An existing `artifacts/` folder is
+   used only if every package file in it is unchanged.
+4. It links `data/derived` to the package's `data/derived`, which the CPU check only reads. An existing `data/derived/`
+   folder is used only if every package file in it is unchanged. The script never changes a file of the package.
+5. It checks the fold array `artifacts/folds.npy` against `configs/folds.parquet`.
+6. It runs the last step of the build scripts of B and A: two calls of `tools/make_submission.py`. They read the frozen
    channel outputs and the delivered blend and second-stage files, run every test-side guard, and write
    `artifacts/submissions/check_B.csv` and `check_A.csv`.
-6. It compares both files with the checksums of section 1.
+7. It compares both files with the checksums of section 1.
 
-The output ends with these two lines, and the exit code is 0:
+The output ends like this; only the time differs:
 
 ```
 OK A 4505c15950167650a66cdc60eb9c153eebfb9ed6192277bd283045f3797354e7
 OK B 76da786dfdbe6a6ddcbcc93070f385e18870cb5cdaea895d92104aa3565f9973
+All checks passed (2m01s).
 ```
 
-A deviation prints a line that starts with `FAIL`, and the exit code is not 0. The two calls refit nothing. With another
-OpenBLAS kernel forced they wrote the same bytes. Their full argument lists are in `reproduce.sh` and in
-[INFERENCE.md §5](INFERENCE.md#5-mode-assemble).
+A deviation prints a line that starts with `FAIL`. The exit code is 0 if every checksum matches, 2 for wrong arguments,
+3 if an input is missing or wrong and 4 if a check failed. The logs of the two calls are in
+`artifacts/eda/private/check/`. The two calls refit nothing. With another OpenBLAS kernel forced they wrote the same
+bytes. Their full argument lists are in `reproduce.sh` and in [INFERENCE.md §5](INFERENCE.md#5-mode-assemble).
 
 #### Full proof, about 2 hours
 
@@ -221,7 +226,8 @@ OpenBLAS kernel forced they wrote the same bytes. Their full argument lists are 
 bash reproduce.sh <package-dir> --full
 ```
 
-After the quick check, the script runs the build chain:
+After the quick check, the script runs the build chain. It needs an x86-64 CPU with AVX2 and FMA, and it writes its logs
+to `artifacts/eda/private/reproduce/`:
 
 ```bash
 export OPENBLAS_CORETYPE=Haswell                          # OpenBLAS kernel of the reference CPU (below)
@@ -277,6 +283,10 @@ the end.
    [weights_manifest.json](weights_manifest.json) lists every file with its checksum. The merged M3 models are written
    there as well.
 4. Set the variables for runs without network access (section 2), then cut the network.
+
+After a GPU run, `artifacts/` and `data/derived/` no longer match the package. To run the quick check again, move both
+folders away first, for example with `mv artifacts artifacts.gpu` and `mv data/derived data/derived.gpu`. `reproduce.sh`
+then sets them up from the package again.
 
 #### Run
 
@@ -378,10 +388,10 @@ not in `env/requirements-cpu.txt`.
   `9b1a1837bc2cf399e2e221c49def4b4ae11d666b5346ecb1eddc076622c8340a`. Do not write into the package's
   `data/derived/charsize/`. Its meta file pins the checksum of the statistics table, which is not bit-reproducible, and
   `tools/builds/primary_m3x5h.sh` checks that meta file.
-- Blank-photo list: `python -I tools/make_blank_list.py check` compares a new computation with the frozen list
-  `data/derived/blank/test_rows.npy` (6 test photos). `write --out <folder>` writes a new list and never touches the
-  frozen one. A photo counts as blank if, converted to grey scale and resized to 256 × 256, its mean is below 12 and its
-  standard deviation below 8.
+- Blank-photo list: `python -I tools/make_blank_list.py check` computes the lists of blank training and test photos and
+  compares them with the frozen lists in `data/derived/blank/`; the test list has 6 rows. `write --out <folder>` writes
+  new lists and never touches the frozen ones. A photo counts as blank if, converted to grey scale and resized to 256 ×
+  256, its mean is below 12 and its standard deviation below 8.
 - Gate lists of the reasoning draws: `python -I tools/replay/gates.py check --table test --line all --sources a40`. It
   reads `artifacts/oof_v1.npy` and the A40 test outputs `v1_test_rp` and `zs27t_all_rp` of the package and reports each
   of the four test-side lists as bit-identical or not.
