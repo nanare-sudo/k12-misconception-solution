@@ -224,6 +224,11 @@ A_ARGS=(
 STATUS=0
 verify() {  # verify <A|B> <file> <expected SHA-256>
   local got
+  if [ ! -f "$2" ]; then
+    echo "FAIL $1 (file missing: $2)"
+    STATUS=4
+    return 0
+  fi
   got=$(sha256sum "$2" | cut -d' ' -f1)
   if [ "$got" = "$3" ]; then
     echo "OK $1 $got"
