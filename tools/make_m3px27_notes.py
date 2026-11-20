@@ -307,7 +307,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--tokenizer", default=None, help="path; empty = without token lengths; default Qwen3.8-27B from the HF cache")
     ap.add_argument("--data-root", help="data root (default: vlm.common.find_data_root)")
     ap.add_argument("--artifacts", default=str(COMP / "artifacts"))
-    ap.add_argument("--px27-sha", help="only for code checks with synthetic data: expected checksum of the px27 export file")
+    ap.add_argument("--px27-sha", help="expected checksum of the px27 export file (mode `full` after new protocol answers; docs/VERIFICATION.md §5.2)")
     ap.add_argument("--expect-model", default=MODEL, help="'' = do not check the model (code checks only)")
     a = ap.parse_args(argv)
 
