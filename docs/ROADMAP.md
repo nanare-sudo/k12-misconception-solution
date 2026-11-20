@@ -20,7 +20,7 @@
 | # | Step | Status |
 |---|---|---|
 | 1 | First build with the code of this repository in a fresh copy with the private package; pins of the JSON files that this code writes | done (2026-11-17, two fresh copies, byte-identical; once more from a fresh clone on 2026-11-20) |
-| 2 | **Runs without network access** for the GPU model steps: (G2) every 27B and M3 step of both submissions on a few rows on one 96 GB card, with empty caches and the offline settings of [INFERENCE.md](INFERENCE.md#4-environments); (G5) the 397B path on 4×H200 as described in [INFERENCE.md](INFERENCE.md#107-order-of-the-steps) | open |
+| 2 | **Runs without network access** for the GPU model steps: first every 27B and M3 step of both submissions on a few rows on one 96 GB card, with empty caches and the offline settings of [INFERENCE.md](INFERENCE.md#4-environments); then the 397B path on 4×H200 as described in [INFERENCE.md](INFERENCE.md#107-order-of-the-steps) | open |
 | 3 | Private input package in the state of this version | done (2026-11-21): completed with the training-side row lists and the inputs of the checks; metadata in English, without internal references, checksums re-pinned |
 | 4 | Lock files with hashes for every pin and an offline wheelhouse | open. The exact versions of every environment are pinned in `env/requirements-*.txt`, and `reproduce.sh` is the single command of the CPU check |
 | 5 | A mode that re-records the checksums of newly computed test-side files | done (2026-11-21): `tools/repin_test_side.py`, [VERIFICATION.md §5.2](VERIFICATION.md#52-rescore-and-full-gpu) |

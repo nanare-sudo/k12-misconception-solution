@@ -316,7 +316,8 @@ counts, shares and checksums. No per-row test output is displayed or inspected.
   its description, if the weights are present.
 - The frozen test-side score files of the channels (`artifacts/runs/`) and the blank-photo list are not pinned one by
   one. They are covered indirectly: a change that alters a delivered file is caught by the pinned output checksums and
-  the byte-identical rebuild; a change that leaves every submission file unchanged has no effect on the result.
+  the byte-identical rebuild; a change that leaves every submission file unchanged has no effect on the result. The
+  blank-photo list can also be recomputed from the photos with `python -I tools/make_blank_list.py check`.
 - The stored verdicts of the M3 evaluation and of the 397B parity check are checked field by field, not by checksum.
 - Blend files are recomputed from the OOF artifacts and compared character by character (`--verify`); the second-stage
   files are refitted and compared in the same way.
@@ -398,9 +399,8 @@ counts, shares and checksums. No per-row test output is displayed or inspected.
   `ORIENT=legacy` and `s029_q397.sh`, which overwrite their outputs. Test matrices written next to an unchanged CSV
   file are not compared; only the test matrix of the inductive file without second stage is pinned.
 - If a build stops at the checksum of a file it has written in the same run, the file stays on disk but does not count
-  as built.
-  Delete it before running the build again: an existing file is only replaced by a byte-identical rebuild, so the next
-  run would otherwise stop at the comparison with it.
+  as built. Delete it before running the build again: an existing file is only replaced by a byte-identical rebuild, so
+  the next run would otherwise stop at the comparison with it.
 
 ## 7. Known limitations
 
