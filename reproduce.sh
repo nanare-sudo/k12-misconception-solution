@@ -170,13 +170,27 @@ else
   echo "   linked: data/derived -> $PKG/data/derived"
 fi
 
+# Run a command once more if it ended by a signal (exit code above 128), for example after a crash at interpreter exit
+# on a busy machine. The steps are deterministic; a second run decides.
+again_on_signal() {
+  local rc=0
+  "$@" || rc=$?
+  if [ "$rc" -gt 128 ]; then
+    echo "   NOTE: the command ended by signal $((rc - 128)); running it once more: ${*:1:3}" >&2
+    rc=0
+    "$@" || rc=$?
+  fi
+  return "$rc"
+}
+
 echo "== 5. Folds"
 rc=0
-python -I tools/make_folds.py --check || rc=$?
+again_on_signal python -I tools/make_folds.py --check || rc=$?
 case $rc in
   0) ;;
   3) python -I tools/make_folds.py ;;
-  *) fail_check "artifacts/folds.npy does not match configs/folds.parquet" ;;
+  4) fail_check "artifacts/folds.npy does not match configs/folds.parquet" ;;
+  *) fail_check "tools/make_folds.py --check ended with exit code $rc" ;;
 esac
 
 # The arguments of the two calls that write the final submissions (the same in tools/gpu_inference.sh; a test checks it).
@@ -222,12 +236,13 @@ write_file() {  # write_file <A|B> <what> <make_submission arguments...>: one ca
   local x="$1" what="$2" log="artifacts/eda/private/check/make_submission_check_$1.log" t=$SECONDS
   shift 2
   echo "   writing $x ($what) ..."
-  if ! python -I tools/make_submission.py "$@" --out "artifacts/submissions/check_$x.csv" --suffix "_check_$x" \
+  if ! again_on_signal python -I tools/make_submission.py "$@" --out "artifacts/submissions/check_$x.csv" --suffix "_check_$x" \
        --stage2-report "artifacts/eda/private/check/guards_$x.json" > "$log" 2>&1; then
     tail -n 25 "$log" >&2
     fail_check "the call for $x stopped (full output: $log)"
   fi
-  echo "   $(grep -m1 '^written:' "$log" | cut -c1-120) ($(elapsed $t))"
+  grep -m1 'NOTE: the command ended by signal' "$log" >&2 || true
+  echo "   $(grep '^written:' "$log" | tail -n 1 | sed -E 's/, check .*//') ($(elapsed $t))"
 }
 
 echo "== 6. Quick check: the two calls that write the final submissions"
