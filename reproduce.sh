@@ -252,7 +252,9 @@ write_file A "submission of 2026-11-14" "${A_ARGS[@]}"
 verify A artifacts/submissions/check_A.csv "$A_SHA"
 verify B artifacts/submissions/check_B.csv "$B_SHA"
 
-if [ "$FULL" = 1 ]; then
+if [ "$FULL" = 1 ] && [ "$STATUS" != 0 ]; then
+  echo "The build chain is not started, because the quick check failed."
+elif [ "$FULL" = 1 ]; then
   echo "== 7. Full proof: the build chain"
   if [ -r /proc/cpuinfo ]; then
     grep -qw avx2 /proc/cpuinfo && grep -qw fma /proc/cpuinfo \
