@@ -46,6 +46,8 @@ steps of inference from the delivered weights without retraining. The private in
 
 ### Changed
 
+- README: copyable commands for the data and the package, and the operating system we tested (Linux only).
+- The repository is public since 2026-11-21 (docs/DATA_AND_COMPLIANCE.md, section 8).
 - `docs/VERIFICATION.md`, `README.md` and `docs/WRITEUP.md` rewritten in plain English. VERIFICATION §5 starts with the
   quick check and gives the GPU modes `rescore` and `full` step by step. It also gives the download commands of the base
   models, the install of the CPU build of torch, the disk that the CPU check needs and how to run the tests. The

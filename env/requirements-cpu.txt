@@ -4,8 +4,8 @@
 # CUDA: not used. Everything runs on the CPU with two BLAS threads (OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=2). torch and
 #   transformers are only imported by shared model helpers; the reference machine had the default PyPI build of torch 2.11.0
 #   (built for CUDA 13.0, therefore the cuda-* and nvidia-* pins below), used on the CPU only. The CPU build of torch 2.11.0
-#   (https://download.pytorch.org/whl/cpu, without the cuda-* and nvidia-* lines) is expected to give the same assembly but
-#   was not tested.
+#   (https://download.pytorch.org/whl/cpu, without the cuda-* and nvidia-* lines) gave the same results on 2026-11-21: quick
+#   check, full proof and tests (docs/VERIFICATION.md, section 2).
 # Pins: the packages and versions that the build files import, their dependencies, and what the imports load besides,
 #   as installed in the reference build environment (import probe of the assembly).
 #   python -m pip install -r env/requirements-cpu.txt

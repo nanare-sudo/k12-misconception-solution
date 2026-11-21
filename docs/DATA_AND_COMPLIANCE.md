@@ -142,6 +142,6 @@ missed by one sixth in 9,000; the decision is recorded with its scope in
 
 ## 8. Publication
 
-This repository is private. After the verification it may be published; the host allows code, configuration files and
-the write-up to be public. The competition data, the pseudo-labels, all other files derived from the competition data and
+This repository is public since 2026-11-21, after the end of the competition; the host allows code, configuration files
+and the write-up to be public. The competition data, the pseudo-labels, all other files derived from the competition data and
 the trained weights stay private, as the host asks (competition forum, 2026-11-17).
