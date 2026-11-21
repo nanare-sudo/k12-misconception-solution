@@ -218,8 +218,8 @@ steps of section 6, use a writable copy as well. Full tree of the private part:
 | Mode | What is recomputed | Hardware | Expected result |
 |---|---|---|---|
 | `assemble` | Blend, alignment, reranker, `REL-01` rule and the file, from the frozen channel outputs | CPU | Byte-identical to the submitted files |
-| `rescore` | Every scoring and ranking step on the test photos, conditioned on the frozen texts; no text is generated | GPUs of section 3, without the vLLM environment | Expected: identical on the reference hardware and number format, statistically equivalent on other hardware (section 8). A and B are written from the new outputs. The script has not yet run on a GPU (§5.2) |
-| `full` | Everything, including new reasoning texts, protocol answers, M3 generations and 397B notes | GPUs of section 3 | A new draw of every text: within about ±0.003 MAP@3 of the submitted private score (1 sd), with no expected systematic shift; about 91–93 % of rows keep the top-1 code (section 8.1). A and B are written from the new outputs. The script has not yet run on a GPU (§5.2) |
+| `rescore` | Every scoring and ranking step on the test photos, conditioned on the frozen texts; no text is generated | GPUs of section 3, without the vLLM environment | Expected: identical on the reference hardware and number format, statistically equivalent on other hardware (section 8). A and B are written from the new outputs. The script ran without network access on 8 test rows each, not yet on all rows (§5.2) |
+| `full` | Everything, including new reasoning texts, protocol answers, M3 generations and 397B notes | GPUs of section 3 | A new draw of every text: within about ±0.003 MAP@3 of the submitted private score (1 sd), with no expected systematic shift; about 91–93 % of rows keep the top-1 code (section 8.1). A and B are written from the new outputs. The script ran without network access on 8 test rows each, not yet on all rows (§5.2) |
 
 ### 5.1 `assemble` (CPU)
 
@@ -384,7 +384,8 @@ outputs of the model runs; the default is `runs/gpu_<mode>/` in the repository. 
 run again when you call the script again with the same output folder. Each configuration names the GPUs it uses (field
 `gpu` of each worker). To split the work over several machines, run the printed commands by hand.
 
-The script has run as a dry run, and its CPU steps have run on the frozen outputs. It has not yet run on a GPU. Its
+The script has run as a dry run, and its CPU steps have run on the frozen outputs. Its GPU jobs have run without
+network access on 8 test rows each (Network, below); a run over all test rows has not been done. Its
 configurations hold, unchanged, the jobs of the runs that produced our test-set outputs.
 
 #### What the script runs
@@ -502,9 +503,20 @@ recompute it, run `cd src && python -u -m vlm.runner --config ../configs/vlm/tes
 
 #### Network
 
-The CPU assembly and the 9B scorer on Kaggle T4 have run without network access. The bf16 and vLLM steps on the rented
-machines and the 397B path have not yet run without network access ([ROADMAP.md](ROADMAP.md)). Section 2 lists the
-settings for such a run.
+The CPU assembly and the 9B scorer on Kaggle T4 have run without network access. On 2026-11-21 we also ran the GPU
+jobs of both modes without network access, on 8 test rows each. This was 21 steps on one RTX PRO 6000 96 GB, with the
+code of the tag `v0.6`, the pinned environments of section 2 and the files of the delivered zip. DNS was switched off
+and every process was traced with `strace`; no step tried to open a network connection. The vLLM server started with
+empty caches, the prompts had the same token counts as in our runs, and every LoRA merge gave the same weights.
+
+- Mode `rescore`, conditioned on the frozen texts: every row kept its top-1 code. 8 of the 11 steps were bit-identical
+  with our outputs, and the other three differed by at most 0.035 in a probability. A repeated step was bit-identical.
+  The three steps whose original ran on an A40 or a Kaggle T4 kept the top-1 code on 23 of 24 rows.
+- Mode `full`, with newly generated texts: the top-1 code stayed the same on 35 of 40 rows.
+
+This test started the same configuration files as `tools/gpu_inference.sh`, with its own driver. Not covered: the
+script itself as one run, a run over all 3,498 test rows, and the 397B path, whose inputs were only checked for
+completeness ([ROADMAP.md](ROADMAP.md)). Section 2 lists the settings for a run without network access.
 
 #### The 397B path
 

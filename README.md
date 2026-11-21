@@ -92,7 +92,8 @@ On GPUs, `tools/gpu_inference.sh` runs the inference from our trained weights. I
 scoring and ranking step and reuses the generated texts that we froze. In mode `full` it also generates every text
 anew. Both modes end by writing the two submission files
 ([VERIFICATION §5.2](docs/VERIFICATION.md#52-rescore-and-full-gpu)). The script has run as a dry run and on its CPU
-steps, but not yet on a GPU. Our inference on the test set ran on Kaggle T4 × 2, an A40 48 GB, an RTX PRO 6000
+steps. Its GPU jobs ran without network access on 8 test rows each on 2026-11-21; a run over all test rows
+has not been done. Our inference on the test set ran on Kaggle T4 × 2, an A40 48 GB, an RTX PRO 6000
 Blackwell 96 GB and, for the 397B model, 4 × H200. Training used the A40 and the RTX PRO 6000.
 
 ## Where to find each item of the host's checklist

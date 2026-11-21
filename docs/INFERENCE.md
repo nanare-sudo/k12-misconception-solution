@@ -8,7 +8,9 @@ Reference document. To reproduce the submissions, start with [VERIFICATION.md](V
 The final solution is built to run **without network access and without any human step**. No external API is called at
 inference time. All models in the inference path are open-weight models. The base models are pinned by revision and
 file checksum, and our trained adapters are part of the delivered package. The CPU assembly and the 9B scorer on Kaggle
-T4 have run without network access; the other GPU model steps have not yet ([ROADMAP.md](ROADMAP.md), step 2).
+T4 have run without network access. The 27B, M3 and 9B steps of both submissions ran without network access on 8 test
+rows each on 2026-11-21 ([VERIFICATION.md §5.2](VERIFICATION.md#52-rescore-and-full-gpu)); the 397B path has not yet
+([ROADMAP.md](ROADMAP.md), step 2).
 
 **Contents:**
 1. [Three modes](#1-three-modes)

@@ -15,6 +15,8 @@ steps of inference from the delivered weights without retraining. The private in
   `bash reproduce.sh <package-dir> --full` passed in 1 h 33 min and 1 h 32 min. The second clone used the CPU build of
   torch. All 574 files of `MANIFEST.sha256` matched, and every package file was unchanged afterwards.
 - `tools/gpu_inference.sh rescore` and `full` as dry runs: no input missing.
+- The GPU jobs of both modes without network access on 8 test rows each, on one RTX PRO 6000 96 GB: no connection
+  attempt, every merge equal, every top-1 code kept behind the frozen texts (docs/VERIFICATION.md §5.2, Network).
 - `tools/make_blank_list.py check` (1 training row, 6 test rows), `tools/replay/gates.py check` (test rows with the A40
   outputs, and training rows), the rebuild of the 397B training notes, `tools/make_m3_targets.py --full --check` and
   `tools/repin_test_side.py --check` (12 of 12 fields unchanged): bit-identical or exit 0.
@@ -90,11 +92,12 @@ steps of inference from the delivered weights without retraining. The private in
 ### Known gaps
 
 The following items are tracked in [docs/ROADMAP.md](docs/ROADMAP.md#2-open-steps):
-- runs without network access for the GPU model steps other than the 9B scorer, including the 397B path (step 2);
+- a run without network access of the 397B path; the other GPU model steps ran without network access on 8 test rows
+  each (step 2);
 - hashes for every pin and an offline wheelhouse (step 4);
 - the scripts that are not exported (step 6);
 - a complete `rescore` or `full` run in one go, which has never been done; `tools/gpu_inference.sh` has run as a dry
-  run and on its CPU steps, not yet on a GPU;
+  run and on its CPU steps, and its GPU jobs on 8 test rows each;
 - the full proof on a CPU with AVX-512; the quick check does not depend on the CPU;
 - the private-leaderboard scores (step 8).
 
