@@ -513,7 +513,7 @@ recompute it, run `cd src && python -u -m vlm.runner --config ../configs/vlm/tes
 
 The CPU assembly and the 9B scorer on Kaggle T4 have run without network access. On 2026-11-21 we also ran the GPU
 jobs of both modes without network access, on 8 test rows each. This was 21 steps on one RTX PRO 6000 96 GB, with the
-code of the tag `v0.6` (commit 3d0728d; later commits changed only documentation), the pinned environments of section 2
+code of the tag `v0.6` (commit 3d0728d; later commits changed only documentation and comment lines), the pinned environments of section 2
 and the files of the delivered zip. DNS was switched off and every process was traced with `strace`; no step tried to
 open a network connection. The vLLM server started with empty caches. The prompts of the reasoning and protocol jobs had
 the same token counts as in our runs, the M3 generation jobs used the same settings, and every LoRA merge gave the same
