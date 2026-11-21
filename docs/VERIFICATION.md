@@ -354,8 +354,8 @@ no text is generated, and no vLLM environment is needed. In mode `full` it also 
    `data/` (section 4).
 3. Install the GPU base environment of section 2. For `full`, also install the vLLM environment.
 4. Download the base models at the pinned revisions into one folder and set `K12_MODELS` to it. The folder must be
-   writable, because each M3 configuration writes its merged model there. Only one merged model exists at a time, with
-   about 18.5 GB of new files. In the GPU base environment:
+   writable, because each M3 configuration writes its merged model there. Only one merged model exists at a time; we
+   estimate about 18.5 GB of new files for it. In the GPU base environment:
 
    ```bash
    export K12_MODELS=/path/to/models
@@ -365,9 +365,9 @@ no text is generated, and no vLLM environment is needed. In mode `full` it also 
    python -c "from huggingface_hub import snapshot_download as d; d('Qwen/Qwen3.5-397B-A17B-FP8', revision='ea5b4f81096f3901c91dea97f81324302495781d', local_dir='$K12_MODELS/Qwen3.5-397B-A17B-FP8', max_workers=32)"
    ```
 
-   The model runner makes the same call itself when a model folder is missing and the network is on. The dry run below
-   checks only that each model folder has a `config.json`. [weights_manifest.json](weights_manifest.json) lists the size
-   and SHA-256 of every file.
+   The model runner uses the same call to download a missing model, but `tools/gpu_inference.sh` switches downloads
+   off, so download the models first. The dry run below checks only that each model folder has a `config.json`.
+   [weights_manifest.json](weights_manifest.json) lists the size and SHA-256 of every file.
 5. Cut the network. The script sets the offline variables of section 2 itself, except `PIP_NO_INDEX` and
    `UV_OFFLINE`; set these two yourself if an install attempt should fail at once. It also sets `K12_DATA` to `data/`
    and `K12_ADAPTERS` to the package's `weights/` folder.
@@ -580,7 +580,7 @@ matrices. We have not built a path from a retrained pipeline to a submission fil
 | 397B parity rows | seed 20261030 |
 | Blend and second stages | deterministic fits (L-BFGS-B); the meta-splits used for decisions have fixed seeds and are not needed to build |
 
-All texts that we generated on our own and rented GPUs were generated with vLLM 0.31.0 and 64 concurrent requests.
+All texts that we generated ourselves were generated with vLLM 0.31.0 and 64 concurrent requests.
 Greedy decoding in vLLM is still not deterministic across runs, because the requests are batched differently. The 397B
 answers on the training rows and the teacher pseudo-labels are frozen API outputs (section 8).
 
