@@ -50,7 +50,7 @@ M3X4_OOF="artifacts/oof_m3x4_full.npy"; M3X4_OOF_SHA="96ad8725bbaa9d274376a0bb68
 LIST_TRAIN="data/derived/charsize/train_h20_rows.npy"; LIST_TRAIN_SHA="11afce9af96fca09032153b566ee81725f466ab927e782fcdad4324b55d18e77"
 LIST_TEST_REL="derived/charsize/test_h20_rows.npy"; LIST_TEST="data/$LIST_TEST_REL"; LIST_TEST_SHA="9b1a1837bc2cf399e2e221c49def4b4ae11d666b5346ecb1eddc076622c8340a"
 LIST_META="data/derived/charsize/charsize_h20.meta.json"; LIST_META_SHA="17292d7b8a81108acaaa2401bf16e5b713f1347a22c2eb281da8a6fecfabec62"
-TRAIN_H_SHA="cffb5d0e8f69ad725d6ed1f6e9a331c395635818ac59e3a6734b646546baa004"  # 42 files: shards, generation, list, list meta
+TRAIN_H_SHA="860343256ff161f928456270e156c941a52098c0367bf2cc3e6f8d91c49ed54f"  # 42 files: shards, generation, list, list meta
 TEST_H_SHA="5023ddc9b3fe1679dc4e20bc3d2f5350206d3586963d6d8312d5396978f7832f"   # test shards h (c166 digest --side test): printed by the first complete build, then pinned here
 # results (pinned after the first build)
 CH_OOF="artifacts/oof_${CH}.npy"; CH_OOF_SHA="388546e508a603fc993bc52faf887e3831895cd57513887c3d21aed7bf78cc2f"
