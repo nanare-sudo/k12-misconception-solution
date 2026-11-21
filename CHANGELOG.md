@@ -19,7 +19,8 @@ steps of inference from the delivered weights without retraining. The private in
   outputs, and training rows), the rebuild of the 397B training notes, `tools/make_m3_targets.py --full --check` and
   `tools/repin_test_side.py --check` (12 of 12 fields unchanged): bit-identical or exit 0.
 - Tests after `--full` in a fresh clone: 685 passed and 15 skipped without `K12_PACKAGE` and without the optional 0.8B
-  model. With both in place, the five tests that need them pass as well, so 690 pass and 10 skip. None failed.
+  model. With these and the photos in place, the five tests that need them pass as well, so 690 pass and 10 skip. After
+  the quick check only, with all inputs: 662 passed and 38 skipped. None failed.
 
 ### Added
 
