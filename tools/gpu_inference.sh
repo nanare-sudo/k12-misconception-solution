@@ -4,8 +4,8 @@
 #   bash tools/gpu_inference.sh rescore <package-dir> [--out DIR] [--dry-run]
 #   bash tools/gpu_inference.sh full    <package-dir> [--out DIR] [--dry-run]
 #
-# rescore   every scoring and ranking step on the test photos, behind the frozen texts of the package. No text is
-#           generated, and no vLLM environment is needed.
+# rescore   every scoring and ranking step on the test photos, conditioned on the frozen texts of the package. No
+#           text is generated, and no vLLM environment is needed.
 # full      every step, with new reasoning texts, protocol answers, M3 texts and 397B answers.
 # Run times and the hardware of each step: docs/VERIFICATION.md, section 3.
 #
@@ -28,9 +28,10 @@
 #      Mode rescore also copies the frozen texts of the package into <out>/.
 #   4. Run the configurations with the model runner, then copy each finished job folder to
 #      artifacts/runs/<run>/<run>/<job>/, where the CPU tools read it. Mode full then exports the new protocol notes
-#      and 397B notes and runs the M3 rankings behind them.
+#      and 397B notes and runs the M3 rankings conditioned on them.
 #   5. Freeze the M3 texts as the rankings scored them (tools/freeze_m3_texts.py). Mode full re-records the checksums of
-#      the new protocol answers (tools/repin_test_side.py --write); mode rescore checks that they did not change.
+#      the new protocol and 397B answers (tools/repin_test_side.py --write); mode rescore checks that they did not
+#      change.
 #   6. Write artifacts/submissions/new_B.csv and new_A.csv with the two make_submission calls of reproduce.sh and
 #      compare them with check_B.csv and check_A.csv. Only counts and shares are printed.
 #
@@ -86,7 +87,7 @@ GPU_STEPS_FULL=(v1te_a_t4 v1te_b_t4 test_side/v1rot_t4 zs27q_test0_rp zs27q_test
   test_side/zs27v_te_rp test_side/zs27v_n3_rp pr27te_rp
   test_side/m3_fullte_rp m3d2te_rp m3d3te_rp m3d4te_rp m3hte_a_rp m3hte_b_rp
   q397p_rp q397te_rp)
-GPU_STEPS_FULL_AFTER_NOTES=(m3px27te_rp q397m3te_rp)   # M3 behind the new protocol notes and 397B notes
+GPU_STEPS_FULL_AFTER_NOTES=(m3px27te_rp q397m3te_rp)   # M3 rankings conditioned on the new protocol and 397B notes
 # Frozen texts that mode rescore copies from the package (the rescore configurations read them).
 FROZEN_TEXTS=(zs27v_te_rp/gen_te zs27v_n3_rp/gen_nte m3_fullte_rp/m3_test_gen m3d2te_rp/m3d2_test_gen
   m3d3te_rp/m3d3_test_gen m3d4te_rp/m3d4_test_gen m3hte_a_rp/m3h_test_gen m3hte_b_rp/m3h_test_gen)
@@ -258,8 +259,8 @@ if [ "$MODE" = rescore ]; then
 else
   for c in "${GPU_STEPS_FULL[@]}"; do run "$c"; done
   put "${PUT_FULL[@]}"
-  # Notes behind which M3 ranks: the new protocol answers of the 27B and the new 397B answers (CPU). The token counts
-  # in the meta files are statistics only; --tokenizer '' leaves them out, so no tokenizer is needed here.
+  # Notes on which M3 ranks the codes: the new protocol answers of the 27B and the new 397B answers (CPU). The token
+  # counts in the meta files are statistics only; --tokenizer '' leaves them out, so no tokenizer is needed here.
   cmd python tools/export_proto_notes.py --name test_pr27 --from pr27te_rp/proto_te/proto --allow-test
   if [ "$DRY" = 1 ]; then
     echo "+ python -I tools/make_m3px27_notes.py --table test --tokenizer '' --px27-sha \"\$(sha256sum data/derived/proto_notes_test/test_pr27.jsonl | cut -d' ' -f1)\""
