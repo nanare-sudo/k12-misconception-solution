@@ -63,7 +63,8 @@ needs GNU coreutils such as `sha256sum`.
    The pins include torch 2.11.0 with its CUDA libraries, about 3.5 GB to download; nothing runs on a GPU.
    [VERIFICATION §2](docs/VERIFICATION.md#2-environment) gives a smaller install with the CPU build of torch.
 
-2. Copy four files of the competition download into `data/`. Replace `<download>` with the folder of your download:
+2. Copy four files of the competition data into `data/`. Replace `<download>` with the folder of the competition data
+   that you downloaded from Kaggle (not our package; that follows in step 3):
 
    ```bash
    mkdir -p data/competition_data
