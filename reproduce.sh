@@ -141,10 +141,11 @@ if [ ! -e artifacts ]; then
   free_kb=$(df -Pk "$REPO" | awk 'NR==2 {print $4}')
   [ "$free_kb" -ge 3000000 ] || fail_input "less than 3 GB free on $(df -P "$REPO" | awk 'NR==2 {print $6}'); the copy needs about 2.1 GB"
   t=$SECONDS
-  rm -rf artifacts.partial
-  cp -r "$PKG/artifacts" artifacts.partial
-  chmod -R u+w artifacts.partial
-  mv artifacts.partial artifacts
+  mkdir -p runs  # ignored by git; holds the copy until it is complete
+  rm -rf runs/artifacts.partial
+  cp -r "$PKG/artifacts" runs/artifacts.partial
+  chmod -R u+w runs/artifacts.partial
+  mv runs/artifacts.partial artifacts
   echo "   copied from the package and made writable ($(elapsed $t))"
 else
   same_as_package artifacts || fail_input "artifacts/ exists, but does not match the package. This happens after tools/gpu_inference.sh replaced run folders, or if artifacts/ comes from another package. Move it away (for example: mv artifacts artifacts.old) and run again; the script then copies the package again."

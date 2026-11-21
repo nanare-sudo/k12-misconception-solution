@@ -16,8 +16,8 @@
 #      files.
 #   3. Install the GPU environment of docs/VERIFICATION.md, section 2. Mode full also needs the vLLM environment in
 #      /workspace/vllm_env with the marker file .k12_ready (docs/INFERENCE.md, section 10.7).
-#   4. Download the base models at their pinned revisions into one folder and set K12_MODELS to it. Merged M3 models
-#      are written there too, one at a time.
+#   4. Download the base models at their pinned revisions into one folder and set K12_MODELS to it. The folder must be
+#      writable: the merged M3 models are written there, one at a time.
 # The script sets K12_DATA to data/ of this repository and K12_ADAPTERS to <package-dir>/weights, and it switches off
 # every download and usage report of the libraries.
 #
