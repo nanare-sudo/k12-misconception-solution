@@ -33,6 +33,9 @@ Both files were uploaded to Kaggle as `submission.csv`. The method of both is in
 
 ## 2. Environment
 
+We ran every check on Linux (Ubuntu 24.04, x86-64). On Windows, use WSL2 with Ubuntu. macOS is untested; `reproduce.sh`
+needs GNU coreutils such as `sha256sum` and `readlink -f`. The GPU modes need Linux with NVIDIA GPUs.
+
 | Environment | Used for | Python | CUDA | Main pins |
 |---|---|---|---|---|
 | CPU | `assemble`, blend and second-stage fits, tests | 3.13.5 | none | numpy 2.4.2, scipy 1.17.1, pandas 2.3.3, scikit-learn 1.8.0, pyarrow 23.0.1, PyYAML 6.0.3, Pillow 11.3.0; torch 2.11.0 and transformers 5.15.1, which shared helpers import and use on the CPU |

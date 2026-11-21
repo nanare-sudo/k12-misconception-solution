@@ -48,10 +48,13 @@ submissions was decided on cross-validation before its public score was known
 
 ## Reproduce
 
+We ran every check on Linux (Ubuntu 24.04, x86-64). On Windows, use WSL2 with Ubuntu. macOS is untested; the script
+needs GNU coreutils such as `sha256sum`.
+
 1. Clone the repository, check out the tag `v0.6` and install the CPU environment with Python 3.13:
 
    ```bash
-   git clone <repository URL> k12-solution && cd k12-solution
+   git clone https://github.com/nanare-sudo/k12-misconception-solution.git k12-solution && cd k12-solution
    git checkout v0.6
    python3.13 -m venv .venv && . .venv/bin/activate
    python -m pip install -r env/requirements-cpu.txt
@@ -60,16 +63,24 @@ submissions was decided on cross-validation before its public score was known
    The pins include torch 2.11.0 with its CUDA libraries, about 3.5 GB to download; nothing runs on a GPU.
    [VERIFICATION §2](docs/VERIFICATION.md#2-environment) gives a smaller install with the CPU build of torch.
 
-2. Put `train.csv` and `test.csv` from the root of the competition download under `data/`, and `taxonomy_v1.csv` and
-   `sample_submission.csv` under `data/competition_data/`. Links are fine. Create the folder first with
-   `mkdir -p data/competition_data`, or link the whole `competition_data/` folder of the download there. The CPU check
-   reads no photo.
-
-3. Download our private package (the link is in our email) and unpack it next to the clone: `unzip k12-host-package.zip`
-   gives the folder `k12-host-package/`. Run the quick check from the repository root, with the path of that folder as
-   `<package-dir>`, here `../k12-host-package`. It takes about 2 minutes:
+2. Copy four files of the competition download into `data/`. Replace `<download>` with the folder of your download:
 
    ```bash
+   mkdir -p data/competition_data
+   cp <download>/train.csv <download>/test.csv data/
+   cp <download>/competition_data/taxonomy_v1.csv <download>/competition_data/sample_submission.csv data/competition_data/
+   ```
+
+   Take `train.csv` and `test.csv` from the root of the download, not from `competition_data/`: the copies there carry
+   the topic names in Indonesian and give other results. Links work as well as copies. The CPU check reads no photo.
+
+3. Download our private package (the link is in our email). Unpack it next to the clone and run the quick check from the
+   repository root. It takes about 2 minutes. Replace `<zip>` with the path of the downloaded file:
+
+   ```bash
+   cd ..
+   unzip -q <zip>                  # creates the folder k12-host-package/ next to k12-solution/
+   cd k12-solution
    bash reproduce.sh ../k12-host-package
    ```
 
