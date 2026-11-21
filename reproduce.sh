@@ -131,7 +131,7 @@ same_as_package() {
     return 0
   fi
   echo "$out" | head -n 10 >&2
-  echo "   ($(printf '%s\n' "$out" | grep -c 'FAILED') files differ or are missing)" >&2
+  echo "   ($(printf '%s\n' "$out" | grep -c 'FAILED') of the package files differ or are missing here)" >&2
   return 1
 }
 
