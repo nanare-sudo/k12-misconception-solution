@@ -279,8 +279,9 @@ is generated, and no vLLM environment is needed. In mode `full` it also generate
 3. Install the GPU base environment of section 2. For `full`, also install the vLLM environment.
 4. Download the base models at the pinned revisions into one folder and set `K12_MODELS` to it.
    [weights_manifest.json](weights_manifest.json) lists every file with its checksum.
-5. Cut the network. The script sets the variables of section 2 itself, and it sets `K12_DATA` to `data/` and
-   `K12_ADAPTERS` to the package's `weights/` folder.
+5. Cut the network. The script sets the offline variables of section 2 itself, except `PIP_NO_INDEX` and
+   `UV_OFFLINE`; set these two yourself if an install attempt should fail at once. It also sets `K12_DATA` to `data/`
+   and `K12_ADAPTERS` to the package's `weights/` folder.
 
 #### Run
 
@@ -293,6 +294,9 @@ bash tools/gpu_inference.sh rescore <package-dir>              # or: bash tools/
 outputs of the model runs; the default is `runs/gpu_<mode>/` in the repository. A configuration that has finished is not
 run again when you call the script again with the same output folder. Each configuration names the GPUs it uses (field
 `gpu` of each worker). To split the work over several machines, run the printed commands by hand.
+
+The script has run as a dry run, and its CPU steps have run on the frozen outputs. It has not yet run on a GPU. The
+configurations it runs hold the jobs of our test-side runs unchanged.
 
 #### What the script runs
 
@@ -533,18 +537,20 @@ Seeds: section 7.
 Download: the private link in our email; it is not stored in this repository. Everything in the package is trained on or
 derived from the competition data, so it is not public.
 
-The package is one zip file. TODO(final): <N> files, <X> GB unpacked. `MANIFEST.sha256` holds the checksum of every
-file, and `PACKAGE_INDEX.tsv` lists each file with its size, SHA-256, role and whether it is derived from test rows.
-`README_PACKAGE.md` in the package says where each folder goes; `reproduce.sh` sets this up for the CPU check.
+The package is one zip file with 572 indexed files and three files about the package: `README_PACKAGE.md`,
+`PACKAGE_INDEX.tsv` and `MANIFEST.sha256`. Unpacked, it takes 3.63 GB. `MANIFEST.sha256` holds the checksum of every
+other file, and `PACKAGE_INDEX.tsv` lists each indexed file with its size, SHA-256, role and whether it is derived from
+test rows. 161 files with 543.2 MB are derived from test rows. `README_PACKAGE.md` in the package says where each
+folder goes; `reproduce.sh` sets this up for the CPU check.
 
-| Role | What it is |
-|---|---|
-| `assemble` | Read by the CPU build: frozen channel outputs, OOF matrices with their metadata, earlier blend, second-stage and reference files, stored reports, frozen derived inputs |
-| `assemble-generated` | Files that the build scripts write and pin themselves; they are included so that the scripts verify them instead of recomputing them |
-| `rescore` | Frozen inputs of the GPU modes that the CPU build does not read: the texts behind the rankings, the teacher pseudo-labels of the unlabelled pool, row lists of the model runs, the 397B parity probe |
-| `training` | Inputs of the training steps of section 6: the M3 training targets and the stored list of their builder, the first-version training rotation lists, the row lists of the protocol-answer runs, the raw 397B answers on the training rows, the training-side gate lists and `artifacts/oof_v1.npy` |
-| `check` | Inputs of the checks of §5.2: the A40 test outputs behind the gate lists |
-| `weights` | Our trained weights (below) |
+| Role | Files | Size | What it is |
+|---|---:|---:|---|
+| `assemble` | 464 | 2.32 GB | Read by the CPU build: frozen channel outputs, OOF matrices with their metadata, earlier blend, second-stage and reference files, stored reports, frozen derived inputs |
+| `assemble-generated` | 11 | 2.1 MB | Files that the build scripts write and pin themselves; they are included so that the scripts verify them instead of recomputing them |
+| `rescore` | 40 | 258.5 MB | Frozen inputs of the GPU modes that the CPU build does not read: the texts behind the rankings, the teacher pseudo-labels of the unlabelled pool, row lists of the model runs, the 397B parity probe |
+| `training` | 31 | 69.9 MB | Inputs of the training steps of section 6: the M3 training targets and the stored list of their builder, the first-version training rotation lists, the row lists of the protocol-answer runs, the raw 397B answers on the training rows, the training-side gate lists and `artifacts/oof_v1.npy` |
+| `check` | 9 | 4.3 MB | Inputs of the checks of §5.2: the A40 test outputs behind the gate lists, and the frozen blank-photo list of the training rows |
+| `weights` | 17 | 969.4 MB | Our trained weights (below) |
 
 | Weights | Content | Base model |
 |---|---|---|

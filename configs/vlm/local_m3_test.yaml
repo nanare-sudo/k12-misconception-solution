@@ -2,7 +2,7 @@
 # No measurement, only: does every step run? Training target with notes, finding and code (joint tokenisation), header
 # with the current adapter (prefix_with_adapter), merging into the weight files, generation (here on the in-house path
 # instead of vLLM), ranking of all codes in sft mode including the completion of missing findings.
-#     (training targets: the frozen files in data/derived/sft/, see docs/CODEMAP.md §10)
+#     (training targets: the frozen files in data/derived/sft/, built by tools/make_m3_targets.py; docs/TRAINING.md §10)
 #     cd src && OMP_NUM_THREADS=6 python -m vlm.runner --config ../configs/vlm/local_m3_test.yaml --out <folder>
 # Small sizes instead of the pilot values: notes up to 96 tokens, images 224 px, LoRA r 8 from layer 12 of 24, 4 steps; the
 # taxonomy stays complete (header as in the pilot, about 3,350 tokens). Generation up to 48 tokens: the small model does

@@ -1,6 +1,6 @@
 # Functional check of the probe proto_rank on the local CPU with the smallest model; no measurement, only: does the path
 # run (system text of the sample, notes as a thinking block, prompt-header cache, scoring of all codes)?
-#     (notes: the frozen file data/derived/proto_notes/train_pr27.jsonl, see docs/CODEMAP.md §10)
+#     (notes: the frozen file data/derived/proto_notes/train_pr27.jsonl, from tools/export_proto_notes.py; docs/TRAINING.md §9)
 #     cd src && python -m vlm.runner --config ../configs/vlm/local_proto_rank.yaml --out <folder>
 run: local_proto_rank
 models_dir: data/models

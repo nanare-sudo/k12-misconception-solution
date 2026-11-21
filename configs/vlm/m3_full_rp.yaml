@@ -1,5 +1,5 @@
 # M3 without pool rows: FULL FIT of the reasoning 27B (recipe of the pilot) on ALL 1,500 gold training targets
-# (data/derived/sft/m3_full_targets.jsonl, a frozen input, see docs/CODEMAP.md §10); no fold held out, no measurement in this
+# (data/derived/sft/m3_full_targets.jsonl, a frozen input, see docs/TRAINING.md §10); no fold held out, no measurement in this
 # run. m3_merge_full then merges the adapter into the weights. Strictly inductive (no teacher targets).
 # The test side runs in m3_fullte_rp.yaml, which contains the same training jobs followed by the test jobs; this file is
 # the training-only form of the same recipe. For a rerun the adapter is delivered UNMERGED (m3_train_full/adapter);

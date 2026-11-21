@@ -103,8 +103,6 @@ used the A40 and the RTX PRO 6000.
 
 ## Other documents
 
-
-
 - [docs/METHOD.md](docs/METHOD.md): the method in full.
 - [docs/VALIDATION.md](docs/VALIDATION.md): folds, uncertainty, decision rules and the checks before a submission.
 - [docs/RESULTS.md](docs/RESULTS.md): progression, ablations, error analysis and compute.

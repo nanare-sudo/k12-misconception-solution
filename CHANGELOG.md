@@ -17,7 +17,7 @@ steps of inference from the delivered weights without retraining. The private in
 - `tools/gpu_inference.sh rescore|full <package-dir> [--out DIR] [--dry-run]`: runs the test-side GPU jobs in order,
   copies their outputs to where the CPU tools read them, writes `new_A.csv` and `new_B.csv` with the two calls of the
   quick check and prints only aggregates. `--dry-run` prints every command and checks that each configuration and input
-  folder exists.
+  folder exists. Its input check is `tools/gpu_inference_inputs.py`; tests `tests/test_gpu_inference_dry_run.py`.
 - `configs/vlm/test_side/` and `configs/vlm/rescore/`: the test-side jobs of the reference configurations, unchanged and
   under the same run and job names; `rescore/` holds no job that generates text. Written by
   `tools/make_inference_configs.py` (`--check` compares) and checked by `tests/test_inference_configs.py`.
@@ -37,8 +37,9 @@ steps of inference from the delivered weights without retraining. The private in
   unchanged.
 - Private input package completed with the inputs of the training side (first-version rotation lists of the training
   rows, row lists of the protocol-answer runs, the raw 397B answers on the training rows, the training-side gate lists,
-  `artifacts/oof_v1.npy`) and with the inputs of the checks (the A40 test outputs behind the gate lists). The zip file
-  has writable file permissions.
+  `artifacts/oof_v1.npy`) and with the inputs of the checks (the A40 test outputs behind the gate lists and the
+  blank-photo list of the training rows). It holds 572 indexed files with 3.63 GB, 161 of them derived from test rows.
+  The zip file has writable file permissions.
 - Reference documents (METHOD, INFERENCE, TRAINING, VALIDATION, RESULTS, CODEMAP, PROVENANCE, DATA_AND_COMPLIANCE,
   MODEL_SIZES): version 0.6, storage locations, run status, the new tools, the reference CPU and its OpenBLAS kernel, the
   complete offline settings and the blank-photo rule. `docs/weights_manifest.json` lists the five M3 fold adapters and
@@ -65,6 +66,10 @@ steps of inference from the delivered weights without retraining. The private in
   `docs/PROVENANCE.md` said that every M3 recipe records `teacher_derived`; the two pilot recipes do not.
   `docs/INFERENCE.md` said that M3 uses exactly three draws, and that `m3x3_full_rows.npy` is rewritten by
   `s029_m3x3.sh`; that script writes it only when the metadata file of the channel is absent.
+- `docs/WRITEUP.md` names both commercial APIs and their frozen outputs, and gives the range of single M3 draws as
+  0.750–0.777.
+- Comments in six run configurations and in `src/vlm/sft.py` pointed to a section of `docs/CODEMAP.md` that no longer
+  lists the M3 training targets and the protocol notes; they now name the builder and `docs/TRAINING.md`.
 
 ### Known gaps
 
@@ -72,7 +77,8 @@ The following items are tracked in [docs/ROADMAP.md](docs/ROADMAP.md#2-open-step
 - runs without network access for the GPU model steps other than the 9B scorer, including the 397B path (step 2);
 - hashes for every pin and an offline wheelhouse (step 4);
 - the scripts that are not exported (step 6);
-- a complete `rescore` or `full` run in one go, which has never been done;
+- a complete `rescore` or `full` run in one go, which has never been done; `tools/gpu_inference.sh` has run as a dry
+  run and on its CPU steps, not yet on a GPU;
 - the private-leaderboard scores (step 8).
 
 ## v0.5 — 2026-11-17

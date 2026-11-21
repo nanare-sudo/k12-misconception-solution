@@ -271,8 +271,7 @@ elif [ "$FULL" = 1 ]; then
     fi
   fi
   export OPENBLAS_CORETYPE="${OPENBLAS_CORETYPE:-Haswell}"
-  echo "   OPENBLAS_CORETYPE=$OPENBLAS_CORETYPE; logs in artifacts/eda/private/reproduce/; each script also writes its"
-  echo "   first step, the rebuild of the predecessor chain, to artifacts/eda/private/<script>/regression_*.log"
+  echo "   OPENBLAS_CORETYPE=$OPENBLAS_CORETYPE; one log per build script in artifacts/eda/private/reproduce/"
   LOGDIR=artifacts/eda/private/reproduce
   mkdir -p "$LOGDIR"
   build() {  # build <n> <log name> <command...>

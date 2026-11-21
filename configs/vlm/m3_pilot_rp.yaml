@@ -5,7 +5,7 @@
 # system text, question, diagram (448 px), key, photo (1,024 px); NO labelled row, no topic or question block, no teacher
 # labels. Answer: notes in the thinking block, then "Finding: <explanation>", then "Root: <code>". Training targets per
 # fold only from rows of the other folds (data/derived/sft/m3_fold<k>_targets.jsonl, frozen inputs with checksums in the
-# .meta.json files; docs/CODEMAP.md §10):
+# .meta.json files; docs/TRAINING.md §10):
 #   - own pr27 note WITH loss where the pr27 channel ranks the gold code first (fold 1: 809 of 1,200 rows, fold 2: 830),
 #     otherwise as a closed thinking block in the prompt without loss; note limit 2,500 tokens (= the pr27 budget; 84 %
 #     of the notes end above 1,800 tokens, median 2,500, so a tighter limit would cut the reasoning budget below pr27);
@@ -21,7 +21,7 @@
 # all 74 codes behind the canonical text "notes\n</think>\n\nFinding: …\nRoot:" (probe proto_rank, sft mode; if the finding
 # is missing, the in-house path generates it up to "Root:") -> output in the format of proto_rank (eda/a8_proto_oof.py --rank).
 #
-# Before the run (local):  the frozen training targets in data/derived/sft/ (folds 0-4 and the full fit; docs/CODEMAP.md §10)
+# Before the run (local):  the frozen training targets in data/derived/sft/ (folds 0-4 and the full fit; docs/TRAINING.md §10)
 #                functional check: configs/vlm/local_m3_test.yaml (0.8B, CPU)
 # Hardware:      one RTX PRO 6000 (96 GB), disk >= 150 GB (base model 51.8 GB + merged files up to 54 GB + vLLM
 #                environment; 80 GB are NOT enough)

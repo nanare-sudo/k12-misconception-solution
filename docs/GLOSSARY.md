@@ -151,6 +151,7 @@ file and folder names are kept as they were during development, because the code
 | `m3_full`, `v1_full` | Our adapters of the full fit on all 1,500 training rows: M3 (LoRA on Qwen3.8-27B) and the 9B scorer (LoRA on Qwen3.5-9B) | `weights/m3_full/`, `weights/v1_full/` |
 | `v1_f0` … `v1_f4`, `m3_train_f0` … `m3_train_f4` | The five fold adapters of the 9B scorer and of M3; each one never saw its own fold | `weights/v1_folds/`; M3 under `artifacts/runs/m3_pilot_rp/` and `m3_f034_rp/` |
 | `sft_recipe.json` | Training recipe of an M3 adapter, with the checksums of its training targets | next to each M3 adapter |
+| note states `fertig`, `entwurf`, `offen`, `fehlt` | Labels for the state of a note in the frozen note files. `fertig`: complete, the answer ended normally. `entwurf`: draft, cut off after the notes named a root code. `offen`: open, cut off before that. `fehlt`: missing, no answer. The files are pinned by checksum, so the labels stay as recorded | `RECORDED_STATE` in `tools/export_proto_notes.py` and `tools/make_q397m3_notes.py` |
 | `orient_cnn` | The orientation network: weights `orient_cnn.pt` and description `orient_cnn.json` | `weights/orient_cnn/`, `artifacts/orient/` |
 | `PACKAGE_INDEX.tsv` | Every package file with its size, SHA-256, role and whether it is derived from test rows | private package |
 | `MANIFEST.sha256` | Checksums of all package files, for `sha256sum -c` | private package |

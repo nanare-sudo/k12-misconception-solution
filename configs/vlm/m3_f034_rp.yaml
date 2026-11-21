@@ -1,6 +1,6 @@
 # M3 without pool rows (recipe of the pilot, configs/vlm/m3_pilot_rp.yaml) on the remaining folds 0, 3 and 4, so that the
 # five folds form ONE channel. Gold training targets per fold (data/derived/sft/m3_fold{0,3,4}_targets.jsonl, frozen
-# inputs, see docs/CODEMAP.md §10), training, merging, generation (3,200 tokens) and exact ranking as in the pilot, unchanged.
+# inputs built by tools/make_m3_targets.py, docs/TRAINING.md §10), training, merging, generation (3,200 tokens) and exact ranking as in the pilot, unchanged.
 # Strictly inductive (no teacher targets).
 #
 # Inputs: data/derived/sft (training targets of training rows only).

@@ -75,7 +75,7 @@ the scripts write them and require the same checksums.
 | `eda/private/primary_m3x4/sens/stage2_primary_m3x4_fixbeta.json` | `eda/c135_primary_m3x4.py fit` (sensitivity with fixed β) | `3350e3ab2206333c7f6b7bba378a102aae96865d5f2ff10f18de4347eec0d4d3` |
 | `stage2_primary_cols.json` | `eda/c151_primary_cols.py fit` | `102f98ce9c50c955753305a1795b808136d098c82c5fa1d25a0fde6f3e988a7f` |
 | `oof_m3x5h.npy` | `eda/c166_primary_m3x5h.py oof` (pinned since version 0.4) | `388546e508a603fc993bc52faf887e3831895cd57513887c3d21aed7bf78cc2f` |
-| `meta_m3x5h.json` | `eda/c166_primary_m3x5h.py oof` | `a2979b02d58572252575c202cd759d0f80b003824ed421d09945ce98ab9188f3` |
+| `meta_m3x5h.json` | `eda/c166_primary_m3x5h.py oof` | `43b0586b76f17faf652849470ffa8e3e7504d845679559a09c168000d1f08a23` |
 | `stack_primary_m3x5h.json` | `eda/c166_primary_m3x5h.py stack` | `50b46374e9703131301bb771bf46c967a8f9b3b02fdf994b8e7f9bbb1545ed66` |
 | `stage2_primary_m3x5h_base.json` | `eda/c166_primary_m3x5h.py fit-base` | `4e3ad9d8c6310701ac214793c5cdd172e00f9828607567bbe376843d2a32030d` |
 | `stage2_primary_m3x5h.json` | `eda/c166_primary_m3x5h.py fit` | `572ff297dc04b7d0e4a9a28b477af74f532bcd742371717d10e172daad894d05` |
@@ -764,7 +764,6 @@ On the competition test set (checked in a fresh copy of the repository with the 
 | Primary line without second stage | `sub_primary_base.csv`, byte-identical to `sub_s032n_q397m3.csv` | `d1667f6d2fb118844b72ecd8abd85220754a709d468519b7a047a893bbea12f1` |
 | Safety line without second stage | `sub_safety_base.csv`, the copy null point of the safety builds | `91a14773ac7ec367b1385f1d304b3b8a74b3d9598aecfd91fee49f62ee4e4bb2` |
 | Strictly inductive line without second stage | `sub_inductive_base.csv`, byte-identical to `sub_s030n_safe.csv` | `8cca7bbfe9b8c9dce47d6153d59712575bb7b8ad6dea8a286f7ef530df448b67` |
-
 
 ## 10. Recomputing the 397B channel on the test rows
 

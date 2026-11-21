@@ -5,7 +5,7 @@ pr27 (instruction with the verdict rules, taxonomy, question, diagram, key, phot
 block, no teacher labels) to think first, then write one finding line and then name the code. The ranking of all codes
 is afterwards scored exactly behind the own text (probe proto_rank in sft mode; mechanics as for the reasoning channel).
 
-Training target per training row (only rows of the OTHER folds; frozen target files, see docs/CODEMAP.md §10):
+Training target per training row (only rows of the OTHER folds; frozen target files, built by tools/make_m3_targets.py):
     <think>\\n NOTES \\n</think>\\n\\nFinding: EXPLANATION\\nRoot: CODE<|im_end|>
   * NOTES = the reasoning of the first pr27 pass for this row (data/derived/proto_notes/train_pr27.jsonl). With loss
     (marker notes) only where the pr27 channel ranks the gold code first (flag pr27_ok of the target builder);
