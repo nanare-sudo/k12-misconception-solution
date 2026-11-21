@@ -8,6 +8,19 @@ delivered for the host's verification.
 Seventh version, the state delivered for the host's verification. It adds one command for the CPU check and the GPU
 steps of inference from the delivered weights without retraining. The private input package is completed.
 
+### Verified
+
+- Quick check in a fresh clone of this version with the delivered package (`bash reproduce.sh <package-dir>`):
+  `OK A 4505c159…797354e7` and `OK B 76da786d…a3565f9973` in 1 min 27 s; all 574 files of `MANIFEST.sha256` matched.
+- Build chain, the six commands that `--full` runs, with the build code of this version and the delivered package: both
+  final files and every pinned file of the chain byte-identical, in 2 h 23 min. Afterwards every package file was
+  unchanged.
+- `tools/gpu_inference.sh rescore` and `full` as dry runs: no input missing.
+- `tools/make_blank_list.py check` (1 training row, 6 test rows), `tools/replay/gates.py check` (test side with the A40
+  outputs, and training side), the rebuild of the 397B training notes, `tools/make_m3_targets.py --full --check` and
+  `tools/repin_test_side.py --check` (12 of 12 fields unchanged): bit-identical or exit 0.
+- Tests: 662 passed and 38 skipped with the private package and the competition data; none failed.
+
 ### Added
 
 - `reproduce.sh`: one command for the CPU check. `bash reproduce.sh <package-dir>` checks the private package with its

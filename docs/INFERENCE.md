@@ -591,9 +591,9 @@ When the steps of `full` are run by hand, run S5 and S6 first: they are the most
 ## 7. Run times, cost and package size
 
 **Final submissions, code of this repository.** The two direct calls of section 5 take about 30 s per file. The build
-chain of section 5 (six commands; `bash reproduce.sh <package-dir> --full` runs them) took 1 h 48 min, 1 h 52 min and
-1 h 59 min in three runs on an Intel Core i5-8250U laptop (4 cores, 8 threads, 15 GB RAM, two BLAS threads, shared with
-other jobs). The measurements below (versions 0.2–0.4) are history.
+chain of section 5 (six commands; `bash reproduce.sh <package-dir> --full` runs them) took 1 h 48 min, 1 h 52 min,
+1 h 59 min and 2 h 23 min in four runs on an Intel Core i5-8250U laptop (4 cores, 8 threads, 15 GB RAM, two BLAS
+threads, shared with other jobs). The measurements below (versions 0.2–0.4) are history.
 
 **Assembly on the CPU, earlier versions** (two BLAS threads, measured in a fresh copy of the repository with the frozen
 inputs, from which every file the build paths write had been deleted): the two historical builds take about 1.3 minutes

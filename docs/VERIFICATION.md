@@ -127,8 +127,8 @@ All 3,498 test rows. Details: [INFERENCE.md §7](INFERENCE.md#7-run-times-cost-a
 | M3 draw h on the 2,459 listed rows at 2,048 px (A only) | 1 × RTX PRO 6000 | two halves of about 4 h (measured) |
 | M3 behind the protocol notes; M3 behind the 397B notes | 1 × RTX PRO 6000 | 4.9 s and about 3.4 s per row |
 | 397B notes | 4 × H200 141 GB, tensor parallel 4, FP8 weights | download 17 min, server start about 7.5 min, 3,498 rows in about 87 min; about 2.05 h in total (measured) |
-| `assemble`, quick check (§5.1) | CPU, 2 BLAS threads | about 2 min in total (estimate), of which the two calls take about 30 s each (measured) |
-| `assemble`, full build chain (§5.1) | CPU, 2 BLAS threads | 1 h 48 min to 1 h 59 min in three runs (measured) |
+| `assemble`, quick check (§5.1) | CPU, 2 BLAS threads | 1.5–2 min in total, of which the two calls take about 30 s each (measured) |
+| `assemble`, full build chain (§5.1) | CPU, 2 BLAS threads | 1 h 48 min to 2 h 23 min in four runs (measured) |
 
 ### Totals
 
@@ -262,7 +262,9 @@ Both files were rebuilt byte for byte on a Kaggle CPU with internet disabled, wi
 is its English translation. On 2026-11-17 they were rebuilt with the code of this repository in two fresh clones that
 read only the competition data and the private package. All 44 CSV and matrix files of the chain were byte-identical. On
 2026-11-20 the build chain ran once more from a fresh clone of the GitHub repository and the package, in 1 h 59 min.
-TODO(final): date and result of the final check of version 0.6 with the delivered package (quick check and `--full`).
+On 2026-11-21 we checked version 0.6 with the delivered package. The quick check wrote both files byte for byte in
+1 min 27 s. The six commands of the build chain rebuilt them byte for byte in 2 h 23 min, on the reference CPU shared
+with other jobs.
 
 ### 5.2 `rescore` and `full` (GPU)
 
@@ -539,9 +541,9 @@ derived from the competition data, so it is not public.
 
 The package is one zip file with 572 indexed files and three files about the package: `README_PACKAGE.md`,
 `PACKAGE_INDEX.tsv` and `MANIFEST.sha256`. Unpacked, it takes 3.63 GB. `MANIFEST.sha256` holds the checksum of every
-other file, and `PACKAGE_INDEX.tsv` lists each indexed file with its size, SHA-256, role and whether it is derived from
-test rows. 161 files with 543.2 MB are derived from test rows. `README_PACKAGE.md` in the package says where each
-folder goes; `reproduce.sh` sets this up for the CPU check.
+other file. `PACKAGE_INDEX.tsv` lists each indexed file with its size, SHA-256 and role, and whether it is derived from
+test rows. 161 files with 543.2 MB in total are derived from test rows. `README_PACKAGE.md` in the package says where
+each folder goes; `reproduce.sh` sets this up for the CPU check.
 
 | Role | Files | Size | What it is |
 |---|---:|---:|---|
