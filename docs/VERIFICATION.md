@@ -69,7 +69,9 @@ python -m pip install -r .venv/requirements-cpu-only.txt --extra-index-url https
 python -m pip install pytest==8.4.2
 ```
 
-On 2026-11-21 the quick check, the full proof and the tests passed with this build, torch 2.11.0+cpu. We used Python
+On 2026-11-21 the quick check, the full proof and the tests passed with this build, torch 2.11.0+cpu. Both installs
+print a warning that the pinned `shellingham` 1.5.0 is a yanked release on PyPI. The warning is harmless; we pin the
+version of our reference environment. We used Python
 3.13.5 from Miniconda, and we have not tested other Python versions. If your system has no Python 3.13, install it with
 Miniconda or uv.
 
