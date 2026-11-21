@@ -74,8 +74,9 @@ needs GNU coreutils such as `sha256sum`.
    Take `train.csv` and `test.csv` from the root of the download, not from `competition_data/`: the copies there carry
    the topic names in Indonesian and give other results. Links work as well as copies. The CPU check reads no photo.
 
-3. Download our private package (the link is in our email). Unpack it next to the clone and run the quick check from the
-   repository root. It takes about 2 minutes. Replace `<zip>` with the path of the downloaded file:
+3. Download our private package. It is not public; the competition host received the link by email. Unpack it next to
+   the clone and run the quick check from the repository root. It takes about 2 minutes. Replace `<zip>` with the full
+   path of the downloaded file, for example `~/Downloads/k12-host-package.zip`:
 
    ```bash
    cd ..

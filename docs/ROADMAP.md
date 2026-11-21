@@ -10,7 +10,7 @@
 | Final submissions | Selected on 2026-11-15, both from the primary line. **Primary submission A** (`primary_m3x5h`): five M3 draws, the fifth with the photo at 2,048 px on the rows with small script, and nine extra second-stage columns. **Primary submission B** (`primary_m3x4`): four M3 draws. Which file is which, with the Kaggle references: [VERIFICATION.md](VERIFICATION.md); CV values: [RESULTS.md](RESULTS.md) |
 | Rebuild on the CPU | Both files are rebuilt byte for byte from the frozen inputs: on a Kaggle CPU without network access with the internal code version, and with the code of this repository in two fresh copies (2026-11-17) and once more from a fresh clone (2026-11-20); with version 0.6 and the delivered zip on 2026-11-21, in two fresh clones that ran `bash reproduce.sh <package-dir> --full` in one go. `bash reproduce.sh <package-dir>` runs the quick check, `--full` the build chain ([VERIFICATION.md §5.1](VERIFICATION.md#51-assemble-cpu)) |
 | GPU steps | `tools/gpu_inference.sh rescore` or `full` runs the test-side jobs from the delivered weights and assembles A and B ([VERIFICATION.md §5.2](VERIFICATION.md#52-rescore-and-full-gpu)). The script has run as a dry run and on its CPU steps. Its GPU jobs ran without network access on 8 test rows each (2026-11-21); a complete `rescore` or `full` run has never been done in one go |
-| Runs without network | The CPU assembly and the 9B scorer on Kaggle T4 ran without network access. On 2026-11-21 every 27B, M3 and 9B step of both submissions ran without network access on 8 test rows each, on one 96 GB card ([VERIFICATION.md §5.2](VERIFICATION.md#52-rescore-and-full-gpu)). The 397B path has not yet run without network access (step 2) |
+| Runs without network | The CPU assembly and the 9B scorer on Kaggle T4 ran without network access. On 2026-11-21 each kind of 27B, M3 and 9B step of both submissions ran without network access on 8 test rows each (21 steps; one shard of each split configuration), on one 96 GB card ([VERIFICATION.md §5.2](VERIFICATION.md#52-rescore-and-full-gpu)). The 397B path has not yet run without network access (step 2) |
 | Private input package | Delivered to the host by private link: frozen inputs, channel outputs, fitted files, training-side inputs, check inputs and our weights, every file with its SHA-256 in `MANIFEST.sha256` ([VERIFICATION.md §9](VERIFICATION.md#9-private-weights-and-inputs)) |
 | Sizes | 481.53 GB as deployed, 440.94 GB at 8 bit; 434.4 B parameters nominal in total ([MODEL_SIZES.md](MODEL_SIZES.md)) |
 | Private leaderboard | Published by the host after the verification |
@@ -49,5 +49,5 @@ None for the delivery. The runs of step 2 do not change the submitted files.
 
 - Add the private-leaderboard results to [README.md](../README.md) and [RESULTS.md](RESULTS.md).
 - Answer the host's questions during the verification and fix any gap that the host finds.
-- The code and the write-up may be published after the verification. Trained weights and files derived from the
-  competition data stay private ([DATA_AND_COMPLIANCE.md](DATA_AND_COMPLIANCE.md#8-publication)).
+- The repository has been public since 2026-11-21. Trained weights and files derived from the competition data stay
+  private ([DATA_AND_COMPLIANCE.md](DATA_AND_COMPLIANCE.md#8-publication)).

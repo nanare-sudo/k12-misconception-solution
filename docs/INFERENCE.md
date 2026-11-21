@@ -8,8 +8,8 @@ Reference document. To reproduce the submissions, start with [VERIFICATION.md](V
 The final solution is built to run **without network access and without any human step**. No external API is called at
 inference time. All models in the inference path are open-weight models. The base models are pinned by revision and
 file checksum, and our trained adapters are part of the delivered package. The CPU assembly and the 9B scorer on Kaggle
-T4 have run without network access. The 27B, M3 and 9B steps of both submissions ran without network access on 8 test
-rows each on 2026-11-21 ([VERIFICATION.md §5.2](VERIFICATION.md#52-rescore-and-full-gpu)); the 397B path has not yet
+T4 have run without network access. Each kind of 27B, M3 and 9B step of both submissions ran without network access on
+8 test rows each on 2026-11-21 (21 steps; one shard of each split configuration) ([VERIFICATION.md §5.2](VERIFICATION.md#52-rescore-and-full-gpu)); the 397B path has not yet
 ([ROADMAP.md](ROADMAP.md), step 2).
 
 **Contents:**
@@ -571,7 +571,8 @@ When the steps of `full` are run by hand, run S5 and S6 first: they are the most
 | All 27B bf16 steps and vLLM text generation | RTX PRO 6000 Blackwell, 96 GB |
 | 397B notes | 4×H200, tensor parallel 4, FP8 weights, vLLM 0.31 |
 
-- **Same hardware and number format:** the scores are bit-identical.
+- **Same hardware, number format and batches:** the scores are bit-identical. A subset of rows forms other batches and
+  can differ in the last digits (our 8-row test: at most 0.035 in a probability, top-1 code kept).
 - **A40 in bf16 against T4 in fp16 (9B scorer):** the channel's top code changes on about 9 % of rows, the blend's top
   code on 1–2 %.
 - **Evidence on a second hardware class** (aggregates only):

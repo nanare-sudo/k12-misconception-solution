@@ -1,5 +1,5 @@
-# Private inputs and outputs are never committed. They are distributed separately
-# (private Kaggle dataset / model) and referenced by path and SHA-256:
+# Private inputs and outputs are never committed. They are delivered in the private input package
+# (docs/VERIFICATION.md, section 9) and referenced by path and SHA-256:
 # competition data, derived inputs, run outputs, OOF/test matrices, blend and
 # second-stage files, submissions, model weights.
 /data

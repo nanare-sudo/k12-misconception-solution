@@ -100,8 +100,9 @@ touch /workspace/vllm_env/.k12_ready
 The `_t4` configurations of the 9B scorer expect two GPUs with 16 GB each, as on Kaggle T4 × 2, and run in fp16. We ran
 them only in Kaggle notebooks with internet off, on the Kaggle GPU image of the day. We did not record the digest of
 that image. `env/requirements-kaggle-t4.txt` lists the four packages that we installed on top of it from offline wheels.
-On other machines with two GPUs they run like the other configurations, but we have not tested this; the scores may then
-differ slightly (section 8).
+On other machines they run like the other configurations. On one RTX PRO 6000 we ran them on 8 test rows each, set to
+one card, and the top-1 code was kept on all 16 rows (section 5.2, Network). The scores may differ slightly
+(section 8).
 
 ### Runs without network access
 
@@ -226,7 +227,9 @@ steps of section 6, use a writable copy as well. Full tree of the private part:
 
 ### 5.1 `assemble` (CPU)
 
-Use the CPU environment of section 2 and the competition data of section 4.
+Use the CPU environment of section 2 and the competition data of section 4. Run every command from the repository
+root. `<package-dir>` is the unpacked package folder, given as an absolute path or relative to the repository root, for
+example `../k12-host-package`.
 
 #### Quick check, about 2 minutes
 
@@ -508,18 +511,24 @@ recompute it, run `cd src && python -u -m vlm.runner --config ../configs/vlm/tes
 
 The CPU assembly and the 9B scorer on Kaggle T4 have run without network access. On 2026-11-21 we also ran the GPU
 jobs of both modes without network access, on 8 test rows each. This was 21 steps on one RTX PRO 6000 96 GB, with the
-code of the tag `v0.6`, the pinned environments of section 2 and the files of the delivered zip. DNS was switched off
-and every process was traced with `strace`; no step tried to open a network connection. The vLLM server started with
-empty caches, the prompts had the same token counts as in our runs, and every LoRA merge gave the same weights.
+code of the tag `v0.6` (commit 3d0728d; later commits changed only documentation), the pinned environments of section 2
+and the files of the delivered zip. DNS was switched off and every process was traced with `strace`; no step tried to
+open a network connection. The vLLM server started with empty caches. The prompts of the reasoning and protocol jobs had
+the same token counts as in our runs, the M3 generation jobs used the same settings, and every LoRA merge gave the same
+weights.
 
-- Mode `rescore`, conditioned on the frozen texts: every row kept its top-1 code. 8 of the 11 steps were bit-identical
-  with our outputs, and the other three differed by at most 0.035 in a probability. A repeated step was bit-identical.
-  The three steps whose original ran on an A40 or a Kaggle T4 kept the top-1 code on 23 of 24 rows.
+- Mode `rescore`, conditioned on the frozen texts: in the 11 steps whose original ran on the same type of card, every
+  row kept its top-1 code. 8 of these 11 steps were bit-identical with our outputs. The other three differed by at most
+  0.035 in a probability, because 8 rows form other scoring batches than our runs over all rows. A repeated step was
+  bit-identical. The three steps whose original ran on an A40 or a Kaggle T4 kept the top-1 code on 23 of 24 rows.
 - Mode `full`, with newly generated texts: the top-1 code stayed the same on 35 of 40 rows.
 
-This test started the same configuration files as `tools/gpu_inference.sh`, with its own driver. Not covered: the
-script itself as one run, a run over all 3,498 test rows, and the 397B path, whose inputs were only checked for
-completeness ([ROADMAP.md](ROADMAP.md)). Section 2 lists the settings for a run without network access.
+This test ran copies of the configuration files of `tools/gpu_inference.sh` with its own driver. The copies differed
+only in their row lists (8 test rows) and, for the two 9B configurations made for Kaggle T4 × 2, in running on one
+card. One shard of each split configuration ran. In mode `full`, the draws d2 and d3, the second half of draw h and the
+M3 rankings behind the new protocol notes were not generated. Not covered: the script itself as one run, a run over all
+3,498 test rows, and the 397B path, whose inputs were only checked for completeness ([ROADMAP.md](ROADMAP.md)).
+Section 2 lists the settings for a run without network access.
 
 #### The 397B path
 

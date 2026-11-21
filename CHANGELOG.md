@@ -16,7 +16,8 @@ steps of inference from the delivered weights without retraining. The private in
   torch. All 574 files of `MANIFEST.sha256` matched, and every package file was unchanged afterwards.
 - `tools/gpu_inference.sh rescore` and `full` as dry runs: no input missing.
 - The GPU jobs of both modes without network access on 8 test rows each, on one RTX PRO 6000 96 GB: no connection
-  attempt, every merge equal, every top-1 code kept behind the frozen texts (docs/VERIFICATION.md §5.2, Network).
+  attempt, every merge equal; behind the frozen texts every top-1 code kept where the original ran on the same type of
+  card, and 23 of 24 where it ran on an A40 or a Kaggle T4 (docs/VERIFICATION.md §5.2, Network).
 - `tools/make_blank_list.py check` (1 training row, 6 test rows), `tools/replay/gates.py check` (test rows with the A40
   outputs, and training rows), the rebuild of the 397B training notes, `tools/make_m3_targets.py --full --check` and
   `tools/repin_test_side.py --check` (12 of 12 fields unchanged): bit-identical or exit 0.
@@ -47,7 +48,7 @@ steps of inference from the delivered weights without retraining. The private in
 ### Changed
 
 - README: copyable commands for the data and the package, and the operating system we tested (Linux only).
-- The repository is public since 2026-11-21 (docs/DATA_AND_COMPLIANCE.md, section 8).
+- The repository has been public since 2026-11-21 (docs/DATA_AND_COMPLIANCE.md, section 8).
 - `docs/VERIFICATION.md`, `README.md` and `docs/WRITEUP.md` rewritten in plain English. VERIFICATION §5 starts with the
   quick check and gives the GPU modes `rescore` and `full` step by step. It also gives the download commands of the base
   models, the install of the CPU build of torch, the disk that the CPU check needs and how to run the tests. The
