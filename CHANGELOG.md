@@ -10,16 +10,16 @@ steps of inference from the delivered weights without retraining. The private in
 
 ### Verified
 
-- Quick check in a fresh clone of this version with the delivered package (`bash reproduce.sh <package-dir>`):
-  `OK A 4505c159…797354e7` and `OK B 76da786d…a3565f9973` in 1 min 27 s; all 574 files of `MANIFEST.sha256` matched.
-- Build chain, the six commands that `--full` runs, with the build code of this version and the delivered package: both
-  final files and every pinned file of the chain byte-identical, in 2 h 23 min. Afterwards every package file was
-  unchanged.
+- Two fresh clones of this version with the delivered zip, following README.md and docs/VERIFICATION.md: the quick check
+  wrote `OK A 4505c159…797354e7` and `OK B 76da786d…a3565f9973` in 1 min 21 s and 1 min 14 s, and
+  `bash reproduce.sh <package-dir> --full` passed in 1 h 33 min and 1 h 32 min. The second clone used the CPU build of
+  torch. All 574 files of `MANIFEST.sha256` matched, and every package file was unchanged afterwards.
 - `tools/gpu_inference.sh rescore` and `full` as dry runs: no input missing.
-- `tools/make_blank_list.py check` (1 training row, 6 test rows), `tools/replay/gates.py check` (test side with the A40
-  outputs, and training side), the rebuild of the 397B training notes, `tools/make_m3_targets.py --full --check` and
+- `tools/make_blank_list.py check` (1 training row, 6 test rows), `tools/replay/gates.py check` (test rows with the A40
+  outputs, and training rows), the rebuild of the 397B training notes, `tools/make_m3_targets.py --full --check` and
   `tools/repin_test_side.py --check` (12 of 12 fields unchanged): bit-identical or exit 0.
-- Tests: 662 passed and 38 skipped with the private package and the competition data; none failed.
+- Tests after `--full` in a fresh clone: 685 passed and 15 skipped without `K12_PACKAGE` and without the optional 0.8B
+  model. With both in place, the five tests that need them pass as well, so 690 pass and 10 skip. None failed.
 
 ### Added
 
@@ -27,12 +27,12 @@ steps of inference from the delivered weights without retraining. The private in
   `MANIFEST.sha256`, copies its `artifacts/` (writable) and links its `data/derived/`, runs the two `make_submission`
   calls of the quick check and compares both files with their checksums (about 2 min). `--full` also runs the build
   chain (about 2 h).
-- `tools/gpu_inference.sh rescore|full <package-dir> [--out DIR] [--dry-run]`: runs the test-side GPU jobs in order,
-  copies their outputs to where the CPU tools read them, writes `new_A.csv` and `new_B.csv` with the two calls of the
-  quick check and prints only aggregates. `--dry-run` prints every command and checks that each configuration and input
-  folder exists. Its input check is `tools/gpu_inference_inputs.py`; tests `tests/test_gpu_inference_dry_run.py`.
-- `configs/vlm/test_side/` and `configs/vlm/rescore/`: the test-side jobs of the reference configurations, unchanged and
-  under the same run and job names; `rescore/` holds no job that generates text. Written by
+- `tools/gpu_inference.sh rescore|full <package-dir> [--out DIR] [--dry-run]`: runs the GPU jobs on the test rows in
+  order, copies their outputs to where the CPU tools read them, writes `new_A.csv` and `new_B.csv` with the two calls of
+  the quick check and prints only aggregates. `--dry-run` prints every command and checks that each configuration and
+  input folder exists. Its input check is `tools/gpu_inference_inputs.py`; tests `tests/test_gpu_inference_dry_run.py`.
+- `configs/vlm/test_side/` and `configs/vlm/rescore/`: the jobs on the test rows of the reference configurations,
+  unchanged and under the same run and job names; `rescore/` holds no job that generates text. Written by
   `tools/make_inference_configs.py` (`--check` compares) and checked by `tests/test_inference_configs.py`.
 - `tools/repin_test_side.py` (`--check`, `--write`): re-records the pinned checksums of new protocol and 397B answers on
   the test rows in the deployment files of A and B and in `meta_m3px27xm.json`; it keeps the old files and refits
@@ -44,15 +44,17 @@ steps of inference from the delivered weights without retraining. The private in
 ### Changed
 
 - `docs/VERIFICATION.md`, `README.md` and `docs/WRITEUP.md` rewritten in plain English. VERIFICATION §5 starts with the
-  quick check and gives the GPU modes `rescore` and `full` step by step.
+  quick check and gives the GPU modes `rescore` and `full` step by step. It also gives the download commands of the base
+  models, the install of the CPU build of torch, the disk that the CPU check needs and how to run the tests. The
+  write-up is shorter.
 - Private input package: the metadata of our own files are cleaned (English descriptions, no internal references). The
-  numbers in these files are unchanged, and the build scripts pin the new checksums. Model outputs and run logs are
-  unchanged.
-- Private input package completed with the inputs of the training side (first-version rotation lists of the training
-  rows, row lists of the protocol-answer runs, the raw 397B answers on the training rows, the training-side gate lists,
-  `artifacts/oof_v1.npy`) and with the inputs of the checks (the A40 test outputs behind the gate lists and the
-  blank-photo list of the training rows). It holds 572 indexed files with 3.63 GB, 161 of them derived from test rows.
-  The zip file has writable file permissions.
+  numbers in these files are unchanged. Where the code pins one of these files, it pins the new checksum, and
+  `MANIFEST.sha256` covers all of them. Model outputs and run logs are unchanged.
+- Private input package completed with the inputs of the training steps (first-version rotation lists of the training
+  rows, row lists of the protocol-answer runs, the raw 397B answers on the training rows, the gate lists of the training
+  rows, `artifacts/oof_v1.npy`) and with the inputs of the checks (the A40 test outputs from which the gate lists are
+  computed, and the blank-photo list of the training rows). It holds 572 indexed files with 3.63 GB, 161 of them
+  derived from test rows. The zip file has writable file permissions.
 - Reference documents (METHOD, INFERENCE, TRAINING, VALIDATION, RESULTS, CODEMAP, PROVENANCE, DATA_AND_COMPLIANCE,
   MODEL_SIZES): version 0.6, storage locations, run status, the new tools, the reference CPU and its OpenBLAS kernel, the
   complete offline settings and the blank-photo rule. `docs/weights_manifest.json` lists the five M3 fold adapters and
@@ -92,6 +94,7 @@ The following items are tracked in [docs/ROADMAP.md](docs/ROADMAP.md#2-open-step
 - the scripts that are not exported (step 6);
 - a complete `rescore` or `full` run in one go, which has never been done; `tools/gpu_inference.sh` has run as a dry
   run and on its CPU steps, not yet on a GPU;
+- the full proof on a CPU with AVX-512; the quick check does not depend on the CPU;
 - the private-leaderboard scores (step 8).
 
 ## v0.5 — 2026-11-17

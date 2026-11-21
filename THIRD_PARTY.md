@@ -25,9 +25,9 @@ In short:
 | Model | Source and revision | Role in the solution | Licence | In the final inference |
 |---|---|---|---|---|
 | Qwen3.5-9B | [`Qwen/Qwen3.5-9B`](https://huggingface.co/Qwen/Qwen3.5-9B/tree/c202236235762e1c871ad0ccb60c8ee5ba337b9a) @ `c202236235762e1c871ad0ccb60c8ee5ba337b9a` | Base model of the 9B scorer (our LoRA adapter `v1_full`) | Apache 2.0 | yes |
-| Qwen3.8-27B | [`Qwen/Qwen3.8-27B`](https://huggingface.co/Qwen/Qwen3.8-27B/tree/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0) @ `1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0` | Zero-shot scorers, reasoning channel, protocol channel; base model of M3 (our LoRA adapter `m3_full`) | Apache 2.0 | yes |
-| Qwen3.5-397B-A17B-FP8 | [`Qwen/Qwen3.5-397B-A17B-FP8`](https://huggingface.co/Qwen/Qwen3.5-397B-A17B-FP8/tree/ea5b4f81096f3901c91dea97f81324302495781d) @ `ea5b4f81096f3901c91dea97f81324302495781d` | 397B notes and protocol answers on the test side (both final submissions; in A also a source of extra second-stage columns) | Apache 2.0 | yes |
-| Qwen3.5-397B-A17B | [`Qwen/Qwen3.5-397B-A17B`](https://huggingface.co/Qwen/Qwen3.5-397B-A17B), served by the Tinker sampling API; the provider's revision and number format were not recorded | 397B outputs on the training rows: blend weight of the 397B channel; in A the training side of six extra second-stage columns | Apache 2.0: the Hub repository and its licence file at the main revision `8472618…` (checked 2026-11-20); the revision that the provider served was not recorded | no; training side only, as frozen outputs |
+| Qwen3.8-27B | [`Qwen/Qwen3.8-27B`](https://huggingface.co/Qwen/Qwen3.8-27B/tree/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0) @ `1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0` | Untrained scorers, reasoning channel, protocol channel; base model of M3 (our LoRA adapter `m3_full`) | Apache 2.0 | yes |
+| Qwen3.5-397B-A17B-FP8 | [`Qwen/Qwen3.5-397B-A17B-FP8`](https://huggingface.co/Qwen/Qwen3.5-397B-A17B-FP8/tree/ea5b4f81096f3901c91dea97f81324302495781d) @ `ea5b4f81096f3901c91dea97f81324302495781d` | 397B notes and protocol answers on the test rows (both final submissions; in A also a source of extra reranker columns) | Apache 2.0 | yes |
+| Qwen3.5-397B-A17B | [`Qwen/Qwen3.5-397B-A17B`](https://huggingface.co/Qwen/Qwen3.5-397B-A17B), served by the Tinker sampling API; the provider's revision and number format were not recorded | 397B outputs on the training rows: blend weight of the 397B channel; in A the training rows of six extra reranker columns | Apache 2.0: the Hub repository and its licence file at the main revision `8472618…` (checked 2026-11-20); the revision that the provider served was not recorded | no; training rows only, as frozen outputs |
 | Qwen3.5-0.8B | [`Qwen/Qwen3.5-0.8B`](https://huggingface.co/Qwen/Qwen3.5-0.8B/tree/2fc06364715b967f1860aea9cf38778875588b17) @ `2fc06364715b967f1860aea9cf38778875588b17` | Tokenizer of the training-side builders (M3 targets, 397B notes); CPU smoke tests of the runner and tests that need a real model | Apache 2.0 | no |
 | Claude Haiku 5.5 (Anthropic) | [Anthropic Messages API](https://docs.anthropic.com/), model ID `claude-haiku-5-5` | Teacher during development: pseudo-labels for the unlabelled pool, frozen | Provider's commercial terms | no; only its frozen pool labels |
 
@@ -74,10 +74,10 @@ API. It reads the frozen API outputs named in the column "Used by the final subm
 
 | API | Model and version (model ID as requested) | Period | Purpose | Rows sent | Used by the final submissions | Cost |
 |---|---|---|---|---|---|---:|
-| [Anthropic Messages API](https://docs.anthropic.com/), batch mode | Claude Haiku 5.5, `claude-haiku-5-5`, effort `xhigh` | 2026-10-11 to 2026-11-07 | Pseudo-labels of all 50,000 unlabelled workings (49,979 usable, about 31 USD); teacher measurements on training rows; two experiments that were not adopted: teacher rationales on unlabelled rows as fine-tuning targets, and a per-question table of the wrong final answer that each misconception would produce (question text, answer key and diagram of training and unlabelled questions only, no student working) | unlabelled and training rows | the frozen pool pseudo-labels, through the per-question task block of two channels | 40.85 USD |
+| [Anthropic Messages API](https://docs.anthropic.com/), batch mode | Claude Haiku 5.5, `claude-haiku-5-5`, effort `xhigh` | 2026-10-11 to 2026-11-07 | Pseudo-labels of all 50,000 unlabelled workings: 49,979 usable, about 31 USD. Teacher measurements on training rows. Two experiments that were not adopted: teacher rationales on unlabelled rows as fine-tuning targets, and a per-question table of the wrong final answer that each misconception would produce. That table used only the question text, answer key and diagram of training and unlabelled questions, no student working | unlabelled and training rows | the frozen pool pseudo-labels, through the per-question task block of two channels | 40.85 USD |
 | Anthropic Messages API | Claude Sonnet 5.5, `claude-sonnet-5-5` | 2026-10-11 to 2026-11-01 | Teacher comparison on 120 training rows; a description experiment on training rows | training rows | no | 4.76 USD |
 | Anthropic Messages API | Claude Opus 5.5, `claude-opus-5-5` | 2026-10-11 | One connectivity check | none, no competition data | no | 0.00 USD |
-| [Tinker sampling API](https://thinkingmachines.ai/tinker/) (Thinking Machines) | Qwen3.5-397B-A17B (renderer `qwen3_5`; the provider's revision and number format were not recorded) | 2026-10-13 to 2026-10-31 | Protocol answers on all 1,500 training rows (frozen), after an earlier measurement on a stratified sample | training rows | the frozen training-side answers: blend weight of the 397B channel; in A the training side of six extra columns | 55.89 USD |
+| [Tinker sampling API](https://thinkingmachines.ai/tinker/) (Thinking Machines) | Qwen3.5-397B-A17B (renderer `qwen3_5`; the provider's revision and number format were not recorded) | 2026-10-13 to 2026-10-31 | Protocol answers on all 1,500 training rows (frozen), after an earlier measurement on a stratified sample | training rows | the frozen answers on the training rows: blend weight of the 397B channel; in A the training rows of six extra reranker columns | 55.89 USD |
 | Tinker sampling API | Inkling-Small | 2026-10-13 | Measurement on training rows | training rows | no | 5.96 USD |
 | Tinker sampling API | Qwen3.8-27B | 2026-10-13 | Control measurement on training rows | training rows | no | 1.35 USD |
 | Total | | | | | | 108.81 USD (Anthropic 45.61, Tinker 63.20) |
@@ -85,7 +85,7 @@ API. It reads the frozen API outputs named in the column "Used by the final subm
 The costs are the sums of our cost ledgers over all calls, including experiments that were not adopted.
 
 Cost of one inference run on the test set: 0 USD for model APIs. The open-weight models of section 1.1 run on our own or
-rented GPUs; the rough GPU time and cost of a test-side run are in
+rented GPUs; the rough GPU time and cost of a run on the test set are in
 [docs/VERIFICATION.md](docs/VERIFICATION.md#3-hardware-and-run-times). Re-creating the frozen API outputs is not part of
 a test inference run. It would cost about 31 USD for the pool pseudo-labels and about 44 USD for the 397B answers on the
 1,500 training rows. It would also give new draws, not the delivered files.
@@ -125,7 +125,7 @@ of the four environments is not included.
 | NumPy | 2.1.2 (GPU base), 2.3.5 (vLLM), 2.4.2 (CPU) | BSD-3-Clause |
 | SciPy | 1.17.1 (CPU) | BSD-3-Clause |
 | pandas | 3.1.0 (GPU base), 2.3.3 (CPU) | BSD-3-Clause |
-| scikit-learn | 1.8.0 (CPU; the TF-IDF vectoriser of the example similarity in the safety line, `src/note_sim.py`) | BSD-3-Clause |
+| scikit-learn | 1.8.0 (CPU; the TF-IDF vectoriser of the example similarity in the safety line, our second design, `src/note_sim.py`) | BSD-3-Clause |
 | Pillow | 11.0.0 (GPU base), 13.0.0 (vLLM), 11.3.0 (CPU) | MIT-CMU (HPND) |
 | PyArrow | 26.0.0 (GPU base), 23.0.1 (CPU) | Apache-2.0 |
 | PyYAML | 6.0.3 | MIT |
@@ -139,7 +139,7 @@ of the four environments is not included.
 |---|---|---|
 | NVIDIA CUDA runtime libraries (`nvidia-*` wheels) | GPU computation; installed with PyTorch and vLLM | NVIDIA proprietary licence (redistributable runtime components) |
 | Docker image `runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404` | Base system of the GPU training and inference environment (Ubuntu 24.04, Python 3.12) | Image of the provider; contains PyTorch (BSD-3-Clause) and the CUDA runtime (NVIDIA licence) |
-| Kaggle GPU image | Base system of the Kaggle T4 runs (Python 3.13, torch 2.11.0+cu128) | Provided by Kaggle |
+| Kaggle GPU image | Base system of the Kaggle T4 runs (Python 3.13, torch 2.11.0+cu128), as Kaggle provided it on the day of each run; we did not record its digest | Provided by Kaggle |
 
 ## 5. Development tools, not part of the solution
 
@@ -151,4 +151,5 @@ of the four environments is not included.
 | AI coding assistants (Anthropic Claude Code, OpenAI Codex) | Writing code and documentation, running analyses | Provider terms |
 
 The coding assistants are not part of the solution. None of their outputs is a label, pseudo-label, transcription or
-prediction that the solution uses, and no test photo or per-row test output was shown to them.
+prediction that the solution uses. During development they read training rows, a few training photos, question diagrams
+and aggregates of the test set. No test photo and no per-row test output was shown to them.

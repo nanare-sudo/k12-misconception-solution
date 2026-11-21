@@ -204,7 +204,8 @@ leaderboard, against CV expectations of about +0.0010, +0.0013 to +0.0016 and +0
 protocol notes; 52 rows), against CV expectations of about +0.003, +0.0006 and +0.0001. The three files of 2026-11-08/14
 differed by +0.0033 (fourth M3 draw; 74 rows), −0.0017 (extra columns; about 60 rows) and −0.0002 (fifth draw; 47 rows),
 against CV expectations of about +0.001, +0.002 and +0.001. None of these differences is interpreted. No variant was chosen
-by its public score; the two final submissions were chosen by cross-validation, with submission B kept as the second slot.
+by its public score. For the final slots we took A, the last step that passed its cross-validation rule, and kept B,
+which is A without its two last components.
 
 ## 4. Single channels and their contribution
 
